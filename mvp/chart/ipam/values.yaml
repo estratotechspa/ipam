@@ -1,0 +1,53 @@
+image:
+  repository: ipam-mvp          # p. ej. ghcr.io/estratotechspa/ipam
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+imagePullSecrets: []            # [{name: ghcr-pull}] si el registro es privado
+
+replicaCount: 1
+
+# Configuración NO secreta (ConfigMap)
+config:
+  port: 8080
+
+# Secretos. Dos formas:
+#  a) Dejar vacío: el chart genera claves aleatorias (y las conserva entre upgrades).
+#  b) existingSecret: usar un Secret que ya tienes en el clúster (kubectl, Sealed Secrets,
+#     External Secrets, etc.) con las claves: DATABASE_URL, POSTGRES_PASSWORD (solo si postgres.enabled),
+#     APP_USER, APP_PASS, JIRA_WEBHOOK_SECRET.
+secrets:
+  existingSecret: ""
+  appUser: ""                   # vacío = sin clave de acceso en el panel
+  appPass: ""
+  jiraWebhookSecret: ""         # vacío = se genera
+  databaseUrl: ""               # solo con postgres.enabled=false (base externa, p. ej. Cloud SQL)
+
+# PostgreSQL incluido (StatefulSet). Para producción se recomienda una base administrada:
+# postgres.enabled=false y secrets.databaseUrl / existingSecret.
+postgres:
+  enabled: true
+  image: postgres:16-alpine
+  persistence:
+    enabled: true
+    size: 5Gi
+    storageClass: ""
+  resources: {}
+
+# Datos de ejemplo (6 pools, 12 asignaciones). Solo se cargan en `helm install`, no en upgrades.
+seed:
+  enabled: false
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false
+  className: ""
+  host: ipam.example.com
+  annotations: {}
+  tls: []                       # [{secretName: ipam-tls, hosts: [ipam.example.com]}]
+
+resources:
+  requests: {cpu: 50m, memory: 96Mi}
+  limits: {memory: 256Mi}

@@ -1,0 +1,33 @@
+# Aplica el esquema (idempotente) en cada install/upgrade y los datos de ejemplo solo en install.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "ipam.name" . }}-migrate
+  labels: {{- include "ipam.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: OnFailure
+      securityContext: {runAsUser: 70, runAsGroup: 70}
+      containers:
+        - name: psql
+          image: {{ .Values.postgres.image }}
+          env:
+            - name: DATABASE_URL
+              valueFrom: {secretKeyRef: {name: {{ include "ipam.secretName" . }}, key: DATABASE_URL}}
+          command: [sh, -ec]
+          args:
+            - |
+              until psql "$DATABASE_URL" -c 'select 1' >/dev/null 2>&1; do echo "esperando la base..."; sleep 3; done
+              psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f /sql/schema.sql
+              {{- if and .Release.IsInstall .Values.seed.enabled }}
+              psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f /sql/seed.sql
+              {{- end }}
+          volumeMounts: [{name: sql, mountPath: /sql}]
+      volumes:
+        - name: sql
+          configMap: {name: {{ include "ipam.name" . }}-sql}

@@ -1,0 +1,12 @@
+IPAM desplegado como «{{ .Release.Name }}».
+
+Acceso (sin ingress):  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "ipam.name" . }} 8080:{{ .Values.service.port }}
+{{- if .Values.ingress.enabled }}
+URL: http{{ if .Values.ingress.tls }}s{{ end }}://{{ .Values.ingress.host }}
+{{- end }}
+
+Usuario y clave del panel (si los definiste o se generaron):
+  kubectl -n {{ .Release.Namespace }} get secret {{ include "ipam.secretName" . }} -o jsonpath='{.data.APP_USER}' | base64 -d; echo
+  kubectl -n {{ .Release.Namespace }} get secret {{ include "ipam.secretName" . }} -o jsonpath='{.data.APP_PASS}' | base64 -d; echo
+Secreto del webhook de Jira:
+  kubectl -n {{ .Release.Namespace }} get secret {{ include "ipam.secretName" . }} -o jsonpath='{.data.JIRA_WEBHOOK_SECRET}' | base64 -d; echo

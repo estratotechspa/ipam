@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ipam.name" . }}
+  labels: {{- include "ipam.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels: {{- include "ipam.selector" . | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "ipam.selector" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if not .Values.secrets.existingSecret }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext: {runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000}
+      containers:
+        - name: api
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          ports: [{name: http, containerPort: {{ .Values.config.port }}}]
+          envFrom:
+            - configMapRef: {name: {{ include "ipam.name" . }}-config}
+          env:
+            {{- range $k := list "DATABASE_URL" "APP_USER" "APP_PASS" "JIRA_WEBHOOK_SECRET" }}
+            - name: {{ $k }}
+              valueFrom: {secretKeyRef: {name: {{ include "ipam.secretName" $ }}, key: {{ $k }}}}
+            {{- end }}
+          readinessProbe: {httpGet: {path: /api/health, port: http}, periodSeconds: 5}
+          livenessProbe: {httpGet: {path: /api/health, port: http}, initialDelaySeconds: 15, periodSeconds: 20}
+          resources: {{- toYaml .Values.resources | nindent 12 }}

@@ -1,0 +1,30 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ipam
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-ipam-dev}
+      POSTGRES_DB: ipam
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./db/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ipam -d ipam"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  api:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://ipam:${DB_PASSWORD:-ipam-dev}@db:5432/ipam
+      APP_USER: ${APP_USER:-}
+      APP_PASS: ${APP_PASS:-}
+      JIRA_WEBHOOK_SECRET: ${JIRA_WEBHOOK_SECRET:-dev-secret-cambiar}
+    ports:
+      - "${PORT:-8080}:8080"
+volumes:
+  pgdata:

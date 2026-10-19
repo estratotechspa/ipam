@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ipam.name" . }}-config
+  labels: {{- include "ipam.labels" . | nindent 4 }}
+data:
+  PORT: {{ .Values.config.port | quote }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ipam.name" . }}-sql
+  labels: {{- include "ipam.labels" . | nindent 4 }}
+data:
+  schema.sql: |
+{{ .Files.Get "files/schema.sql" | indent 4 }}
+  seed.sql: |
+{{ .Files.Get "files/seed.sql" | indent 4 }}

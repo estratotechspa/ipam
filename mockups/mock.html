@@ -1,0 +1,40 @@
+<!doctype html><meta charset="utf-8">
+<style>
+*{box-sizing:border-box}body{margin:0;font:14px system-ui,sans-serif;background:#f4f6fa;color:#1c2333;width:1200px}
+.top{background:#12203a;color:#fff;padding:14px 24px;display:flex;justify-content:space-between;align-items:center}
+.top b{font-size:18px}.nav span{margin-left:22px;opacity:.7}.nav .on{opacity:1;border-bottom:2px solid #4da3ff;padding-bottom:4px}
+.wrap{padding:24px}h2{margin:0 0 14px}.row{display:flex;gap:16px}.card{background:#fff;border-radius:10px;padding:18px;box-shadow:0 1px 3px #0002;flex:1}
+.kpi{font-size:28px;font-weight:700}.sub{color:#6b778c;font-size:12px}
+table{width:100%;border-collapse:collapse}th{text-align:left;color:#6b778c;font-size:12px;padding:8px;border-bottom:1px solid #e3e8ef}td{padding:9px 8px;border-bottom:1px solid #eef1f6}
+.tag{padding:2px 8px;border-radius:10px;font-size:11px;color:#fff}.dev{background:#2e9e5b}.qa{background:#d99a00}.pre{background:#8a5cd6}.prod{background:#d64545}
+.bar{height:8px;background:#e3e8ef;border-radius:4px;overflow:hidden;width:140px}.bar i{display:block;height:100%;background:#4da3ff}
+code{background:#eef1f6;padding:2px 6px;border-radius:4px}
+.btn{background:#2d6cdf;color:#fff;padding:9px 16px;border-radius:6px;display:inline-block}
+.in{border:1px solid #cfd6e2;border-radius:6px;padding:9px;background:#fff;margin:4px 0 12px}
+.alert{background:#fdecec;border:1px solid #e99;border-radius:8px;padding:14px;margin-bottom:14px;color:#8a1f1f}
+.sug{border:1px solid #9ad0ae;background:#effaf3;border-radius:8px;padding:12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+.flow{display:flex;align-items:center;gap:10px;margin:14px 0}.box{background:#fff;border:2px solid #2d6cdf;border-radius:8px;padding:12px 16px;text-align:center}
+.arrow{font-size:22px;color:#2d6cdf}.jira{border-color:#0052cc;background:#e9f0ff}
+.s{display:none}.s:target{display:block}
+</style>
+<div class="top"><b>IPAM · Gestión de segmentos</b><div class="nav"><span class="on">Pools</span><span>Asignaciones</span><span>Solicitar</span><span>cquiroz ▾</span></div></div>
+
+<div class="s wrap" id="s1"><h2>Estado de pools</h2>
+<div class="row"><div class="card"><div class="kpi">14</div><div class="sub">Pools</div></div><div class="card"><div class="kpi">62</div><div class="sub">Asignaciones activas</div></div><div class="card"><div class="kpi">38%</div><div class="sub">Uso promedio</div></div><div class="card"><div class="kpi">0</div><div class="sub">Solapamientos</div></div></div>
+<div class="card" style="margin-top:16px"><table><tr><th>Pool</th><th>Tipo</th><th>Ambiente</th><th>Proveedor</th><th>CIDR base</th><th>Uso</th></tr>
+<tr><td>gke-nodos-prod</td><td>Nodos</td><td><span class="tag prod">prod</span></td><td>GCP</td><td><code>10.10.0.0/16</code></td><td><div class="bar"><i style="width:42%"></i></div></td></tr>
+<tr><td>gke-pods-prod</td><td>Pods</td><td><span class="tag prod">prod</span></td><td>GCP</td><td><code>10.64.0.0/12</code></td><td><div class="bar"><i style="width:61%"></i></div></td></tr>
+<tr><td>gke-svc-prod</td><td>Servicios</td><td><span class="tag prod">prod</span></td><td>GCP</td><td><code>10.96.0.0/16</code></td><td><div class="bar"><i style="width:18%"></i></div></td></tr>
+<tr><td>gke-cp-prod</td><td>Control plane</td><td><span class="tag prod">prod</span></td><td>GCP</td><td><code>172.16.0.0/20</code></td><td><div class="bar"><i style="width:25%"></i></div></td></tr>
+<tr><td>gke-nodos-qa</td><td>Nodos</td><td><span class="tag qa">qa</span></td><td>GCP</td><td><code>10.20.0.0/16</code></td><td><div class="bar"><i style="width:30%"></i></div></td></tr>
+<tr><td>onprem-lan-dev</td><td>Nodos</td><td><span class="tag dev">dev</span></td><td>On-prem</td><td><code>192.168.0.0/16</code></td><td><div class="bar"><i style="width:12%"></i></div></td></tr></table></div></div>
+
+<div class="s wrap" id="s2"><h2>Solicitar segmento</h2><div class="row"><div class="card" style="max-width:420px">
+Pool<div class="in">gke-pods-prod (10.64.0.0/12)</div>Proyecto / VPC<div class="in">vpc-pagos</div>CIDR manual (opcional)<div class="in"><code>10.64.8.0/22</code></div>Máscara<div class="in">/22</div><span class="btn">Solicitar</span></div>
+<div class="card"><div class="alert"><b>⚠ Solapamiento detectado</b><br>10.64.8.0/22 se cruza con <code>10.64.8.0/21</code> asignado a <b>vpc-clientes</b> por <b>jperez</b> el 02-oct-2026 (ticket NET-142).</div>
+<b>Segmentos libres sugeridos (/22)</b><br><br>
+<div class="sug"><code>10.64.16.0/22</code><span class="btn">Usar</span></div><div class="sug"><code>10.64.20.0/22</code><span class="btn">Usar</span></div><div class="sug"><code>10.64.24.0/22</code><span class="btn">Usar</span></div></div></div></div>
+
+<div class="s wrap" id="s3"><h2>Integración bidireccional con Jira</h2>
+<div class="card"><b>Sentido 1 · IPAM → Jira</b><div class="flow"><div class="box">Panel / API<br>solicita segmento</div><span class="arrow">→</span><div class="box">IPAM<br>valida y asigna</div><span class="arrow">→</span><div class="box jira">Jira crea ticket<br>NET-1xx</div><span class="arrow">→</span><div class="box">Guarda<br>ticket_jira_id</div></div></div>
+<div class="card" style="margin-top:16px"><b>Sentido 2 · Jira → IPAM</b><div class="flow"><div class="box jira">Ticket «Solicitud de Segmento IPAM»<br>ambiente, tipo, pool, máscara, VPC</div><span class="arrow">→</span><div class="box">Webhook<br>(firmado)</div><span class="arrow">→</span><div class="box">IPAM calcula<br>y asigna</div><span class="arrow">→</span><div class="box jira">Actualiza ticket<br>con el rango</div></div></div></div>
