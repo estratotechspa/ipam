@@ -2,7 +2,9 @@ const path = require('path');
 const crypto = require('crypto');
 const express = require('express');
 const { Pool } = require('pg');
+const ExcelJS = require('exceljs');
 const { parse, libres } = require('./cidr');
+const jira = require('./jira');
 
 const PORT = process.env.PORT || 8080;
 const APP_USER = process.env.APP_USER || '';
@@ -89,7 +91,29 @@ async function asignar({ pool, vpc, cidr, mascara, solicitante, origen, ticket }
     cl.release(); // liberar ANTES de usar el pool de nuevo (evento): evita agotarlo bajo concurrencia
   }
   await evento('asignacion', { cidr: resultado.asignacion.cidr, pool, vpc, ticket: resultado.asignacion.ticket, origen });
+  await sincronizarJira(resultado.asignacion);
   return resultado;
+}
+
+// Integración saliente con Jira (apagada por defecto: JIRA_ENABLED=true para activarla).
+// Un fallo de Jira nunca deshace la asignación: queda como evento.
+async function sincronizarJira(a) {
+  if (!jira.enabled()) return;
+  const falta = jira.faltantes();
+  if (falta.length) return evento('jira_error', { ticket: a.ticket, motivo: `Faltan variables: ${falta.join(', ')}` });
+  try {
+    if (a.origen === 'jira') {
+      await jira.actualizarTicket(a.ticket, a);
+      await evento('jira_ticket_actualizado', { ticket: a.ticket, rango: a.cidr });
+    } else {
+      const clave = await jira.crearTicket(a);
+      await db.query('update asignaciones set ticket=$1 where id=$2', [clave, a.id]);
+      a.ticket = clave;
+      await evento('jira_ticket_creado', { ticket: clave, rango: a.cidr });
+    }
+  } catch (e) {
+    await evento('jira_error', { ticket: a.ticket, motivo: e.message });
+  }
 }
 
 // ---------- API ----------
@@ -118,6 +142,57 @@ app.get('/api/resumen', wrap(async (_q, res) => {
 app.get('/api/asignaciones', wrap(async (_q, res) => {
   res.json((await db.query(
     'select id, pool_id, cidr::text, vpc, solicitante, ticket, origen, creado_en from asignaciones order by id desc')).rows);
+}));
+
+app.get('/api/jira/estado', (_q, res) => res.json({ activa: jira.enabled(), faltantes: jira.enabled() ? jira.faltantes() : [] }));
+
+// Exporta a Excel todos los segmentos asignados (con los datos de su pool) y la lista de pools.
+app.get('/api/exportar.xlsx', wrap(async (_q, res) => {
+  const filas = (await db.query(
+    `select a.id, a.pool_id, p.tipo, p.ambiente, p.proveedor, p.cidr::text as pool_cidr, a.cidr::text, a.vpc,
+            a.solicitante, a.ticket, a.origen, a.creado_en
+       from asignaciones a join pools p on p.id = a.pool_id order by p.ambiente desc, a.pool_id, a.cidr`)).rows;
+  const pools = (await db.query(
+    `select p.id, p.tipo, p.ambiente, p.proveedor, p.cidr::text, count(a.id)::int as asignaciones,
+            coalesce(sum(2^(32-masklen(a.cidr))),0)::float8 / (2^(32-masklen(p.cidr)))::float8 as uso
+       from pools p left join asignaciones a on a.pool_id = p.id group by p.id order by p.ambiente desc, p.id`)).rows;
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'IPAM';
+  const hoja = (nombre, columnas, datos) => {
+    const ws = wb.addWorksheet(nombre, { views: [{ state: 'frozen', ySplit: 1 }] });
+    ws.columns = columnas;
+    ws.addRows(datos);
+    ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF12203A' } };
+    ws.autoFilter = { from: 'A1', to: { row: 1, column: columnas.length } };
+    return ws;
+  };
+  hoja('Segmentos', [
+    { header: 'Segmento (CIDR)', key: 'cidr', width: 20 }, { header: 'Máscara', key: 'mascara', width: 9 },
+    { header: 'Direcciones', key: 'dir', width: 13, style: { numFmt: '#,##0' } },
+    { header: 'Pool', key: 'pool', width: 20 }, { header: 'Tipo', key: 'tipo', width: 14 },
+    { header: 'Ambiente', key: 'amb', width: 10 }, { header: 'Proveedor', key: 'prov', width: 12 },
+    { header: 'CIDR del pool', key: 'pcidr', width: 18 }, { header: 'Proyecto / VPC', key: 'vpc', width: 22 },
+    { header: 'Solicitó', key: 'sol', width: 16 }, { header: 'Origen', key: 'origen', width: 10 },
+    { header: 'Ticket', key: 'ticket', width: 11 }, { header: 'Fecha', key: 'fecha', width: 17, style: { numFmt: 'dd-mm-yyyy hh:mm' } },
+  ], filas.map((r) => {
+    const len = Number(r.cidr.split('/')[1]);
+    return { cidr: r.cidr, mascara: `/${len}`, dir: 2 ** (32 - len), pool: r.pool_id, tipo: r.tipo, amb: r.ambiente,
+      prov: r.proveedor, pcidr: r.pool_cidr, vpc: r.vpc, sol: r.solicitante, origen: r.origen, ticket: r.ticket, fecha: r.creado_en };
+  }));
+  hoja('Pools', [
+    { header: 'Pool', key: 'id', width: 20 }, { header: 'Tipo', key: 'tipo', width: 14 },
+    { header: 'Ambiente', key: 'amb', width: 10 }, { header: 'Proveedor', key: 'prov', width: 12 },
+    { header: 'CIDR base', key: 'cidr', width: 18 }, { header: 'Asignaciones', key: 'n', width: 13 },
+    { header: 'Uso', key: 'uso', width: 9, style: { numFmt: '0.0%' } },
+  ], pools.map((p) => ({ id: p.id, tipo: p.tipo, amb: p.ambiente, prov: p.proveedor, cidr: p.cidr, n: p.asignaciones, uso: p.uso })));
+
+  const nombre = `ipam-segmentos-${new Date().toISOString().slice(0, 10)}.xlsx`;
+  res.set({ 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'Content-Disposition': `attachment; filename="${nombre}"` });
+  await wb.xlsx.write(res);
+  res.end();
 }));
 
 app.get('/api/pools/:id/libres', wrap(async (req, res) => {
@@ -161,8 +236,8 @@ async function procesarTicket({ ticket, ambiente, tipo, mascara, vpc }) {
     await evento('jira_rechazo', { ticket, motivo: r.error });
     return { status: r.status, body: { ticket, error: r.error } };
   }
-  // Retorno a Jira: en el MVP queda registrado como evento (la llamada REST real a Jira es la fase siguiente).
-  await evento('jira_actualiza_ticket', { ticket, rango: r.asignacion.cidr, estado: 'Hecho' });
+  // Retorno a Jira: con JIRA_ENABLED=true ya lo hizo sincronizarJira(); apagado, solo queda el evento simulado.
+  if (!jira.enabled()) await evento('jira_actualiza_ticket', { ticket, rango: r.asignacion.cidr, estado: 'Hecho', simulado: true });
   return { status: 200, body: { ticket, pool: p.id, cidr: r.asignacion.cidr } };
 }
 

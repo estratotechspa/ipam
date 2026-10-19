@@ -47,14 +47,23 @@ helm install ipam chart/ipam -n ipam -f mis-valores.yaml \
 |---|---|---|
 | GET | `/api/health` | salud (abierta) |
 | GET | `/api/pools`, `/api/resumen`, `/api/asignaciones`, `/api/eventos` | lecturas |
+| GET | `/api/exportar.xlsx` | Excel con todos los segmentos (hoja «Segmentos») y los pools (hoja «Pools») |
+| GET | `/api/jira/estado` | si la integración saliente con Jira está activa |
 | GET | `/api/pools/:id/libres?mascara=22` | 3 segmentos libres |
 | POST | `/api/solicitudes` `{pool, vpc, cidr?, mascara?}` | 201 · 400 inválido · 409 solapamiento (con conflicto y sugeridos) |
 | DELETE | `/api/asignaciones/:id` | liberar |
 | POST | `/webhook/jira` | entrada desde Jira (firmada) |
 | POST | `/api/jira/simular` | simula un ticket para la demo |
 
+## Integración saliente con Jira (desactivada por defecto)
+Código en `src/jira.js`. Se activa con `JIRA_ENABLED=true` más `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_PROJECT` (opcionales: `JIRA_ISSUE_TYPE`=Task, `JIRA_DONE_TRANSITION`=Done).
+- Solicitud desde el panel → crea el ticket en Jira y guarda su clave real en la asignación.
+- Ticket que llega por webhook → comenta el rango en el ticket y lo pasa a la transición final.
+- Si Jira falla, la asignación se mantiene y queda un evento `jira_error`. Sin activar, todo funciona como antes (tickets `NET-xxx` simulados).
+- Aún no probada contra un Jira real. Pendiente para Helm: pasar estas variables al Secret/values del chart.
+
 ## Alcance del MVP (lo que NO está)
-- Los números de ticket (`NET-xxx`) los genera el IPAM; **no se conecta a un Jira real** (ni crea ni actualiza tickets por REST; el retorno queda como evento registrado).
+- Con la integración desactivada, los números de ticket (`NET-xxx`) los genera el IPAM.
 - Solo IPv4, un único usuario (Basic Auth), sin roles ni historial de cambios por usuario.
 - Los 6 pools y 12 asignaciones son datos de ejemplo.
 
