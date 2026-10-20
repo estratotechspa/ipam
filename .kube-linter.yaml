@@ -1,0 +1,5 @@
+# kube-linter: reglas por defecto sobre el render del chart (ingress activo).
+checks:
+  doNotAutoAddDefaults: false
+  exclude:
+    - default-service-account   # el chart usa la ServiceAccount por defecto; se resuelve en la fase de endurecimiento
