@@ -31,7 +31,9 @@ postgres:
     enabled: true
     size: 5Gi
     storageClass: ""
-  resources: {}
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {cpu: 500m, memory: 512Mi}
 
 # Datos de ejemplo (6 pools, 12 asignaciones). Solo se cargan en `helm install`, no en upgrades.
 seed:
@@ -50,4 +52,15 @@ ingress:
 
 resources:
   requests: {cpu: 50m, memory: 96Mi}
-  limits: {memory: 256Mi}
+  limits: {cpu: 500m, memory: 256Mi}
+
+# NetworkPolicy: la app solo recibe tráfico en su puerto y solo sale a DNS, la base de datos y HTTPS
+# (Jira / proveedor OIDC). La base incluida solo acepta conexiones de la app y del Job de esquema.
+networkPolicy:
+  enabled: true
+  # Orígenes permitidos hacia la app. Vacío = cualquiera dentro del clúster (típico: el ingress controller
+  # vive en otro namespace). Para restringir: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: ingress-nginx}}}]
+  ingressFrom: []
+  # Puerto de la base cuando es externa (postgres.enabled=false) y destinos extra de salida (lista de reglas "to").
+  externalDatabasePort: 5432
+  egressExtra: []

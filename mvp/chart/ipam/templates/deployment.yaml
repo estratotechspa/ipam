@@ -9,7 +9,9 @@ spec:
     matchLabels: {{- include "ipam.selector" . | nindent 6 }}
   template:
     metadata:
-      labels: {{- include "ipam.selector" . | nindent 8 }}
+      labels:
+        {{- include "ipam.selector" . | nindent 8 }}
+        app.kubernetes.io/component: api
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
         {{- if not .Values.secrets.existingSecret }}
@@ -19,7 +21,9 @@ spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets: {{- toYaml . | nindent 8 }}
       {{- end }}
-      securityContext: {runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000}
+      serviceAccountName: {{ include "ipam.name" . }}
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, seccompProfile: {type: RuntimeDefault}}
       containers:
         - name: api
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
