@@ -51,12 +51,37 @@ jobs:
           diff mvp/db/schema.sql mvp/chart/ipam/files/schema.sql
           diff mvp/db/seed.sql mvp/chart/ipam/files/seed.sql
       - run: helm lint mvp/chart/ipam --set secrets.existingSecret=x
+      - name: Render con respaldos activados
+        run: helm template ipam mvp/chart/ipam --set secrets.existingSecret=x --set postgres.backup.enabled=true --set postgres.backup.repo.gcs.bucket=b > /dev/null
       - name: Render con OIDC activado
         run: helm template ipam mvp/chart/ipam --set auth.oidc.issuer=https://accounts.google.com --set auth.oidc.clientId=x --set secrets.oidcClientSecret=x --set config.publicUrl=https://ipam.example.com > /dev/null
       - run: helm template ipam mvp/chart/ipam --set secrets.existingSecret=x --set ingress.enabled=true > /tmp/render.yaml
       - name: kube-linter
         uses: stackrox/kube-linter-action@v1
         with: {directory: /tmp/render.yaml, config: .kube-linter.yaml}
+
+  postgres-imagen:
+    name: Imagen de PostgreSQL con pgBackRest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hadolint/hadolint-action@v3.1.0
+        with: {dockerfile: mvp/postgres/Dockerfile, failure-threshold: warning}
+      - run: sh -n mvp/postgres/respaldo.sh && sh -n mvp/postgres/prueba-restauracion.sh
+      - uses: docker/build-push-action@v6
+        with: {context: mvp/postgres, load: true, tags: 'ipam-postgres:ci'}
+      - name: Respaldo completo, incremental y restauración con la imagen
+        run: |
+          docker run -d --name pg -e POSTGRES_USER=ipam -e POSTGRES_PASSWORD=ci -e POSTGRES_DB=ipam \
+            -v "$PWD/mvp/db/schema.sql:/docker-entrypoint-initdb.d/01.sql:ro" -v "$PWD/mvp/db/seed.sql:/docker-entrypoint-initdb.d/02.sql:ro" \
+            ipam-postgres:ci postgres -c archive_mode=on -c wal_level=replica -c 'archive_command=pgbackrest --stanza=ipam archive-push %p'
+          docker exec pg sh -c 'mkdir -p /etc/pgbackrest /repo /tmp/pgbackrest; chown postgres /repo /tmp/pgbackrest; printf "[global]\nrepo1-type=posix\nrepo1-path=/repo\nstart-fast=y\nlock-path=/tmp/pgbackrest/lock\n[ipam]\npg1-path=/var/lib/postgresql/data\npg1-socket-path=/var/run/postgresql\npg1-user=ipam\n" > /etc/pgbackrest/pgbackrest.conf'
+          until docker exec pg pg_isready -U ipam -d ipam -h /var/run/postgresql >/dev/null 2>&1; do sleep 2; done; sleep 3
+          docker exec -u postgres pg pgbackrest --stanza=ipam stanza-create
+          docker exec -u postgres pg pgbackrest --stanza=ipam --type=full backup
+          docker exec -u postgres pg psql -U ipam -d ipam -qAc "insert into asignaciones (pool_id,cidr,vpc,solicitante,ticket) values ('onprem-lan-dev','192.168.90.0/24','ci','ci','NET-CI'); select pg_switch_wal()"
+          docker exec -u postgres pg pgbackrest --stanza=ipam --type=incr backup
+          docker exec -u postgres -e POSTGRES_USER=ipam -e POSTGRES_DB=ipam pg prueba-restauracion.sh | tee /dev/stderr | grep -q 'OK:'
 
   dockerfile:
     name: Dockerfile e imagen

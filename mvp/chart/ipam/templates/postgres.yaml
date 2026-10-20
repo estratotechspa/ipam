@@ -24,11 +24,17 @@ spec:
       labels: {app.kubernetes.io/name: ipam, app.kubernetes.io/instance: {{ .Release.Name }}, app.kubernetes.io/component: db}
     spec:
       automountServiceAccountToken: false
+      {{- if .Values.postgres.backup.enabled }}
+      serviceAccountName: {{ include "ipam.pgHost" . }}
+      {{- end }}
       securityContext: {runAsNonRoot: true, runAsUser: 70, runAsGroup: 70, fsGroup: 70, seccompProfile: {type: RuntimeDefault}}
       containers:
         - name: postgres
-          image: {{ .Values.postgres.image }}
+          image: {{ if .Values.postgres.backup.enabled }}{{ .Values.postgres.backup.image }}{{ else }}{{ .Values.postgres.image }}{{ end }}
           securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          {{- if .Values.postgres.backup.enabled }}
+          args: [postgres, -c, archive_mode=on, -c, wal_level=replica, -c, "archive_timeout=300", -c, "archive_command=pgbackrest --stanza=ipam archive-push %p"]
+          {{- end }}
           env:
             - {name: POSTGRES_USER, value: ipam}
             - {name: POSTGRES_DB, value: ipam}
@@ -41,10 +47,40 @@ spec:
             - {name: data, mountPath: /var/lib/postgresql/data}
             - {name: run, mountPath: /var/run/postgresql}
             - {name: tmp, mountPath: /tmp}
+            {{- if .Values.postgres.backup.enabled }}
+            - {name: pgbackrest, mountPath: /etc/pgbackrest, readOnly: true}
+            {{- include "ipam.backupRepoMounts" . | nindent 12 }}
+            {{- end }}
           resources: {{- toYaml .Values.postgres.resources | nindent 12 }}
+        {{- if .Values.postgres.backup.enabled }}
+        - name: respaldos
+          image: {{ .Values.postgres.backup.image }}
+          command: [respaldo.sh]
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          env:
+            - {name: POSTGRES_USER, value: ipam}
+            - {name: POSTGRES_DB, value: ipam}
+            - {name: BACKUP_HORA, value: {{ .Values.postgres.backup.schedule.hour | quote }}}
+            - {name: BACKUP_FULL_DIA, value: {{ .Values.postgres.backup.schedule.fullDay | quote }}}
+            - {name: BACKUP_PRUEBA_DIA, value: {{ .Values.postgres.backup.schedule.restoreTestDay | quote }}}
+            - name: PGPASSWORD
+              valueFrom: {secretKeyRef: {name: {{ include "ipam.secretName" . }}, key: POSTGRES_PASSWORD}}
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/postgresql/data}
+            - {name: run, mountPath: /var/run/postgresql}
+            - {name: tmp, mountPath: /tmp}
+            - {name: pgbackrest, mountPath: /etc/pgbackrest, readOnly: true}
+            {{- include "ipam.backupRepoMounts" . | nindent 12 }}
+          resources: {{- toYaml .Values.postgres.backup.resources | nindent 12 }}
+        {{- end }}
       volumes:
         - {name: run, emptyDir: {}}
         - {name: tmp, emptyDir: {}}
+        {{- if .Values.postgres.backup.enabled }}
+        - name: pgbackrest
+          configMap: {name: {{ include "ipam.pgHost" . }}-pgbackrest}
+        {{- include "ipam.backupRepoVolumes" . | nindent 8 }}
+        {{- end }}
         {{- if not .Values.postgres.persistence.enabled }}
         - {name: data, emptyDir: {}}
         {{- end }}

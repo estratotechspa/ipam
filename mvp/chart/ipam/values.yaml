@@ -72,6 +72,31 @@ postgres:
     requests: {cpu: 50m, memory: 128Mi}
     limits: {cpu: 500m, memory: 512Mi}
 
+  # Respaldos incrementales (pgBackRest) con archivado continuo de WAL → recuperación a un punto en el tiempo.
+  # Solo para el PostgreSQL incluido. Con una base administrada (Cloud SQL, RDS…) usa sus respaldos nativos.
+  # Política por defecto: completo cada domingo + incremental el resto de los días, 02:00 UTC; se conservan 4 completos
+  # (≈ 4 semanas) con sus incrementales y los WAL necesarios; el día 1 de cada mes se restaura el último respaldo en un
+  # directorio temporal y se comprueba (ver docs/RESPALDOS.md).
+  backup:
+    enabled: false
+    image: ghcr.io/estratotechspa/ipam-postgres:16   # construida desde mvp/postgres (postgres + pgBackRest)
+    retentionFull: 4
+    schedule: {hour: "02", fullDay: "0", restoreTestDay: "01"}
+    repo:
+      type: gcs                 # gcs | posix (posix = volumen propio; para pruebas o NFS, no para producción)
+      path: /ipam               # prefijo dentro del bucket (o ruta en el volumen)
+      gcs:
+        bucket: ""
+        keyType: auto           # auto = Workload Identity / cuenta de servicio del nodo · service = llave JSON en un Secret
+        keySecret: ""           # con keyType=service: Secret con la clave «key.json»
+        endpoint: ""            # redes sin salida a Internet: endpoint privado (Private Service Connect), p. ej. storage.p.googleapis.com
+        verifyTls: true
+      posix: {size: 5Gi, storageClass: ""}
+    serviceAccountAnnotations: {}   # Workload Identity: {iam.gke.io/gcp-service-account: ipam-backup@PROYECTO.iam.gserviceaccount.com}
+    resources:
+      requests: {cpu: 20m, memory: 64Mi}
+      limits: {cpu: 500m, memory: 256Mi}
+
 # Datos de ejemplo (6 pools, 12 asignaciones). Solo se cargan en `helm install`, no en upgrades.
 seed:
   enabled: false
@@ -79,6 +104,12 @@ seed:
 service:
   type: ClusterIP
   port: 80
+
+# Gateway API (alternativa al Ingress): crea un HTTPRoute hacia un Gateway que ya exista en el clúster.
+httpRoute:
+  enabled: false
+  hostnames: []                 # vacío = ingress.host
+  parentRefs: []                # p. ej. [{name: gateway-interno, namespace: infra}]
 
 ingress:
   enabled: false
