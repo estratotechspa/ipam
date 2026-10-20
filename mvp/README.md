@@ -9,7 +9,7 @@ Gestión de segmentos de red (IPv4): pools, asignaciones sin solapamiento, suger
 docker compose up -d --build        # http://localhost:8080
 docker compose down -v              # apaga y borra la base (vuelve a los datos de ejemplo)
 ```
-Variables opcionales (archivo `.env` junto al compose): `APP_USER` y `APP_PASS` (activan clave de acceso), `DB_PASSWORD`, `JIRA_WEBHOOK_SECRET`, `PORT`.
+Variables opcionales (archivo `.env` junto al compose): `APP_USER` y `APP_PASS` (clave de acceso) o `OIDC_*` + `PUBLIC_URL` + `SESSION_SECRET` (ver «Acceso, roles y auditoría»), `DB_PASSWORD`, `JIRA_WEBHOOK_SECRET`, `PORT`.
 Pruebas unitarias: `npm test`.
 
 ## Instalar en Kubernetes con Helm
@@ -37,6 +37,22 @@ helm install ipam chart/ipam -n ipam -f mis-valores.yaml \
 - **URL:** `--set ingress.enabled=true --set ingress.host=ipam.tudominio.cl` (+ `ingress.className` y `tls`).
 - **Webhook de Jira:** debe poder llegar a `https://<host>/webhook/jira`; usa el mismo `JIRA_WEBHOOK_SECRET`.
 
+## Acceso, roles y auditoría
+Tres modos, según la configuración: **OIDC** (`OIDC_ISSUER`), **Basic Auth** de un solo usuario (`APP_USER` + `APP_PASS`, solo demos) o **abierto** (demo local; la interfaz lo avisa).
+
+**Inicio de sesión con Google Workspace** (cualquier proveedor OpenID Connect funciona igual cambiando `issuer`):
+1. En Google Cloud → *APIs y servicios → Credenciales* → *ID de cliente de OAuth* (aplicación web). URI de redirección autorizado: `<PUBLIC_URL>/auth/callback`.
+2. Helm: `auth.oidc.issuer=https://accounts.google.com`, `auth.oidc.clientId=…`, `secrets.oidcClientSecret=…`, `config.publicUrl=https://ipam.…`, `auth.oidc.allowedDomains=empresa.cl`, `auth.oidc.adminEmails=quien@empresa.cl`.
+3. Microsoft Entra: `issuer=https://login.microsoftonline.com/<tenant>/v2.0` y, si usan grupos, `scopes="openid email profile"` + `groupsClaim`/`adminGroups`.
+
+| Rol | Puede |
+|---|---|
+| `lector` | ver pools, asignaciones, eventos, exportar a Excel |
+| `solicitante` | + solicitar segmentos |
+| `admin` | + liberar, simular tickets de Jira, ver auditoría, asignar roles a otras personas |
+
+El rol sale de: correos admin de la configuración (siempre) → rol asignado en la pestaña *Usuarios* → grupos del proveedor → `defaultRole` (`lector`; `ninguno` = solo entran los mapeados). Un cambio de rol rige en el próximo inicio de sesión. La sesión es una cookie firmada de 8 h (`SESSION_HORAS`) sin estado en el servidor (sirve con varias réplicas); cerrar sesión borra la cookie local, no cierra la sesión en Google. Los cambios desde el navegador exigen la cabecera `X-Requested-With: ipam` (defensa CSRF). Todo inicio/cierre de sesión, asignación, liberación, exportación y cambio de rol queda en la tabla `auditoria` (pestaña *Auditoría*).
+
 ## Seguridad del contenedor y del chart
 - **Imagen:** dos etapas; runtime `cgr.dev/chainguard/node` fijado por digest (sin shell ni gestor de paquetes; Trivy: 0 CRITICAL/HIGH con parche). Usuario `65532`, sistema de archivos de solo lectura, sin capacidades Linux.
 - **Imagen propia del cliente:** `docker build --build-arg BASE_IMAGE=<su-imagen-node> --build-arg BUILD_IMAGE=<su-imagen-node> .` (Node ≥ 20 en el PATH, usuario no root).
@@ -54,6 +70,7 @@ helm install ipam chart/ipam -n ipam -f mis-valores.yaml \
 |---|---|---|
 | GET | `/api/health` | salud (abierta) |
 | GET | `/api/pools`, `/api/resumen`, `/api/asignaciones`, `/api/eventos` | lecturas |
+| GET | `/api/me` · `/api/usuarios` · `/api/auditoria` | sesión actual · usuarios y roles (admin) · bitácora (admin) |
 | GET | `/api/exportar.xlsx` | Excel con todos los segmentos (hoja «Segmentos») y los pools (hoja «Pools») |
 | GET | `/api/jira/estado` | si la integración saliente con Jira está activa |
 | GET | `/api/pools/:id/libres?mascara=22` | 3 segmentos libres |
@@ -71,7 +88,7 @@ Código en `src/jira.js`. Se activa con `JIRA_ENABLED=true` más `JIRA_BASE_URL`
 
 ## Alcance del MVP (lo que NO está)
 - Con la integración desactivada, los números de ticket (`NET-xxx`) los genera el IPAM.
-- Solo IPv4, un único usuario (Basic Auth), sin roles ni historial de cambios por usuario.
+- Solo IPv4. El rol efectivo se resuelve al iniciar sesión (no hay revocación inmediata de sesiones).
 - Los 6 pools y 12 asignaciones son datos de ejemplo.
 
 ## Guion de demo (5 min)

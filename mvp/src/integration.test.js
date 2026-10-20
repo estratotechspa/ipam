@@ -10,7 +10,7 @@ const hay = !!process.env.DATABASE_URL;
 const opts = { skip: hay ? false : 'sin DATABASE_URL' };
 
 let server, base, db;
-const post = (ruta, cuerpo, h = {}) => fetch(base + ruta, { method: 'POST', headers: { 'Content-Type': 'application/json', ...h }, body: JSON.stringify(cuerpo) });
+const post = (ruta, cuerpo, h = {}) => fetch(base + ruta, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'ipam', ...h }, body: JSON.stringify(cuerpo) });
 const firma = (txt) => 'sha256=' + crypto.createHmac('sha256', SECRET).update(txt).digest('hex');
 
 test.before(async () => {
@@ -48,18 +48,18 @@ test('concurrencia: 20 solicitudes simultáneas → 20 segmentos distintos', opt
   const cidrs = (await Promise.all(rs.map((r) => r.json()))).map((x) => x.cidr);
   assert.equal(new Set(cidrs).size, 20);
   for (const a of await (await fetch(base + '/api/asignaciones')).json()) {
-    if (a.vpc.startsWith('conc-')) assert.equal((await fetch(`${base}/api/asignaciones/${a.id}`, { method: 'DELETE' })).status, 200);
+    if (a.vpc.startsWith('conc-')) assert.equal((await fetch(`${base}/api/asignaciones/${a.id}`, { method: 'DELETE', headers: { 'X-Requested-With': 'ipam' } })).status, 200);
   }
 });
 
 test('asignar y liberar devuelve el espacio', opts, async () => {
   const a = await (await post('/api/solicitudes', { pool: 'onprem-lan-dev', vpc: 'ciclo', cidr: '192.168.50.0/24' })).json();
   assert.equal((await post('/api/solicitudes', { pool: 'onprem-lan-dev', vpc: 'ciclo2', cidr: '192.168.50.0/24' })).status, 409);
-  assert.equal((await fetch(`${base}/api/asignaciones/${a.id}`, { method: 'DELETE' })).status, 200);
-  assert.equal((await fetch(`${base}/api/asignaciones/${a.id}`, { method: 'DELETE' })).status, 404);
+  assert.equal((await fetch(`${base}/api/asignaciones/${a.id}`, { method: 'DELETE', headers: { 'X-Requested-With': 'ipam' } })).status, 200);
+  assert.equal((await fetch(`${base}/api/asignaciones/${a.id}`, { method: 'DELETE', headers: { 'X-Requested-With': 'ipam' } })).status, 404);
   const b = await post('/api/solicitudes', { pool: 'onprem-lan-dev', vpc: 'ciclo3', cidr: '192.168.50.0/24' });
   assert.equal(b.status, 201);
-  await fetch(`${base}/api/asignaciones/${(await b.json()).id}`, { method: 'DELETE' });
+  await fetch(`${base}/api/asignaciones/${(await b.json()).id}`, { method: 'DELETE', headers: { 'X-Requested-With': 'ipam' } });
 });
 
 test('webhook de Jira: firma inválida → 401; firma válida → asigna', opts, async () => {
@@ -72,7 +72,7 @@ test('webhook de Jira: firma inválida → 401; firma válida → asigna', opts,
   assert.equal(d.ticket, 'NET-9001');
   const a = (await (await fetch(base + '/api/asignaciones')).json()).find((x) => x.ticket === 'NET-9001');
   assert.equal(a.origen, 'jira');
-  await fetch(`${base}/api/asignaciones/${a.id}`, { method: 'DELETE' });
+  await fetch(`${base}/api/asignaciones/${a.id}`, { method: 'DELETE', headers: { 'X-Requested-With': 'ipam' } });
 });
 
 test('exportación a Excel: archivo .xlsx válido', opts, async () => {
