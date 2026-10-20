@@ -53,6 +53,18 @@ Tres modos, según la configuración: **OIDC** (`OIDC_ISSUER`), **Basic Auth** d
 
 El rol sale de: correos admin de la configuración (siempre) → rol asignado en la pestaña *Usuarios* → grupos del proveedor → `defaultRole` (`lector`; `ninguno` = solo entran los mapeados). Un cambio de rol rige en el próximo inicio de sesión. La sesión es una cookie firmada de 8 h (`SESSION_HORAS`) sin estado en el servidor (sirve con varias réplicas); cerrar sesión borra la cookie local, no cierra la sesión en Google. Los cambios desde el navegador exigen la cabecera `X-Requested-With: ipam` (defensa CSRF). Todo inicio/cierre de sesión, asignación, liberación, exportación y cambio de rol queda en la tabla `auditoria` (pestaña *Auditoría*).
 
+## Marca y dominio configurables
+Nada de «EstratoTech» está escrito en el código ni en la imagen: nombre, colores, logo y URL se cambian por configuración.
+- Variables: `BRAND_NAME`, `BRAND_SUBTITLE`, `BRAND_FOOTER`, `BRAND_COLOR` (botones), `BRAND_COLOR_TOP` (barra), `BRAND_COLOR_ACCENT`, `BRAND_LOGO_FILE` (ruta de un png/jpg/webp/svg ≤ 512 KB). Colores solo en formato `#rrggbb`.
+- Helm: `branding.*` (el logo va en base64: `--set-string branding.logo="$(base64 < logo.png | tr -d '\n')"`).
+- Dominio: `config.publicUrl` (o `ingress.host`); es la base del login y de los enlaces. POC: `ipam.estratotech.cl`; luego, el del cliente (p. ej. `ipam.cliente.interno.cl`) cambiando solo ese valor y el registro de retorno en el proveedor OIDC.
+
+## Llevarse el IPAM a otra infraestructura
+- **Respaldo lógico:** `GET /api/exportar.json` (admin; botón «Respaldo JSON») entrega pools, asignaciones y roles asignados.
+- **Restauración:** `POST /api/importar` con ese JSON (admin). Es todo o nada: si algún segmento se solapa con otro, se rechaza completo (409) y no se importa nada. Los pools que ya existen no se tocan y las asignaciones repetidas se omiten, así que se puede repetir sin duplicar.
+  `curl -u … -H 'X-Requested-With: ipam' -H 'Content-Type: application/json' --data @ipam-respaldo.json https://<host>/api/importar`
+- La contraseña de la base, los secretos de OIDC/Jira y la marca viven en Secret/ConfigMap/values: se reinstala el chart en el nuevo clúster con otros valores y se importa el JSON.
+
 ## Seguridad del contenedor y del chart
 - **Imagen:** dos etapas; runtime `cgr.dev/chainguard/node` fijado por digest (sin shell ni gestor de paquetes; Trivy: 0 CRITICAL/HIGH con parche). Usuario `65532`, sistema de archivos de solo lectura, sin capacidades Linux.
 - **Imagen propia del cliente:** `docker build --build-arg BASE_IMAGE=<su-imagen-node> --build-arg BUILD_IMAGE=<su-imagen-node> .` (Node ≥ 20 en el PATH, usuario no root).
@@ -71,6 +83,8 @@ El rol sale de: correos admin de la configuración (siempre) → rol asignado en
 | GET | `/api/health` | salud (abierta) |
 | GET | `/api/pools`, `/api/resumen`, `/api/asignaciones`, `/api/eventos` | lecturas |
 | GET | `/api/me` · `/api/usuarios` · `/api/auditoria` | sesión actual · usuarios y roles (admin) · bitácora (admin) |
+| GET · POST | `/api/exportar.json` · `/api/importar` | respaldo lógico completo · restauración (admin) |
+| GET | `/api/config` · `/brand.css` · `/brand/logo` | marca (abiertos) |
 | GET | `/api/exportar.xlsx` | Excel con todos los segmentos (hoja «Segmentos») y los pools (hoja «Pools») |
 | GET | `/api/jira/estado` | si la integración saliente con Jira está activa |
 | GET | `/api/pools/:id/libres?mascara=22` | 3 segmentos libres |

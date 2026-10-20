@@ -38,3 +38,4 @@ input,select{width:100%;border:1px solid var(--line);border-radius:6px;padding:9
 
 .nav button[hidden]{display:none}
 #yo button{margin-left:8px;background:transparent;border:1px solid #9fb0cf;color:#fff;border-radius:6px;padding:2px 8px;cursor:pointer;opacity:1}
+#logo{height:28px;vertical-align:middle;margin-right:10px}#logo[hidden]{display:none}

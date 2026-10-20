@@ -35,7 +35,7 @@ async function renderPools(){
 
 async function renderAsig(){
   try{const a=await get('/api/asignaciones');
-  $('asig').innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h2>Asignaciones</h2><a class="btn" href="/api/exportar.xlsx" download>⬇ Exportar a Excel</a></div><div class="card tablewrap"><table><tr><th>Segmento</th><th>Pool</th><th>Proyecto / VPC</th><th>Direcciones</th><th>Solicitó</th><th>Origen</th><th>Ticket</th><th>Fecha</th><th></th></tr>
+  $('asig').innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h2>Asignaciones</h2><span><a class="btn" href="/api/exportar.xlsx" download>⬇ Exportar a Excel</a> ${puede('admin')?'<a class="btn sec" href="/api/exportar.json" download title="Respaldo completo para llevar el IPAM a otra infraestructura">⬇ Respaldo JSON</a>':''}</span></div><div class="card tablewrap"><table><tr><th>Segmento</th><th>Pool</th><th>Proyecto / VPC</th><th>Direcciones</th><th>Solicitó</th><th>Origen</th><th>Ticket</th><th>Fecha</th><th></th></tr>
   ${a.map(x=>`<tr><td><code>${esc(x.cidr)}</code></td><td>${esc(x.pool_id)}</td><td>${esc(x.vpc)}</td><td>${fmt(size(x.cidr))}</td><td>${esc(x.solicitante)}</td><td>${esc(x.origen)}</td><td>${esc(x.ticket)}</td><td>${fecha(x.creado_en)}</td>
   <td>${puede('admin')?`<button class="btn sec" data-del="${x.id}" data-c="${esc(x.cidr)}">Liberar</button>`:''}</td></tr>`).join('')}</table></div>`;
   $('asig').querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{
@@ -98,7 +98,13 @@ async function renderAudit(){
 
 function render(t){({pools:renderPools,asig:renderAsig,sol:renderSol,jira:renderJira,usuarios:renderUsuarios,audit:renderAudit})[t]()}
 
+async function marca(){
+  try{const m=await (await fetch('/api/config')).json();
+    document.title=m.nombre+' · Gestión de segmentos';$('nombre').textContent=m.nombre+' · Gestión de segmentos';$('subtitulo').textContent=m.subtitulo||'';
+    if(m.logo){$('logo').src=m.logo;$('logo').hidden=false}$('pie').textContent=m.pie||''}catch(e){}
+}
 async function iniciar(){
+  marca();
   const r=await fetch('/api/me',{headers:CAB});
   if(r.status===401){location.href='/auth/login?next='+encodeURIComponent(location.pathname);return}
   YO=await r.json();

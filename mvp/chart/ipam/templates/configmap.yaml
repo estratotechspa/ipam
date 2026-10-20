@@ -16,6 +16,14 @@ data:
   TRUST_PROXY: {{ . | quote }}
   {{- end }}
   HSTS: {{ .Values.config.hsts | quote }}
+  {{- range $k, $val := dict "BRAND_NAME" .Values.branding.name "BRAND_SUBTITLE" .Values.branding.subtitle "BRAND_FOOTER" .Values.branding.footer "BRAND_COLOR" .Values.branding.color "BRAND_COLOR_TOP" .Values.branding.colorTop "BRAND_COLOR_ACCENT" .Values.branding.colorAccent }}
+  {{- if $val }}
+  {{ $k }}: {{ $val | quote }}
+  {{- end }}
+  {{- end }}
+  {{- if .Values.branding.logo }}
+  BRAND_LOGO_FILE: /etc/ipam-brand/logo
+  {{- end }}
   {{- if $o.issuer }}
   OIDC_ISSUER: {{ $o.issuer | quote }}
   OIDC_CLIENT_ID: {{ required "auth.oidc.clientId es obligatorio con issuer" $o.clientId | quote }}
@@ -40,3 +48,13 @@ data:
 {{ .Files.Get "files/schema.sql" | indent 4 }}
   seed.sql: |
 {{ .Files.Get "files/seed.sql" | indent 4 }}
+{{- if .Values.branding.logo }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ipam.name" . }}-brand
+  labels: {{- include "ipam.labels" . | nindent 4 }}
+binaryData:
+  logo: {{ .Values.branding.logo | quote }}
+{{- end }}
