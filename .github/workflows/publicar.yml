@@ -34,8 +34,11 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           sbom: true
           provenance: mode=max
-      - uses: aquasecurity/trivy-action@0.28.0
-        with: {image-ref: 'ghcr.io/${{ github.repository }}@${{ steps.build.outputs.digest }}', severity: 'CRITICAL,HIGH', ignore-unfixed: true, exit-code: '1'}
+      - name: Trivy sobre la imagen publicada
+        run: |
+          IMG="ghcr.io/${{ github.repository }}@${{ steps.build.outputs.digest }}"
+          docker pull "$IMG"
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.58.1 image --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 "$IMG"
 
   postgres:
     runs-on: ubuntu-latest
