@@ -24,6 +24,11 @@ services:
       APP_USER: ${APP_USER:-}
       APP_PASS: ${APP_PASS:-}
       JIRA_WEBHOOK_SECRET: ${JIRA_WEBHOOK_SECRET:-dev-secret-cambiar}
+      JIRA_ENABLED: ${JIRA_ENABLED:-false}
+      JIRA_BASE_URL: ${JIRA_BASE_URL:-}
+      JIRA_EMAIL: ${JIRA_EMAIL:-}
+      JIRA_API_TOKEN: ${JIRA_API_TOKEN:-}
+      JIRA_PROJECT: ${JIRA_PROJECT:-}
     ports:
       - "${PORT:-8080}:8080"
 volumes:

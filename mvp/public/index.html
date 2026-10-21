@@ -77,7 +77,7 @@ const fail=(id,e)=>$(id).innerHTML=`<div class="alert">No se pudo cargar: ${esc(
 
 async function renderPools(){
   try{const [pools,r]=await Promise.all([get('/api/pools'),get('/api/resumen')]);
-  $('pools').innerHTML=`<h2>Estado de pools</h2>
+  $('pools').innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h2>Estado de pools</h2><a class="btn sec" href="/api/exportar.xlsx" download>⬇ Exportar a Excel</a></div>
   <div class="row"><div class="card"><div class="kpi">${r.pools}</div><div class="sub">Pools</div></div>
   <div class="card"><div class="kpi">${r.asignaciones}</div><div class="sub">Asignaciones activas</div></div>
   <div class="card"><div class="kpi">${(r.uso_promedio*100).toFixed(1).replace('.',',')}%</div><div class="sub">Uso promedio</div></div>
@@ -88,7 +88,7 @@ async function renderPools(){
 
 async function renderAsig(){
   try{const a=await get('/api/asignaciones');
-  $('asig').innerHTML=`<h2>Asignaciones</h2><div class="card tablewrap"><table><tr><th>Segmento</th><th>Pool</th><th>Proyecto / VPC</th><th>Direcciones</th><th>Solicitó</th><th>Origen</th><th>Ticket</th><th>Fecha</th><th></th></tr>
+  $('asig').innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h2>Asignaciones</h2><a class="btn" href="/api/exportar.xlsx" download>⬇ Exportar a Excel</a></div><div class="card tablewrap"><table><tr><th>Segmento</th><th>Pool</th><th>Proyecto / VPC</th><th>Direcciones</th><th>Solicitó</th><th>Origen</th><th>Ticket</th><th>Fecha</th><th></th></tr>
   ${a.map(x=>`<tr><td><code>${esc(x.cidr)}</code></td><td>${esc(x.pool_id)}</td><td>${esc(x.vpc)}</td><td>${fmt(size(x.cidr))}</td><td>${esc(x.solicitante)}</td><td>${esc(x.origen)}</td><td>${esc(x.ticket)}</td><td>${fecha(x.creado_en)}</td>
   <td><button class="btn sec" data-del="${x.id}" data-c="${esc(x.cidr)}">Liberar</button></td></tr>`).join('')}</table></div>`;
   $('asig').querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{
@@ -120,11 +120,12 @@ async function solicitar(){
   res.innerHTML=`<div class="alert">${esc(d.error||'Error '+r.status)}</div>`}
 
 async function renderJira(){
-  let ev=[];try{ev=await get('/api/eventos')}catch(e){}
+  let ev=[],je={activa:false};try{ev=await get('/api/eventos');je=await get('/api/jira/estado')}catch(e){}
+  const estado=je.activa?(je.faltantes.length?`<span class="tag prod">Activa · faltan: ${esc(je.faltantes.join(', '))}</span>`:'<span class="tag dev">Activa</span>'):'<span class="tag qa">Desactivada (simulada)</span>';
   const linea=e=>`${new Date(e.ts).toLocaleTimeString('es-CL')}  ${e.tipo}  ${JSON.stringify(e.detalle)}`;
-  $('jira').innerHTML=`<h2>Integración bidireccional con Jira</h2>
+  $('jira').innerHTML=`<h2>Integración bidireccional con Jira ${estado}</h2>
   <div class="card"><b>Sentido 1 · IPAM → Jira</b><div class="flow"><div class="box">Panel / API<br>solicita segmento</div><span class="arrow">→</span><div class="box">IPAM<br>valida y asigna</div><span class="arrow">→</span><div class="box jira">Jira crea ticket<br>NET-1xx</div><span class="arrow">→</span><div class="box">Guarda<br>ticket_jira_id</div></div>
-  <span class="muted">En el MVP el número de ticket lo genera el IPAM (secuencia NET-xxx); la creación real en Jira es la fase siguiente.</span></div>
+  <span class="muted">Con la integración desactivada, el número de ticket lo genera el IPAM (secuencia NET-xxx). Al activarla (JIRA_ENABLED=true) se crea el ticket real en Jira.</span></div>
   <div class="card" style="margin-top:16px"><b>Sentido 2 · Jira → IPAM</b><div class="flow"><div class="box jira">Ticket «Solicitud de Segmento IPAM»<br>ambiente, tipo, pool, máscara, VPC</div><span class="arrow">→</span><div class="box">Webhook<br>(firmado HMAC)</div><span class="arrow">→</span><div class="box">IPAM calcula<br>y asigna</div><span class="arrow">→</span><div class="box jira">Actualiza ticket<br>con el rango</div></div>
   <div class="row"><div style="flex:1;min-width:240px"><b>Simular ticket entrante</b>
    <label>Ambiente</label><select id="j-amb"><option>prod</option><option>qa</option><option>dev</option></select>
