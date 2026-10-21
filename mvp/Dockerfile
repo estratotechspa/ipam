@@ -5,11 +5,13 @@
 ARG BUILD_IMAGE=node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402
 ARG BASE_IMAGE=cgr.dev/chainguard/node@sha256:95f6858673107192ab0c550f4d8d31347d53d33f799c14bf74222c61e0063641
 
+# hadolint ignore=DL3006
 FROM ${BUILD_IMAGE} AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 
+# hadolint ignore=DL3006
 FROM ${BASE_IMAGE}
 WORKDIR /app
 ENV NODE_ENV=production PATH=/usr/local/bin:/usr/bin:/bin:/nodejs/bin
