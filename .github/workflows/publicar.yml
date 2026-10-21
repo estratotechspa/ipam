@@ -35,7 +35,7 @@ jobs:
           sbom: true
           provenance: mode=max
       - uses: aquasecurity/trivy-action@v0.33.1
-        with: {image-ref: 'ghcr.io/${{ github.repository }}@${{ steps.build.outputs.digest }}', severity: 'CRITICAL,HIGH', ignore-unfixed: true, exit-code: '1'}
+        with: {version: v0.58.1, image-ref: 'ghcr.io/${{ github.repository }}@${{ steps.build.outputs.digest }}', severity: 'CRITICAL,HIGH', ignore-unfixed: true, exit-code: '1'}
 
   postgres:
     runs-on: ubuntu-latest
