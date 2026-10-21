@@ -68,7 +68,7 @@ jobs:
       - uses: hadolint/hadolint-action@v3.1.0
         with: {dockerfile: mvp/postgres/Dockerfile, failure-threshold: warning}
       - run: sh -n mvp/postgres/respaldo.sh && sh -n mvp/postgres/prueba-restauracion.sh
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with: {context: mvp/postgres, load: true, tags: 'ipam-postgres:ci'}
       - name: Respaldo completo, incremental y restauración con la imagen
         run: |
@@ -91,7 +91,7 @@ jobs:
       - uses: hadolint/hadolint-action@v3.1.0
         with: {dockerfile: mvp/Dockerfile, failure-threshold: warning}
       - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with: {context: mvp, load: true, tags: 'ipam:ci'}
       - name: Trivy (CRITICAL/HIGH con parche disponible)
         # Se ejecuta con la imagen oficial de Trivy: la instalación del binario por trivy-action falló en el runner.
