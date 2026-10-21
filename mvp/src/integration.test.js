@@ -82,3 +82,38 @@ test('exportación a Excel: archivo .xlsx válido', opts, async () => {
   const buf = Buffer.from(await r.arrayBuffer());
   assert.equal(buf.subarray(0, 2).toString(), 'PK');
 });
+
+test('respaldo JSON: exporta, restaura lo borrado y rechaza solapamientos sin importar nada', opts, async () => {
+  const H = { 'X-Requested-With': 'ipam' };
+  const r = await fetch(base + '/api/exportar.json');
+  assert.equal(r.status, 200);
+  const resp = await r.json();
+  assert.equal(resp.formato, 'ipam-respaldo');
+  assert.ok(resp.pools.length >= 6 && resp.asignaciones.length >= 12);
+
+  // Importar lo mismo no duplica nada.
+  const igual = await (await post('/api/importar', resp)).json();
+  assert.equal(igual.asignaciones, 0);
+  assert.equal(igual.omitidas, resp.asignaciones.length);
+
+  // Se borra una asignación y el respaldo la devuelve.
+  const lista = await (await fetch(base + '/api/asignaciones')).json();
+  const a = lista.find((x) => x.ticket === 'NET-101');
+  await fetch(`${base}/api/asignaciones/${a.id}`, { method: 'DELETE', headers: H });
+  const rest = await (await post('/api/importar', resp)).json();
+  assert.equal(rest.asignaciones, 1);
+
+  // Un respaldo con un segmento que se solapa con otro existente se rechaza completo.
+  const malo = { ...resp, asignaciones: [{ pool_id: 'gke-pods-prod', cidr: '10.64.8.0/22', vpc: 'choque', solicitante: 'x', ticket: 'NET-7777', origen: 'panel' }] };
+  const res = await post('/api/importar', malo);
+  assert.equal(res.status, 409);
+  assert.ok(!(await (await fetch(base + '/api/asignaciones')).json()).some((x) => x.ticket === 'NET-7777'));
+
+  assert.equal((await post('/api/importar', { hola: 1 })).status, 400);
+});
+
+test('marca por API y logo inexistente', opts, async () => {
+  assert.equal((await (await fetch(base + '/api/config')).json()).nombre, 'IPAM');
+  assert.match(await (await fetch(base + '/brand.css')).text(), /--top:/);
+  assert.equal((await fetch(base + '/brand/logo')).status, 404);
+});

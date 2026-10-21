@@ -43,4 +43,12 @@ spec:
             {{- end }}
           readinessProbe: {httpGet: {path: /api/health, port: http}, periodSeconds: 5}
           livenessProbe: {httpGet: {path: /api/health, port: http}, initialDelaySeconds: 15, periodSeconds: 20}
+          {{- if .Values.branding.logo }}
+          volumeMounts: [{name: brand, mountPath: /etc/ipam-brand, readOnly: true}]
+          {{- end }}
           resources: {{- toYaml .Values.resources | nindent 12 }}
+      {{- if .Values.branding.logo }}
+      volumes:
+        - name: brand
+          configMap: {name: {{ include "ipam.name" . }}-brand}
+      {{- end }}

@@ -15,6 +15,17 @@ config:
   trustProxy: "1"               # saltos de proxy delante de la app (ingress); "" para desactivar
   hsts: false                   # true si el acceso es siempre por HTTPS
 
+# Marca: todo opcional y sin reconstruir la imagen.
+branding:
+  name: ""                      # vacío = «IPAM»
+  subtitle: ""
+  footer: ""
+  color: ""                     # botones, p. ej. "#0a7d4f"
+  colorTop: ""                  # barra superior
+  colorAccent: ""               # pestaña activa
+  logo: ""                      # archivo png/jpg/webp/svg (≤ 512 KB) en base64:
+                                #   --set-string branding.logo="$(base64 < logo.png | tr -d '\n')"
+
 # Inicio de sesión con OpenID Connect (Google Workspace, Microsoft Entra, Okta, Keycloak…).
 # Con issuer vacío el panel usa Basic Auth (secrets.appUser/appPass) o queda abierto (solo demos).
 # URL de retorno a registrar en el proveedor:  <publicUrl>/auth/callback

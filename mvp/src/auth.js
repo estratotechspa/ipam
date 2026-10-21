@@ -158,12 +158,12 @@ function montar(app, { db, auditar }) {
     res.json({ ok: true, redirect: '/auth/sesion-cerrada' });
   });
   app.get('/auth/sesion-cerrada', (_q, res) => {
-    res.type('html').send('<!doctype html><meta charset="utf-8"><title>Sesión cerrada</title><body style="font:16px system-ui;margin:3rem"><h2>Sesión cerrada</h2><p><a href="/auth/login">Volver a entrar</a></p>');
+    res.type('html').send('<!doctype html><meta charset="utf-8"><title>Sesión cerrada</title><link rel="stylesheet" href="/brand.css"><body style="font:16px system-ui;margin:3rem"><h2>Sesión cerrada</h2><p><a href="/auth/login">Volver a entrar</a></p>');
   });
 
   // Middleware de acceso: todo exige sesión salvo salud, webhook (firmado) y /auth.
   app.use((req, res, next) => {
-    if (req.path === '/api/health' || req.path === '/webhook/jira' || req.path.startsWith('/auth/')) return next();
+    if (req.path === '/api/health' || req.path === '/webhook/jira' || req.path.startsWith('/auth/') || req.path === '/api/config' || req.path === '/brand.css' || req.path === '/brand/logo') return next();
     const m = modo();
     if (m === 'none') { req.usuario = 'anonimo'; req.rol = 'admin'; }
     else if (m === 'basic') {
