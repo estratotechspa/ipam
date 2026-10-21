@@ -45,7 +45,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: azure/setup-helm@v4
+      - uses: azure/setup-helm@v5
       - name: El esquema y los datos del chart son los mismos que los de db/
         run: |
           diff mvp/db/schema.sql mvp/chart/ipam/files/schema.sql
