@@ -1,6 +1,7 @@
 const path = require('path');
 const crypto = require('crypto');
 const express = require('express');
+const helmet = require('helmet');
 const { Pool } = require('pg');
 const ExcelJS = require('exceljs');
 const { parse, libres } = require('./cidr');
@@ -13,6 +14,18 @@ const WEBHOOK_SECRET = process.env.JIRA_WEBHOOK_SECRET || 'dev-secret-cambiar';
 
 const db = new Pool({ connectionString: process.env.DATABASE_URL, max: 10 });
 const app = express();
+app.disable('x-powered-by');
+// Detrás de un ingress/balanceador: TRUST_PROXY=1 (número de saltos) para que req.ip/protocolo sean los reales.
+if (process.env.TRUST_PROXY) app.set('trust proxy', Number(process.env.TRUST_PROXY) || process.env.TRUST_PROXY);
+// Cabeceras de seguridad. La interfaz no usa scripts en línea (todo en /app.js); los estilos en atributo sí.
+app.use(helmet({
+  contentSecurityPolicy: { directives: {
+    defaultSrc: ["'self'"], scriptSrc: ["'self'"], styleSrc: ["'self'", "'unsafe-inline'"], imgSrc: ["'self'", 'data:'],
+    connectSrc: ["'self'"], objectSrc: ["'none'"], frameAncestors: ["'none'"], baseUri: ["'self'"], formAction: ["'self'"],
+    upgradeInsecureRequests: null,   // el TLS lo termina el ingress del cliente; no forzar https desde la app
+  } },
+  hsts: process.env.HSTS === 'true',  // solo cuando el acceso es siempre por HTTPS
+}));
 app.use(express.json({ verify: (req, _res, buf) => { req.raw = buf; } }));
 
 // Acceso: Basic Auth solo si APP_USER y APP_PASS están definidos. Salud y webhook quedan abiertos

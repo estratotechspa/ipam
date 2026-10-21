@@ -37,6 +37,13 @@ helm install ipam chart/ipam -n ipam -f mis-valores.yaml \
 - **URL:** `--set ingress.enabled=true --set ingress.host=ipam.tudominio.cl` (+ `ingress.className` y `tls`).
 - **Webhook de Jira:** debe poder llegar a `https://<host>/webhook/jira`; usa el mismo `JIRA_WEBHOOK_SECRET`.
 
+## Seguridad del contenedor y del chart
+- **Imagen:** dos etapas; runtime `cgr.dev/chainguard/node` fijado por digest (sin shell ni gestor de paquetes; Trivy: 0 CRITICAL/HIGH con parche). Usuario `65532`, sistema de archivos de solo lectura, sin capacidades Linux.
+- **Imagen propia del cliente:** `docker build --build-arg BASE_IMAGE=<su-imagen-node> --build-arg BUILD_IMAGE=<su-imagen-node> .` (Node ≥ 20 en el PATH, usuario no root).
+- **Chart:** `seccomp RuntimeDefault`, ServiceAccount propia sin token montado, `NetworkPolicy` (`networkPolicy.*`; `ingressFrom` para limitar quién llega a la app), Postgres y Job con filesystem de solo lectura y límites de recursos.
+- **Cabeceras HTTP:** `helmet` con CSP estricta (`script-src 'self'`). Detrás de un ingress: `TRUST_PROXY=1`; con acceso solo por HTTPS: `HSTS=true`.
+- **Cadena de suministro:** `publicar.yml` publica en GHCR con SBOM y atestación. Pendiente: firma de imágenes y TLS de extremo a extremo → `docs/DEUDA-TECNICA.md`.
+
 ## Cómo está resuelto lo importante
 - **Sin solapamientos, garantizado por la base:** restricción de exclusión GiST (`sin_solapamiento`) sobre `(pool, cidr)`; además un trigger exige que el segmento caiga dentro del pool. Aunque alguien inserte directo en la base, se rechaza.
 - **Concurrencia:** las asignaciones de un mismo pool se serializan con un bloqueo de transacción (probado: 20 solicitudes simultáneas → 20 segmentos distintos).
