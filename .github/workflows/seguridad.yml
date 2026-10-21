@@ -21,8 +21,9 @@ jobs:
       - name: npm audit (solo producción)
         run: npm audit --omit=dev --audit-level=high
       - name: Licencias permitidas
+        # buffers@0.1.1 (dependencia de exceljs) no declara licencia en su package.json: se excluye y debe revisarse a mano.
         run: >-
-          npx --yes license-checker-rseidelsohn@4 --production --summary --onlyAllow
+          npx --yes license-checker-rseidelsohn@4 --production --summary --excludePackages 'buffers@0.1.1' --onlyAllow
           'MIT;ISC;Apache-2.0;BSD-2-Clause;BSD-3-Clause;0BSD;BlueOak-1.0.0;Python-2.0;CC0-1.0;CC-BY-4.0;Unlicense'
 
   secretos:
@@ -38,6 +39,8 @@ jobs:
 
   codeql:
     name: Análisis estático (CodeQL)
+    # En repos privados exige GitHub Advanced Security; activar con la variable de repositorio CODEQL=true.
+    if: ${{ !github.event.repository.private || vars.CODEQL == 'true' }}
     runs-on: ubuntu-latest
     permissions: {contents: read, security-events: write}
     steps:

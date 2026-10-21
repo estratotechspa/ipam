@@ -94,7 +94,7 @@ jobs:
       - uses: docker/build-push-action@v6
         with: {context: mvp, load: true, tags: 'ipam:ci'}
       - name: Trivy (CRITICAL/HIGH con parche disponible)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.33.1
         with: {image-ref: 'ipam:ci', severity: 'CRITICAL,HIGH', ignore-unfixed: true, exit-code: '1'}
       - name: Prueba de humo de la imagen (solo lectura, sin capacidades)
         run: |
