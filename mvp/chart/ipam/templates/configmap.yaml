@@ -5,6 +5,30 @@ metadata:
   labels: {{- include "ipam.labels" . | nindent 4 }}
 data:
   PORT: {{ .Values.config.port | quote }}
+  {{- $o := .Values.auth.oidc }}
+  {{- $pub := .Values.config.publicUrl }}
+  {{- if and (not $pub) .Values.ingress.enabled }}{{ $pub = printf "%s://%s" (ternary "https" "http" (gt (len .Values.ingress.tls) 0)) .Values.ingress.host }}{{ end }}
+  {{- if and $o.issuer (not $pub) }}{{ fail "Con auth.oidc.issuer debes indicar config.publicUrl (o activar el ingress con host)" }}{{ end }}
+  {{- if $pub }}
+  PUBLIC_URL: {{ $pub | quote }}
+  {{- end }}
+  {{- with .Values.config.trustProxy }}
+  TRUST_PROXY: {{ . | quote }}
+  {{- end }}
+  HSTS: {{ .Values.config.hsts | quote }}
+  {{- if $o.issuer }}
+  OIDC_ISSUER: {{ $o.issuer | quote }}
+  OIDC_CLIENT_ID: {{ required "auth.oidc.clientId es obligatorio con issuer" $o.clientId | quote }}
+  OIDC_SCOPES: {{ $o.scopes | quote }}
+  OIDC_GROUPS_CLAIM: {{ $o.groupsClaim | quote }}
+  OIDC_DEFAULT_ROLE: {{ $o.defaultRole | quote }}
+  SESSION_HORAS: {{ $o.sessionHours | quote }}
+  {{- range $k, $val := dict "OIDC_ALLOWED_DOMAINS" $o.allowedDomains "OIDC_ADMIN_EMAILS" $o.adminEmails "OIDC_REQUESTER_EMAILS" $o.requesterEmails "OIDC_READER_EMAILS" $o.readerEmails "OIDC_ADMIN_GROUPS" $o.adminGroups "OIDC_REQUESTER_GROUPS" $o.requesterGroups "OIDC_READER_GROUPS" $o.readerGroups }}
+  {{- if $val }}
+  {{ $k }}: {{ $val | quote }}
+  {{- end }}
+  {{- end }}
+  {{- end }}
 ---
 apiVersion: v1
 kind: ConfigMap

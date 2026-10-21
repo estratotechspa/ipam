@@ -37,6 +37,10 @@ spec:
             - name: {{ $k }}
               valueFrom: {secretKeyRef: {name: {{ include "ipam.secretName" $ }}, key: {{ $k }}}}
             {{- end }}
+            {{- range $k := list "OIDC_CLIENT_SECRET" "SESSION_SECRET" }}
+            - name: {{ $k }}
+              valueFrom: {secretKeyRef: {name: {{ include "ipam.secretName" $ }}, key: {{ $k }}, optional: true}}
+            {{- end }}
           readinessProbe: {httpGet: {path: /api/health, port: http}, periodSeconds: 5}
           livenessProbe: {httpGet: {path: /api/health, port: http}, initialDelaySeconds: 15, periodSeconds: 20}
           resources: {{- toYaml .Values.resources | nindent 12 }}

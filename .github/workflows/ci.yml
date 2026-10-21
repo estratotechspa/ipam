@@ -46,7 +46,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: azure/setup-helm@v4
+      - name: El esquema y los datos del chart son los mismos que los de db/
+        run: |
+          diff mvp/db/schema.sql mvp/chart/ipam/files/schema.sql
+          diff mvp/db/seed.sql mvp/chart/ipam/files/seed.sql
       - run: helm lint mvp/chart/ipam --set secrets.existingSecret=x
+      - name: Render con OIDC activado
+        run: helm template ipam mvp/chart/ipam --set auth.oidc.issuer=https://accounts.google.com --set auth.oidc.clientId=x --set secrets.oidcClientSecret=x --set config.publicUrl=https://ipam.example.com > /dev/null
       - run: helm template ipam mvp/chart/ipam --set secrets.existingSecret=x --set ingress.enabled=true > /tmp/render.yaml
       - name: kube-linter
         uses: stackrox/kube-linter-action@v1

@@ -43,3 +43,24 @@ create table if not exists eventos (
   detalle jsonb not null default '{}'
 );
 
+
+-- Usuarios que han iniciado sesión (OIDC). «rol» nulo = se resuelve por grupos / configuración.
+create table if not exists usuarios (
+  email         text primary key,
+  nombre        text not null default '',
+  rol           text check (rol in ('lector','solicitante','admin')),
+  ultimo_acceso timestamptz,
+  creado_en     timestamptz not null default now()
+);
+
+-- Bitácora de auditoría: quién hizo qué y cuándo.
+create table if not exists auditoria (
+  id      bigserial primary key,
+  ts      timestamptz not null default now(),
+  usuario text not null,
+  rol     text,
+  accion  text not null,
+  detalle jsonb not null default '{}',
+  ip      text
+);
+create index if not exists auditoria_ts_idx on auditoria (ts desc);

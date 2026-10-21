@@ -6,10 +6,9 @@ const { Pool } = require('pg');
 const ExcelJS = require('exceljs');
 const { parse, libres } = require('./cidr');
 const jira = require('./jira');
+const auth = require('./auth');
 
 const PORT = process.env.PORT || 8080;
-const APP_USER = process.env.APP_USER || '';
-const APP_PASS = process.env.APP_PASS || '';
 const WEBHOOK_SECRET = process.env.JIRA_WEBHOOK_SECRET || 'dev-secret-cambiar';
 
 const db = new Pool({ connectionString: process.env.DATABASE_URL, max: 10 });
@@ -28,16 +27,15 @@ app.use(helmet({
 }));
 app.use(express.json({ verify: (req, _res, buf) => { req.raw = buf; } }));
 
-// Acceso: Basic Auth solo si APP_USER y APP_PASS están definidos. Salud y webhook quedan abiertos
-// (el webhook se protege con firma HMAC).
-app.use((req, res, next) => {
-  if (!APP_USER || req.path === '/api/health' || req.path === '/webhook/jira') return next();
-  const h = req.headers.authorization || '';
-  const [u, ...rest] = Buffer.from(h.replace(/^Basic /, ''), 'base64').toString().split(':');
-  const ok = (a, b) => a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
-  if (h.startsWith('Basic ') && ok(u || '', APP_USER) && ok(rest.join(':'), APP_PASS)) { req.usuario = u; return next(); }
-  res.set('WWW-Authenticate', 'Basic realm="IPAM"').status(401).send('Autenticación requerida');
-});
+// Auditoría: nunca bloquea la operación; un fallo queda en el log.
+const auditar = (accion, usuario, rol, detalle = {}, ip = null) =>
+  db.query('insert into auditoria (usuario, rol, accion, detalle, ip) values ($1,$2,$3,$4,$5)', [usuario, rol, accion, detalle, ip])
+    .catch((e) => console.error('auditoría:', e.message));
+const audita = (req, accion, detalle) => auditar(accion, req.usuario || 'sistema', req.rol || null, detalle, req.ip);
+
+auth.validarConfiguracion();
+auth.montar(app, { db, auditar });
+const { requiere } = auth;
 
 const wrap = (fn) => (req, res) => fn(req, res).catch((e) => {
   console.error(e);
@@ -160,7 +158,7 @@ app.get('/api/asignaciones', wrap(async (_q, res) => {
 app.get('/api/jira/estado', (_q, res) => res.json({ activa: jira.enabled(), faltantes: jira.enabled() ? jira.faltantes() : [] }));
 
 // Exporta a Excel todos los segmentos asignados (con los datos de su pool) y la lista de pools.
-app.get('/api/exportar.xlsx', wrap(async (_q, res) => {
+app.get('/api/exportar.xlsx', requiere('lector'), wrap(async (req, res) => {
   const filas = (await db.query(
     `select a.id, a.pool_id, p.tipo, p.ambiente, p.proveedor, p.cidr::text as pool_cidr, a.cidr::text, a.vpc,
             a.solicitante, a.ticket, a.origen, a.creado_en
@@ -201,6 +199,7 @@ app.get('/api/exportar.xlsx', wrap(async (_q, res) => {
     { header: 'Uso', key: 'uso', width: 9, style: { numFmt: '0.0%' } },
   ], pools.map((p) => ({ id: p.id, tipo: p.tipo, amb: p.ambiente, prov: p.proveedor, cidr: p.cidr, n: p.asignaciones, uso: p.uso })));
 
+  await audita(req, 'exportar', { filas: filas.length });
   const nombre = `ipam-segmentos-${new Date().toISOString().slice(0, 10)}.xlsx`;
   res.set({ 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     'Content-Disposition': `attachment; filename="${nombre}"` });
@@ -216,18 +215,37 @@ app.get('/api/pools/:id/libres', wrap(async (req, res) => {
   res.json(libres(p.cidr, await ocupados(req.params.id), len, 3));
 }));
 
-app.post('/api/solicitudes', wrap(async (req, res) => {
+app.post('/api/solicitudes', requiere('solicitante'), wrap(async (req, res) => {
   const { pool, vpc, cidr, mascara } = req.body || {};
   const r = await asignar({ pool, vpc, cidr, mascara, solicitante: req.usuario || 'panel', origen: 'panel' });
   if (!r.ok) return res.status(r.status).json(r);
+  await audita(req, 'asignar', { cidr: r.asignacion.cidr, pool, vpc, ticket: r.asignacion.ticket });
   res.status(201).json(r.asignacion);
 }));
 
-app.delete('/api/asignaciones/:id', wrap(async (req, res) => {
+app.delete('/api/asignaciones/:id', requiere('admin'), wrap(async (req, res) => {
   const r = await db.query('delete from asignaciones where id=$1 returning cidr::text, ticket, pool_id', [req.params.id]);
   if (!r.rowCount) return res.status(404).json({ error: 'No existe' });
   await evento('liberacion', r.rows[0]);
+  await audita(req, 'liberar', r.rows[0]);
   res.json({ liberado: r.rows[0] });
+}));
+
+// Usuarios y auditoría (solo admin). El rol asignado aquí rige desde el próximo inicio de sesión del usuario.
+app.get('/api/usuarios', requiere('admin'), wrap(async (_q, res) => {
+  res.json((await db.query('select email, nombre, rol, ultimo_acceso from usuarios order by email')).rows);
+}));
+app.put('/api/usuarios/:email', requiere('admin'), wrap(async (req, res) => {
+  const rol = req.body && req.body.rol === null ? null : String((req.body || {}).rol || '');
+  if (rol !== null && !auth.ROLES.includes(rol)) return res.status(400).json({ error: 'rol inválido' });
+  const email = req.params.email.toLowerCase();
+  await db.query(
+    'insert into usuarios (email, rol) values ($1,$2) on conflict (email) do update set rol = excluded.rol', [email, rol]);
+  await audita(req, 'cambiar_rol', { usuario: email, rol });
+  res.json({ email, rol });
+}));
+app.get('/api/auditoria', requiere('admin'), wrap(async (_q, res) => {
+  res.json((await db.query('select id, ts, usuario, rol, accion, detalle, ip from auditoria order by id desc limit 200')).rows);
 }));
 
 app.get('/api/eventos', wrap(async (_q, res) => {
@@ -249,6 +267,7 @@ async function procesarTicket({ ticket, ambiente, tipo, mascara, vpc }) {
     await evento('jira_rechazo', { ticket, motivo: r.error });
     return { status: r.status, body: { ticket, error: r.error } };
   }
+  await auditar('asignar_jira', 'jira-webhook', null, { ticket, cidr: r.asignacion.cidr, pool: p.id, vpc });
   // Retorno a Jira: con JIRA_ENABLED=true ya lo hizo sincronizarJira(); apagado, solo queda el evento simulado.
   if (!jira.enabled()) await evento('jira_actualiza_ticket', { ticket, rango: r.asignacion.cidr, estado: 'Hecho', simulado: true });
   return { status: 200, body: { ticket, pool: p.id, cidr: r.asignacion.cidr } };
@@ -266,7 +285,7 @@ app.post('/webhook/jira', wrap(async (req, res) => {
 }));
 
 // Simulador para la demo: arma un ticket de Jira, lo firma y lo procesa por el mismo camino del webhook.
-app.post('/api/jira/simular', wrap(async (req, res) => {
+app.post('/api/jira/simular', requiere('solicitante'), wrap(async (req, res) => {
   const { ambiente, tipo, mascara, vpc } = req.body || {};
   const ticket = await nuevoTicket();
   const cuerpo = Buffer.from(JSON.stringify({ ticket, ambiente, tipo, mascara, vpc }));
