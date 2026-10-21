@@ -1,0 +1,67 @@
+{{- if and .Values.postgres.enabled .Values.postgres.backup.enabled }}
+{{- $b := .Values.postgres.backup }}
+{{- if and (eq $b.repo.type "gcs") (not $b.repo.gcs.bucket) }}{{ fail "postgres.backup.repo.gcs.bucket es obligatorio con repo.type=gcs" }}{{ end }}
+{{- if and (eq $b.repo.type "gcs") (eq $b.repo.gcs.keyType "service") (not $b.repo.gcs.keySecret) }}{{ fail "postgres.backup.repo.gcs.keySecret es obligatorio con keyType=service" }}{{ end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ipam.pgHost" . }}-pgbackrest
+  labels: {{- include "ipam.labels" . | nindent 4 }}
+data:
+  pgbackrest.conf: |
+    [global]
+    repo1-type={{ $b.repo.type }}
+    repo1-path={{ $b.repo.path }}
+    {{- if eq $b.repo.type "gcs" }}
+    repo1-gcs-bucket={{ $b.repo.gcs.bucket }}
+    repo1-gcs-key-type={{ $b.repo.gcs.keyType }}
+    {{- with $b.repo.gcs.endpoint }}
+    repo1-gcs-endpoint={{ . }}
+    {{- end }}
+    {{- if not $b.repo.gcs.verifyTls }}
+    repo1-storage-verify-tls=n
+    {{- end }}
+    {{- if eq $b.repo.gcs.keyType "service" }}
+    repo1-gcs-key=/etc/pgbackrest-gcs/key.json
+    {{- end }}
+    {{- end }}
+    repo1-retention-full-type=count
+    repo1-retention-full={{ $b.retentionFull }}
+    repo1-block=y
+    repo1-bundle=y
+    compress-type=zst
+    start-fast=y
+    log-level-console=info
+    log-level-file=off
+    lock-path=/tmp/pgbackrest/lock
+    spool-path=/tmp/pgbackrest/spool
+
+    [ipam]
+    pg1-path=/var/lib/postgresql/data/pgdata
+    pg1-socket-path=/var/run/postgresql
+    pg1-user=ipam
+{{- if eq $b.repo.type "posix" }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "ipam.pgHost" . }}-respaldos
+  labels: {{- include "ipam.labels" . | nindent 4 }}
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- with $b.repo.posix.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources: {requests: {storage: {{ $b.repo.posix.size }}}}
+{{- end }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "ipam.pgHost" . }}
+  labels: {{- include "ipam.labels" . | nindent 4 }}
+  {{- with $b.serviceAccountAnnotations }}
+  annotations: {{- toYaml . | nindent 4 }}
+  {{- end }}
+automountServiceAccountToken: false
+{{- end }}

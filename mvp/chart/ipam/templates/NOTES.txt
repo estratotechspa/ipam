@@ -1,6 +1,9 @@
 IPAM desplegado como «{{ .Release.Name }}».
 
 Acceso (sin ingress):  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "ipam.name" . }} 8080:{{ .Values.service.port }}
+{{- if .Values.auth.oidc.issuer }}
+Inicio de sesión OIDC: registra en el proveedor la URL de retorno  {{ default (printf "%s://%s" (ternary "https" "http" (gt (len .Values.ingress.tls) 0)) .Values.ingress.host) .Values.config.publicUrl }}/auth/callback
+{{- end }}
 {{- if .Values.ingress.enabled }}
 URL: http{{ if .Values.ingress.tls }}s{{ end }}://{{ .Values.ingress.host }}
 {{- end }}
