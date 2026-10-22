@@ -8,7 +8,7 @@ const CAB = { 'X-Requested-With': 'ipam' };
 async function api(url, opt) {
   const init =
     opt && opt.body !== undefined
-      ? { method: opt.method || 'POST', headers: { 'Content-Type': 'application/json', ...CAB }, body: JSON.stringify(opt.body) }
+      ? { method: opt.method || 'POST', headers: { 'Content-Type': 'application/json', ...CAB, ...(opt.headers || {}) }, body: JSON.stringify(opt.body) }
       : { headers: CAB, method: (opt && opt.method) || 'GET' };
   const r = await fetch(url, init);
   if (r.status === 401 && YO.modo === 'oidc') {
@@ -164,12 +164,13 @@ async function renderSol() {
   } catch (e) {
     return fail('sol', e);
   }
-  $('sol').innerHTML = `<h2>Solicitar segmento</h2><div class="row"><div class="card" style="max-width:420px;flex:none;width:100%">
+  $('sol').innerHTML =
+    `<h2>Asignar directo</h2><p class="muted" style="max-width:720px">Entrega el segmento <b>de inmediato y de forma definitiva</b>, sin pasar por una reserva ni por la aprobación de otra persona: queda registrado en la auditoría a tu nombre. Para el flujo normal (pedir, aprobar, asignar) usa <b>Reservas → Nueva reserva</b>.</p><div class="row"><div class="card" style="max-width:420px;flex:none;width:100%">
   <label>Pool</label><select id="s-pool">${pools.map((p) => `<option value="${esc(p.id)}" >${esc(p.id)} (${esc(p.cidr)})</option>`).join('')}</select>
   <label>Proyecto / VPC</label><input id="s-vpc" value="" placeholder="vpc-mi-proyecto">
   <label>CIDR manual (opcional; vacío = asignar el primer libre)</label><input id="s-cidr" value="" placeholder="ej. 10.210.48.0/22 (debe caer dentro del pool)">
   <label>Máscara (si no hay CIDR manual)</label><select id="s-len">${MASCARAS.map((n) => `<option ${n === 22 ? 'selected' : ''} value="${n}">/${n}</option>`).join('')}</select>
-  <p><button class="btn" id="s-go">Solicitar</button></p></div>
+  <p><button class="btn" id="s-go">Asignar</button></p></div>
   <div class="card" id="s-res"><p class="muted">Si pides un CIDR que choque con uno existente, la base de datos lo rechaza y se sugieren segmentos libres. Con el CIDR vacío se asigna el primer segmento libre del tamaño elegido.</p></div></div>`;
   $('s-go').onclick = solicitar;
 }
@@ -329,7 +330,58 @@ function tabla(titulo, cabeceras, filas, vacio) {
 }
 
 /* ===== Reservas (todos los roles; opera según permisos: dueño o admin) ===== */
-const RES = { filtro: { estado: '', pool: '', solicitante: '' }, timer: null };
+// Formulario «Nueva reserva» (solicitante y admin): aparta un rango por un tiempo; un admin debe aprobarla para que sea asignación.
+function formularioNuevaReserva(pools, estado, recargar) {
+  const campo = (etiqueta, control) => h('label', null, etiqueta, control);
+  const pool = h(
+    'select',
+    { id: 'nr-pool', required: true },
+    pools.map((p) => h('option', { value: p.id }, `${p.id} (${p.cidr})`)),
+  );
+  const vpc = h('input', { id: 'nr-vpc', required: true, maxlength: 120, placeholder: 'vpc-mi-proyecto' });
+  const ticket = h('input', { id: 'nr-ticket', maxlength: 60, placeholder: 'opcional (si no, se genera NET-xxx)' });
+  const mascara = h(
+    'select',
+    { id: 'nr-mascara' },
+    MASCARAS.map((n) => h('option', { value: n, selected: n === 24 }, '/' + n)),
+  );
+  const cidr = h('input', { id: 'nr-cidr', placeholder: 'opcional: vacío = el primer rango libre' });
+  const ttl = h('input', { id: 'nr-ttl', type: 'number', min: 1, max: 72, value: 24 });
+  const boton = h('button', { class: 'btn', type: 'submit', id: 'nr-go' }, 'Reservar');
+  const enviar = async (e) => {
+    e.preventDefault();
+    boton.disabled = true;
+    const cuerpo = { pool: pool.value, vpc: vpc.value.trim(), mascara: +mascara.value, ttl_horas: +ttl.value || 24 };
+    if (cidr.value.trim()) cuerpo.cidr = cidr.value.trim();
+    if (ticket.value.trim()) cuerpo.ticket = ticket.value.trim();
+    const r = await api('/api/v1/reservas', { body: cuerpo, headers: { 'Idempotency-Key': crypto.randomUUID() } });
+    boton.disabled = false;
+    if (!r.ok) return msg(estado, errorApi(r) + (r.data && r.data.sugeridos ? ' Libres sugeridos: ' + r.data.sugeridos.join(', ') : ''), 'error');
+    RES.aviso = {
+      texto: `Reservado ${r.data.cidr} en ${r.data.pool_id} por ${ttl.value || 24} h. Falta la aprobación de un admin para que sea asignación; si no se aprueba, expira sola.`,
+      tipo: 'ok',
+    };
+    recargar();
+  };
+  return h(
+    'details',
+    { class: 'card', style: 'margin:0 0 14px' },
+    h('summary', { style: 'cursor:pointer;font-weight:600' }, '＋ Nueva reserva'),
+    h(
+      'form',
+      { class: 'filtros', style: 'margin-top:12px', 'aria-label': 'Nueva reserva', onsubmit: enviar },
+      campo('Bloque base', pool),
+      campo('Proyecto / VPC', vpc),
+      campo('Máscara', mascara),
+      campo('CIDR manual', cidr),
+      campo('Ticket', ticket),
+      campo('Vigencia (horas, máx. 72)', ttl),
+      boton,
+    ),
+  );
+}
+
+const RES = { filtro: { estado: '', pool: '', solicitante: '' }, timer: null, aviso: null };
 function restante(seg) {
   const d = Math.floor(seg / 86400),
     hh = Math.floor((seg % 86400) / 3600),
@@ -366,6 +418,10 @@ async function renderReservas() {
         (!f.solicitante || r.solicitante.toLowerCase().includes(f.solicitante.toLowerCase())) && poolDe.has(r.pool_id) && pasaFiltro(poolDe.get(r.pool_id)),
     );
     const estado = h('div', { id: 'res-msg', 'aria-live': 'polite' });
+    if (RES.aviso) {
+      msg(estado, RES.aviso.texto, RES.aviso.tipo);
+      RES.aviso = null;
+    }
     const filtros = h(
       'form',
       { class: 'filtros', role: 'search', 'aria-label': 'Filtrar reservas', onsubmit: (e) => e.preventDefault() },
@@ -475,6 +531,7 @@ async function renderReservas() {
         h('b', null, 'No es definitiva'),
         ': se vuelve asignación solo al confirmarla (tras la aprobación de una persona) y, si no se confirma, expira sola.',
       ),
+      puede('solicitante') ? formularioNuevaReserva(pools, estado, renderReservas) : null,
       filtros,
       estado,
       tabla(
@@ -717,7 +774,7 @@ async function iniciar() {
   }
   YO = await r.json();
   const nav = $('nav');
-  nav.querySelector('[data-t="sol"]').hidden = !puede('solicitante');
+  nav.querySelector('[data-t="sol"]').hidden = !puede('admin');
   nav.querySelector('[data-t="tokens"]').hidden = !puede('admin');
   nav.querySelector('[data-t="usuarios"]').hidden = !(puede('admin') && YO.modo === 'oidc');
   nav.querySelector('[data-t="audit"]').hidden = !puede('admin');

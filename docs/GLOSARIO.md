@@ -27,7 +27,7 @@ Términos en orden alfabético, explicados sin jerga. El término en inglés va 
 | **OIDC** | *OpenID Connect*: inicio de sesión corporativo (SSO) con un proveedor de identidad. |
 | **OpenAPI** | Descripción formal de la API (`/api/v1/openapi.json`). Sirve para generar clientes y probar. |
 | **OpenTofu** (`tofu`) | Herramienta de infraestructura como código, compatible con Terraform. Los ejemplos usan `tofu`; `terraform` también sirve. |
-| **Pool** | Rango grande reservado para un tipo de uso en un ambiente. De él se cortan las asignaciones. |
+| **Pool** | **Bloque grande** (p. ej. `10.210.0.0/20`) definido para un tipo de uso en un ambiente; de él se cortan las asignaciones. «Pool» es el término habitual en IPAM: una reserva común de la que se van sacando rangos. No es lo mismo que una asignación (un pedazo ya entregado). |
 | **Pooler** | Intermediario de conexiones delante de PostgreSQL (el de Supabase). El IPAM necesita el modo **sesión**. |
 | **Prometheus / `/metrics`** | Sistema de métricas y la ruta que las publica. Nace cerrada. |
 | **Rate limit** | Límite de peticiones por minuto para evitar abusos. Responde 429 al pasarse. |

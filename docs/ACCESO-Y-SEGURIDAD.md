@@ -17,8 +17,9 @@ Cómo se controla quién entra y qué puede hacer. El análisis de amenazas est�
 | Acción | lector | agente | solicitante | admin |
 |---|:-:|:-:|:-:|:-:|
 | Ver pools, asignaciones, reservas | ✔ | ✔ | ✔ | ✔ |
-| Reservar, y confirmar/liberar **sus** reservas | | ✔ | ✔ | ✔ |
-| Asignar directo (Solicitar) | | | ✔ | ✔ |
+| Reservar (también «Nueva reserva» en la interfaz) y liberar **sus** reservas | | ✔ | ✔ | ✔ |
+| **Aprobar** (confirmar) reservas | | solo las suyas, con `aprobado_por` | | ✔ (todas) |
+| Asignar directo (sin reserva) | | | | ✔ |
 | Liberar asignaciones, confirmar/liberar reservas ajenas | | | | ✔ |
 | Tokens, usuarios, auditoría, respaldo e importación | | | | ✔ |
 Los usuarios pueden ser `lector`, `solicitante` o `admin`; los tokens, `lector` o `agente`.

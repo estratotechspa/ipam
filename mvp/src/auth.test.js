@@ -154,16 +154,21 @@ test('login OIDC como administrador (correo de la configuración) y auditoría',
   assert.ok(aud.some((x) => x.accion === 'login' && x.usuario === 'root@empresa.cl'));
 });
 
-test('roles por grupo: solicitante puede asignar pero no liberar; lector solo lee', opts, async () => {
+test('roles por grupo: solicitante reserva pero no asigna directo ni libera; el admin aprueba; lector solo lee', opts, async () => {
   const ana = new Navegador();
   await ana.entrar('ana@empresa.cl');
   assert.equal((await (await ana.api('/api/me')).json()).rol, 'solicitante');
-  const r = await ana.api('/api/solicitudes', { method: 'POST', body: JSON.stringify({ pool: 'onprem-lan-dev', vpc: 'rbac', cidr: '192.168.70.0/24' }) });
+  // Asignar directo es solo de admin: el solicitante pasa por una reserva que otra persona (admin) aprueba.
+  const directo = await ana.api('/api/solicitudes', { method: 'POST', body: JSON.stringify({ pool: 'onprem-lan-dev', vpc: 'rbac', cidr: '192.168.70.0/24' }) });
+  assert.equal(directo.status, 403);
+  const r = await ana.api('/api/reservas', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': 'rbac-ana-1' },
+    body: JSON.stringify({ pool: 'onprem-lan-dev', vpc: 'rbac', cidr: '192.168.70.0/24' }),
+  });
   assert.equal(r.status, 201);
-  const asig = await r.json();
-  assert.equal(asig.solicitante, 'ana@empresa.cl');
-  const del = await ana.api('/api/asignaciones/' + asig.id, { method: 'DELETE' });
-  assert.equal(del.status, 403);
+  const reserva = await r.json();
+  assert.equal(reserva.solicitante, 'ana@empresa.cl');
   assert.equal((await ana.api('/api/auditoria')).status, 403);
 
   const lector = new Navegador();
@@ -172,8 +177,13 @@ test('roles por grupo: solicitante puede asignar pero no liberar; lector solo le
   assert.equal((await lector.api('/api/solicitudes', { method: 'POST', body: JSON.stringify({ pool: 'onprem-lan-dev', vpc: 'x', mascara: 24 }) })).status, 403);
   assert.equal((await lector.api('/api/exportar.xlsx')).status, 200);
 
+  // El admin aprueba la reserva (confirmar) y puede liberar la asignación; el solicitante no.
   const jefe = new Navegador();
   await jefe.entrar('jefe@empresa.cl');
+  const conf = await jefe.api(`/api/reservas/${reserva.id}/confirmar`, { method: 'POST', body: '{}' });
+  assert.equal(conf.status, 200);
+  const asig = (await conf.json()).asignacion;
+  assert.equal((await ana.api('/api/asignaciones/' + asig.id, { method: 'DELETE' })).status, 403);
   assert.equal((await jefe.api('/api/asignaciones/' + asig.id, { method: 'DELETE' })).status, 200);
 });
 

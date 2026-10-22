@@ -217,3 +217,23 @@ test('Jira → reserva → aprobación manual de un admin → asignación (nada 
   // Limpieza: liberar la asignación.
   await page.request.delete(`/api/v1/asignaciones/${a.id}`, { headers: { 'X-Requested-With': 'ipam' } });
 });
+
+test('Nueva reserva desde la interfaz: se crea, queda pendiente y un admin la aprueba', async ({ page }) => {
+  const vpc = `nueva-res-${Date.now()}`;
+  await irA(page, 'Reservas');
+  await page.getByText('Nueva reserva').first().click();
+  await page.selectOption('#nr-pool', 'gke-nodos-qa');
+  await page.fill('#nr-vpc', vpc);
+  await page.selectOption('#nr-mascara', '26');
+  await page.click('#nr-go');
+  await expect(page.getByRole('status')).toContainText('Falta la aprobación de un admin');
+  const fila = page.locator('tr', { hasText: vpc });
+  await expect(fila).toContainText('reservada');
+  expect((await (await page.request.get('/api/v1/asignaciones')).json()).some((a) => a.vpc === vpc)).toBe(false);
+  page.once('dialog', (d) => d.accept());
+  await fila.getByRole('button', { name: /Confirmar/ }).click();
+  await expect(page.locator('tr', { hasText: vpc })).toContainText('confirmada');
+  const a = (await (await page.request.get('/api/v1/asignaciones')).json()).find((x) => x.vpc === vpc);
+  expect(a.cidr).toMatch(/\/26$/);
+  await page.request.delete(`/api/v1/asignaciones/${a.id}`, { headers: { 'X-Requested-With': 'ipam' } });
+});

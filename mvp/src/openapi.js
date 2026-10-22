@@ -229,7 +229,8 @@ const schemas = {
   Solicitud: {
     type: 'object',
     required: ['pool', 'vpc'],
-    description: 'Asignación directa (sin reserva previa), para personas con rol solicitante o admin.',
+    description:
+      'Asignación directa (sin reserva previa ni aprobación de otra persona), solo para admin. El flujo normal es reservar (`POST /reservas`) y que un admin apruebe.',
     properties: { pool: { type: 'string' }, vpc: { type: 'string' }, cidr: { $ref: '#/components/schemas/Cidr' }, mascara: { type: 'integer' } },
     example: { pool: 'gke-nodos-qa', vpc: 'proyecto-demo-qa', mascara: 24 },
   },
@@ -862,7 +863,7 @@ function rutasDePoolsYAsignaciones(p) {
     'x-alias-legado': '/api/solicitudes',
     post: op({
       tag: 'Asignaciones',
-      summary: 'Asigna un rango directo (solicitante o admin)',
+      summary: 'Asigna un rango directo (solo admin)',
       description: 'Camino de las personas desde la interfaz. Los agentes usan reservas.',
       body: cuerpo('Solicitud', schemas.Solicitud.example),
       ok: { 201: respuesta('Asignado.', 'Asignacion') },

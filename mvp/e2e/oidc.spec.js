@@ -20,7 +20,7 @@ test('un lector NO ve la pestaña Tokens (ni Auditoría), ve Reservas y no puede
   await expect(nav.getByRole('button', { name: 'Reservas' })).toBeVisible();
   await expect(nav.getByRole('button', { name: 'Tokens' })).toHaveCount(0);
   await expect(nav.getByRole('button', { name: 'Auditoría' })).toHaveCount(0);
-  await expect(nav.getByRole('button', { name: 'Solicitar' })).toHaveCount(0);
+  await expect(nav.getByRole('button', { name: 'Asignar directo' })).toHaveCount(0);
   await nav.getByRole('button', { name: 'Reservas' }).click();
   await expect(page.getByRole('heading', { name: 'Reservas', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: /^(Confirmar|Liberar)/ })).toHaveCount(0);

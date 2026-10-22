@@ -22,7 +22,7 @@ function montar(app, { casos, audita, validacion }) {
     return r.ok ? res.json(r.libres) : enviarFallo(res, { ...r, error: r.error }, { legado: false });
   });
 
-  api(app, 'post', '/solicitudes', requiere('solicitante'), validacion.cuerpo('Solicitud'), async (req, res) => {
+  api(app, 'post', '/solicitudes', requiere('admin'), validacion.cuerpo('Solicitud'), async (req, res) => {
     const { pool, vpc, cidr, mascara } = req.body || {};
     const r = await asignaciones.asignar({ pool, vpc, cidr, mascara, solicitante: req.usuario || 'panel', origen: 'panel' });
     if (!r.ok) return enviarFallo(res, r, { legado: true });

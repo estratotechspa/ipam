@@ -10,6 +10,13 @@ En este IPAM:
 - Cada proyecto recibe **asignaciones**: pedazos de un pool (por ejemplo un `/22`) que nadie más puede tomar.
 - Los agentes automáticos (pipelines) no asignan directo: **reservan** un rango por un tiempo limitado y **una persona aprueba** antes de que se vuelva definitivo (*human-in-the-loop*, «humano en el circuito»).
 
+### Pool, asignación y reserva (la diferencia)
+| | Pool | Asignación | Reserva |
+|---|---|---|---|
+| Qué es | El **bloque grande** de un ambiente y tipo (p. ej. `dev-nodos` = `10.210.0.0/20`) | Un **pedazo** del pool entregado de forma definitiva a un proyecto (p. ej. `10.210.1.0/24`) | Un pedazo **apartado por un tiempo**, pendiente de aprobación |
+| Analogía | El terreno ya loteado | El lote entregado | El lote con una nota de «apartado» |
+Los tres se escriben como CIDR, por eso se parecen. «Pool» es el término habitual en IPAM: una reserva común de la que se van sacando rangos.
+
 ## 2 · Entrar
 Abre la URL del IPAM. Según cómo esté configurado verás:
 - **Usuario y contraseña** (modo POC): el navegador pide credenciales.
@@ -20,8 +27,8 @@ Tu **rol** decide qué pestañas ves:
 | Rol | Qué puede hacer |
 |---|---|
 | `lector` | Ver pools, asignaciones y reservas. Exportar a Excel. |
-| `solicitante` | Lo anterior, más pedir segmentos directamente. |
-| `admin` | Todo: liberar asignaciones, administrar tokens, usuarios, auditoría y respaldos. |
+| `solicitante` | Lo anterior, más **crear reservas** (un admin las aprueba). |
+| `admin` | Todo: **aprobar reservas**, asignar directo, liberar asignaciones, administrar tokens, usuarios, auditoría y respaldos. |
 
 Los **agentes** (tokens de servicio) tienen rol `lector` o `agente` y no usan la interfaz: ver [API-Y-AGENTES](API-Y-AGENTES.md).
 
@@ -45,18 +52,19 @@ La lista oficial de segmentos definitivos: **segmento**, **pool**, **proyecto/VP
 - **Respaldo JSON** (solo admin): copia lógica completa para llevar el IPAM a otra infraestructura ([MIGRACION](ops/MIGRACION.md)).
 - **Liberar** (solo admin): devuelve el segmento al pool. Queda en la auditoría. Hazlo solo cuando la red realmente se eliminó.
 
-### Solicitar — «necesito un rango ahora» (solicitante y admin)
-Formulario para pedir un segmento **definitivo** de inmediato:
-1. Elige el **pool** (ambiente y tipo correctos).
-2. Escribe el **proyecto / VPC** (el nombre de quien lo usará; es obligatorio).
+### Asignar directo — «entrégalo ya, definitivo» (solo admin)
+Formulario para entregar un segmento **de inmediato y de forma definitiva**, **sin reserva y sin aprobación de otra persona**. Queda en la auditoría a nombre del admin que lo hizo.
+1. Elige el **pool** (el bloque base del ambiente y tipo correctos).
+2. Escribe el **proyecto / VPC** (obligatorio).
 3. Deja **CIDR manual** vacío para que el IPAM entregue el primer segmento libre del tamaño que elijas en **Máscara**, de `/8` a `/32` (`/22` = 1.024 direcciones, `/24` = 256, `/26` = 64, `/28` = 16…). Si necesitas un rango específico, escríbelo; debe caer dentro del pool.
-4. Pulsa **Solicitar**.
+4. Pulsa **Asignar**.
 
-Si el rango que pediste choca con otro, el IPAM **no asigna nada**: te muestra con quién choca (proyecto, persona, fecha) y te ofrece **segmentos libres** con un botón «Usar».
-Para una red nueva de un proyecto GCP, lo normal es que la pida el pipeline por reserva (pestaña siguiente), no a mano.
+Si el rango choca con otro, el IPAM **no asigna nada**: te muestra con quién choca y ofrece **segmentos libres** con un botón «Usar».
+Para el flujo normal (pedir, aprobar, asignar) usa **Reservas → Nueva reserva**.
 
 ### Reservas — «apartado, esperando aprobación»
-Aquí viven las reservas tentativas que crean los agentes. Una reserva **aparta** un rango sin entregarlo todavía:
+Aquí viven las reservas tentativas que crean los agentes, Jira y las personas. Una reserva **aparta** un rango sin entregarlo todavía:
+- **Nueva reserva** (botón arriba, para solicitante y admin): eliges bloque base, proyecto/VPC, máscara o CIDR, ticket opcional y vigencia (hasta 72 h). **Un admin debe aprobarla** (Confirmar) para que sea asignación.
 - **Estados:** `reservada` (vigente, con **cuenta regresiva**), `confirmada` (ya es asignación), `liberada` (se devolvió) y `expirada` (nadie la aprobó a tiempo).
 - Por defecto expira a las **24 horas** (máximo 72); si nadie hace nada, el rango vuelve solo al pool.
 - Puedes **confirmar** o **liberar** las tuyas (el admin, las de todos). Las reservas que llegan desde **Jira** (solicitante `jira-webhook`) solo las puede aprobar un **admin**: confirmar equivale a dar la **aprobación manual** para asignar el CIDR. Un agente debe indicar **quién aprobó** y **dónde consta** (un MR, un ticket): así queda registro de la aprobación humana.
@@ -86,7 +94,8 @@ Bitácora de **solo lectura**: fecha, usuario, rol, acción y detalle de cada ca
 4. Si algo falla o se rechaza, el pipeline **libera**; si nadie hace nada, **expira sola**.
 Detalle técnico en [API-Y-AGENTES](API-Y-AGENTES.md) y [ARQUITECTURA](ARQUITECTURA.md).
 
-- **Dar un rango a mano:** pestaña Solicitar.
+- **Pedir un rango:** Reservas → Nueva reserva; un admin la aprueba.
+- **Entregar un rango ya (admin):** pestaña Asignar directo.
 - **Saber cuánto queda en un pool:** pestaña Pools, barra de uso.
 - **Devolver un rango:** Asignaciones → Liberar (admin).
 - **Entregar un informe:** Exportar a Excel.

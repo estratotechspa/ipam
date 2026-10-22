@@ -5,7 +5,7 @@ test('solicitar → ver en asignaciones → exportar a Excel → liberar', async
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Estado de pools' })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Solicitar', exact: true }).click();
+  await page.getByRole('button', { name: 'Asignar directo', exact: true }).click();
   await page.selectOption('#s-pool', 'gke-nodos-qa');
   await page.fill('#s-vpc', vpc);
   await page.fill('#s-cidr', '');
@@ -27,7 +27,7 @@ test('solicitar → ver en asignaciones → exportar a Excel → liberar', async
 
 test('un CIDR solapado muestra la alerta y sugiere segmentos libres', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Solicitar', exact: true }).click();
+  await page.getByRole('button', { name: 'Asignar directo', exact: true }).click();
   await page.selectOption('#s-pool', 'gke-pods-prod');
   await page.fill('#s-vpc', 'vpc-e2e-solapado');
   await page.fill('#s-cidr', '10.64.8.0/22');
