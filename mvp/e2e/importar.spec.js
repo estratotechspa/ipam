@@ -12,7 +12,10 @@ test('importar segmentos: simular no escribe, el solapamiento con otro pool exig
     `10.20.0.0/24,${marca}-d,Nodos`, // solapa con gke-nodos-qa (otro pool)
   ].join('\n');
   await page.goto('/');
-  await page.locator('#nav').getByRole('button', { name: 'Importar', exact: true }).click();
+  await page
+    .locator('#pools')
+    .getByRole('button', { name: /Importar segmentos/ })
+    .click(); // Importar vive dentro de Pools
   await expect(page.getByRole('heading', { name: 'Importar segmentos que ya existen' })).toBeVisible();
   await page.fill('#imp-prov', 'E2E-Test');
   await page.selectOption('#imp-amb', 'dev');

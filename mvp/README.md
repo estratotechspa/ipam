@@ -133,7 +133,7 @@ Código en `src/jira.js`. Se activa con `JIRA_ENABLED=true` más `JIRA_BASE_URL`
 
 ## Guion de demo (5 min)
 1. **Pools:** estado y uso de cada pool.
-2. **Asignar directo (admin):** `gke-pods-prod` + `10.64.8.0/22` → solapamiento con NET-142, y sugeridos; «Usar» → asignado con ticket.
-3. **Asignar directo sin CIDR** (solo máscara) → asigna el primer libre.
+2. **Asignaciones → Nueva asignación (admin):** `gke-pods-prod` + `10.64.8.0/22` → solapamiento con NET-142, y sugeridos; «Usar» → asignado con ticket.
+3. **Nueva asignación sin CIDR** (solo máscara, con VLAN opcional) → asigna el primer libre; clic en su ID → ficha con detalle e historial.
 4. **Jira:** «Enviar webhook» → se ve el evento recibido, la asignación y la actualización del ticket.
 5. **Asignaciones:** aparecen con origen `panel` / `jira`; «Liberar» devuelve el espacio.

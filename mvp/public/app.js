@@ -32,13 +32,19 @@ const get = async (u) => {
   return r.data;
 };
 
+// Vistas sin botón propio en la barra: se abren desde su pestaña (Importar, desde Pools) y solo las ve un admin.
+const SUBVISTAS = { importar: 'pools' };
+let VISTA = 'pools';
 function show(t) {
-  if (!$(t) || $('nav').querySelector('[data-t="' + t + '"]').hidden) t = 'pools';
+  const boton = $('nav').querySelector('[data-t="' + t + '"]');
+  if (!$(t) || (SUBVISTAS[t] ? !puede('admin') : !boton || boton.hidden)) t = 'pools';
+  VISTA = t;
+  const marcada = SUBVISTAS[t] || t;
   clearInterval(RES.timer);
   document.querySelectorAll('.wrap').forEach((w) => w.classList.toggle('hide', w.id !== t));
   document.querySelectorAll('#nav button').forEach((b) => {
-    b.classList.toggle('on', b.dataset.t === t);
-    if (b.dataset.t === t) b.setAttribute('aria-current', 'page');
+    b.classList.toggle('on', b.dataset.t === marcada);
+    if (b.dataset.t === marcada) b.setAttribute('aria-current', 'page');
     else b.removeAttribute('aria-current');
   });
   render(t);
@@ -101,32 +107,62 @@ const barraFiltro = (todos, recargar) =>
     camposFiltro(todos, recargar),
   );
 
+// Uso de un pool: lo asignado (definitivo) más lo reservado (apartado). Es la misma cuenta en la tabla, la ficha y la disponibilidad.
+const pct = (x) => (x * 100).toFixed(1).replace('.', ',') + ' %';
+const anchoUso = (x) => (x > 0 ? Math.max(x * 100, 1) : 0);
+const textoUso = (asig, res) => `Asignado ${pct(asig)} · reservado ${pct(res)}`;
+const barraUsoHtml = (asig, res) =>
+  `<span class="uso"><span class="bar" role="img" aria-label="${textoUso(asig, res)}" title="${textoUso(asig, res)}"><i style="width:${anchoUso(asig)}%"></i><i class="res" style="width:${anchoUso(res)}%"></i></span>${pct(asig + res)}</span>`;
+const barraUso = (asig, res) =>
+  h(
+    'span',
+    { class: 'uso' },
+    h(
+      'span',
+      { class: 'bar', role: 'img', 'aria-label': textoUso(asig, res), title: textoUso(asig, res) },
+      h('i', { style: `width:${anchoUso(asig)}%` }),
+      h('i', { class: 'res', style: `width:${anchoUso(res)}%` }),
+    ),
+    pct(asig + res),
+  );
+
 async function renderPools() {
   try {
     const [todos, r] = await Promise.all([get('/api/pools'), get('/api/resumen')]);
     const pools = todos.filter(pasaFiltro);
+    // Uso total ponderado por tamaño: direcciones ocupadas (asignadas + reservadas) de todos los pools ÷ direcciones totales.
+    const total = pools.reduce((n, p) => n + size(p.cidr), 0);
+    const ocupadas = pools.reduce((n, p) => n + (p.uso + (p.uso_reservado || 0)) * size(p.cidr), 0);
     $('pools').innerHTML =
-      `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h2>Estado de pools</h2><a class="btn sec" href="/api/exportar.xlsx" download>⬇ Exportar a Excel</a></div>
+      `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h2>Estado de pools</h2><span class="acciones">${puede('admin') ? '<button type="button" class="btn" id="btn-importar">⬆ Importar segmentos</button>' : ''}<a class="btn sec" href="/api/exportar.xlsx" download>⬇ Exportar a Excel</a></span></div>
   <div class="row"><div class="card"><div class="kpi">${pools.length}</div><div class="sub">Pools</div></div>
   <div class="card"><div class="kpi">${pools.reduce((n, p) => n + p.asignaciones, 0)}</div><div class="sub">Asignaciones activas</div></div>
-  <div class="card"><div class="kpi">${((pools.length ? pools.reduce((n, p) => n + p.uso, 0) / pools.length : 0) * 100).toFixed(1).replace('.', ',')}%</div><div class="sub">Uso promedio</div></div>
+  <div class="card"><div class="kpi">${pct(total ? ocupadas / total : 0)}</div><div class="sub">Uso total (asignado + reservado, sobre todas las direcciones)</div></div>
   <div class="card"><div class="kpi">${r.solapamientos}</div><div class="sub">Solapamientos (la base de datos los impide)</div></div></div>
-  <div class="card tablewrap" style="margin-top:16px"><table><tr><th>Pool</th><th>Tipo</th><th>Ambiente</th><th>Proveedor</th><th>CIDR base</th><th>Asig.</th><th>Uso</th></tr>
+  <p class="muted leyenda"><span class="muestra asig"></span> asignado <span class="muestra res"></span> reservado · Haz clic en un pool para ver su ficha.</p>
+  <div class="card tablewrap"><table><tr><th>Pool</th><th>Tipo</th><th>Ambiente</th><th>Proveedor</th><th>CIDR base</th><th>Asig.</th><th>Reservas</th><th>Uso</th></tr>
   ${pools
     .map(
       (
         p,
-      ) => `<tr><td>${esc(p.id)}</td><td>${esc(p.tipo)}</td><td>${tag(p.ambiente)}</td><td>${esc(p.proveedor)}</td><td><code>${esc(p.cidr)}</code></td><td>${p.asignaciones}</td>
-  <td><div class="bar" title="${(p.uso * 100).toFixed(2)}%"><i style="width:${Math.max(p.uso * 100, 1)}%"></i></div></td></tr>`,
+      ) => `<tr><td><button type="button" class="enlace" data-ficha-pool="${esc(p.id)}">${esc(p.id)}</button></td><td>${esc(p.tipo)}</td><td>${tag(p.ambiente)}</td><td>${esc(p.proveedor)}</td><td><code>${esc(p.cidr)}</code></td><td>${p.asignaciones}</td><td>${p.reservas_vigentes || 0}</td>
+  <td>${barraUsoHtml(p.uso, p.uso_reservado || 0)}</td></tr>`,
     )
     .join('')}</table></div>`;
     $('pools').prepend(barraFiltro(todos, renderPools));
+    $('pools')
+      .querySelectorAll('[data-ficha-pool]')
+      .forEach((b) => (b.onclick = () => fichaPool(b.dataset.fichaPool)));
+    const imp = $('btn-importar');
+    if (imp) imp.onclick = () => show('importar');
   } catch (e) {
     fail('pools', e);
   }
 }
 
 let busquedaAsig = ''; // texto del buscador de Asignaciones
+const ASIG = { formAbierto: false, aviso: null };
+const textoVlan = (x) => (x.vlan ? `${x.vlan}${x.vlan_nombre ? ' · ' + x.vlan_nombre : ''}` : x.vlan_nombre || '—');
 async function renderAsig() {
   try {
     const [todosPools, todasAsig] = await Promise.all([get('/api/pools'), get('/api/asignaciones')]);
@@ -134,14 +170,14 @@ async function renderAsig() {
     const q = busquedaAsig.trim().toLowerCase();
     const a = todasAsig
       .filter((x) => deEsePool.has(x.pool_id) && pasaFiltro(deEsePool.get(x.pool_id)))
-      .filter((x) => !q || [x.codigo, x.cidr, x.vpc, x.ticket, x.solicitante, x.pool_id, x.origen].join(' ').toLowerCase().includes(q));
+      .filter((x) => !q || [x.codigo, x.cidr, x.vpc, x.ticket, x.solicitante, x.pool_id, x.origen, x.vlan, x.vlan_nombre].join(' ').toLowerCase().includes(q));
     $('asig').innerHTML =
-      `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h2>Asignaciones</h2><span><a class="btn" href="/api/exportar.xlsx" download>⬇ Exportar a Excel</a> ${puede('admin') ? '<a class="btn sec" href="/api/exportar.json" download title="Respaldo completo para llevar el IPAM a otra infraestructura">⬇ Respaldo JSON</a>' : ''}</span></div><div class="card tablewrap"><table><tr><th>ID</th><th>Segmento</th><th>Pool</th><th>Proyecto / VPC</th><th>Direcciones</th><th>Solicitó</th><th>Origen</th><th>Ticket</th><th>Fecha</th><th></th></tr>
+      `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h2>Asignaciones</h2><span><a class="btn" href="/api/exportar.xlsx" download>⬇ Exportar a Excel</a> ${puede('admin') ? '<a class="btn sec" href="/api/exportar.json" download title="Respaldo completo para llevar el IPAM a otra infraestructura">⬇ Respaldo JSON</a>' : ''}</span></div><div class="card tablewrap"><table><tr><th>ID</th><th>Segmento</th><th>Pool</th><th>Proyecto / VPC</th><th>VLAN</th><th>Direcciones</th><th>Solicitó</th><th>Origen</th><th>Ticket</th><th>Fecha</th><th></th></tr>
   ${a
     .map(
       (
         x,
-      ) => `<tr><td><code>${esc(x.codigo || '')}</code></td><td><code>${esc(x.cidr)}</code></td><td>${esc(x.pool_id)}</td><td>${esc(x.vpc)}</td><td>${fmt(size(x.cidr))}</td><td>${esc(x.solicitante)}</td><td>${esc(x.origen)}</td><td>${esc(x.ticket)}</td><td>${fecha(x.creado_en)}</td>
+      ) => `<tr><td><button type="button" class="enlace" data-ficha-asig="${esc(x.id)}"><code>${esc(x.codigo || x.id)}</code></button></td><td><code>${esc(x.cidr)}</code></td><td>${esc(x.pool_id)}</td><td>${esc(x.vpc)}</td><td>${esc(textoVlan(x))}</td><td>${fmt(size(x.cidr))}</td><td>${esc(x.solicitante)}</td><td>${esc(x.origen)}</td><td>${esc(x.ticket)}</td><td>${fecha(x.creado_en)}</td>
   <td>${puede('admin') ? `<button class="btn sec" data-del="${x.id}" data-c="${esc(x.cidr)}">Liberar</button>` : ''}</td></tr>`,
     )
     .join('')}</table></div>`;
@@ -149,7 +185,7 @@ async function renderAsig() {
       id: 'f-buscar',
       type: 'search',
       value: busquedaAsig,
-      placeholder: 'ID, segmento, proyecto, ticket…',
+      placeholder: 'ID, segmento, proyecto, VLAN, ticket…',
       oninput: async (e) => {
         busquedaAsig = e.target.value;
         await renderAsig();
@@ -163,73 +199,156 @@ async function renderAsig() {
     const barra = barraFiltro(todosPools, renderAsig);
     barra.insertBefore(h('label', null, 'Buscar', buscador), barra.firstChild);
     $('asig').prepend(barra);
+    const aviso = h('div', { id: 'asig-msg', 'aria-live': 'polite' });
+    if (ASIG.aviso) {
+      msg(aviso, ASIG.aviso, 'ok');
+      ASIG.aviso = null;
+    }
+    $('asig').prepend(aviso);
+    if (puede('admin')) $('asig').prepend(formularioNuevaAsignacion(todosPools, renderAsig));
+    $('asig')
+      .querySelectorAll('[data-ficha-asig]')
+      .forEach((b) => (b.onclick = () => fichaAsignacion(b.dataset.fichaAsig)));
     $('asig')
       .querySelectorAll('[data-del]')
-      .forEach(
-        (b) =>
-          (b.onclick = async () => {
-            const motivo = prompt('¿Por qué se libera ' + b.dataset.c + '? (queda en la auditoría)');
-            if (motivo === null) return;
-            if (!motivo.trim()) return alert('Indica el motivo: queda registrado en la auditoría.');
-            const r = await api('/api/asignaciones/' + b.dataset.del, { method: 'DELETE', body: { motivo: motivo.trim() } });
-            if (!r.ok) alert((r.data && (r.data.mensaje || r.data.error)) || 'No se pudo liberar');
-            renderAsig();
-          }),
-      );
+      .forEach((b) => (b.onclick = () => liberarAsignacion(b.dataset.del, b.dataset.c, renderAsig)));
   } catch (e) {
     fail('asig', e);
   }
 }
 
-let pools = [];
-async function renderSol() {
-  try {
-    pools = await get('/api/pools');
-  } catch (e) {
-    return fail('sol', e);
+/** Libera una asignación pidiendo el motivo (queda en el historial). Devuelve true si se liberó. */
+async function liberarAsignacion(id, cidr, despues) {
+  const motivo = prompt('¿Por qué se libera ' + cidr + '? (queda en el historial)');
+  if (motivo === null) return false;
+  if (!motivo.trim()) {
+    alert('Indica el motivo: queda registrado en el historial.');
+    return false;
   }
-  $('sol').innerHTML =
-    `<h2>Asignar directo</h2><p class="muted" style="max-width:720px">Entrega el segmento <b>de inmediato y de forma definitiva</b>, sin pasar por una reserva ni por la aprobación de otra persona: queda registrado en la auditoría a tu nombre. Para el flujo normal (pedir, aprobar, asignar) usa <b>Reservas → Nueva reserva</b>.</p><div class="row"><div class="card" style="max-width:420px;flex:none;width:100%">
-  <label>Pool</label><select id="s-pool">${pools.map((p) => `<option value="${esc(p.id)}" >${esc(p.id)} (${esc(p.cidr)})</option>`).join('')}</select>
-  <label>Proyecto / VPC</label><input id="s-vpc" value="" placeholder="vpc-mi-proyecto">
-  <label>CIDR manual (opcional; vacío = asignar el primer libre)</label><input id="s-cidr" value="" placeholder="ej. 10.210.48.0/22 (debe caer dentro del pool)">
-  <label>Máscara (si no hay CIDR manual)</label><select id="s-len">${MASCARAS.map((n) => `<option ${n === 22 ? 'selected' : ''} value="${n}">/${n}</option>`).join('')}</select>
-  <p><button class="btn" id="s-go">Asignar</button></p></div>
-  <div class="card" style="flex:1;min-width:320px"><b>Disponibilidad del pool elegido</b><div id="s-disp"></div></div>
-  <div class="card" id="s-res"><p class="muted">Si pides un CIDR que choque con uno existente, la base de datos lo rechaza y se sugieren segmentos libres. Con el CIDR vacío se asigna el primer segmento libre del tamaño elegido.</p></div></div>`;
-  $('s-go').onclick = solicitar;
-  const actualizarDisp = () => cargarDisponibilidad($('s-disp'), $('s-pool').value, $('s-len'));
-  $('s-pool').onchange = actualizarDisp;
-  actualizarDisp();
+  const r = await api('/api/asignaciones/' + id, { method: 'DELETE', body: { motivo: motivo.trim() } });
+  if (!r.ok) alert((r.data && (r.data.mensaje || r.data.error)) || 'No se pudo liberar');
+  if (despues) await despues();
+  return r.ok;
 }
 
-async function solicitar() {
-  const body = { pool: $('s-pool').value, vpc: $('s-vpc').value.trim(), cidr: $('s-cidr').value.trim() || undefined, mascara: +$('s-len').value };
-  const res = $('s-res');
-  $('s-go').disabled = true;
-  const r = await api('/api/solicitudes', { body });
-  $('s-go').disabled = false;
-  const d = r.data || {};
-  if (r.ok) {
-    cargarDisponibilidad($('s-disp'), $('s-pool').value, $('s-len'));
-    res.innerHTML = `<div class="ok">✔ Asignado <code>${esc(d.cidr)}</code> en ${esc(d.pool_id)} para ${esc(d.vpc)}. Jira creó el ticket <b>${esc(d.ticket)}</b>.</div><p class="muted">Míralo en la pestaña Asignaciones.</p>`;
-    return;
-  }
-  if (d.error === 'solapamiento') {
-    const x = d.conflicto,
-      len = (body.cidr || '').split('/')[1];
-    res.innerHTML = `<div class="alert"><b>⚠ Solapamiento detectado</b><br><code>${esc(body.cidr)}</code> se cruza con <code>${esc(x.cidr)}</code> asignado a <b>${esc(x.vpc)}</b> por <b>${esc(x.solicitante)}</b> el ${fecha(x.creado_en)} (ticket ${esc(x.ticket)}).</div>
-    <b>Segmentos libres sugeridos (/${esc(len)})</b><br><br>${d.sugeridos.length ? d.sugeridos.map((s) => `<div class="sug"><code>${esc(s)}</code><button class="btn" data-use="${esc(s)}">Usar</button></div>`).join('') : '<p class="muted">No hay segmentos libres de ese tamaño.</p>'}`;
-    res.querySelectorAll('[data-use]').forEach(
-      (b) =>
-        (b.onclick = () => {
-          $('s-cidr').value = b.dataset.use;
-          solicitar();
-        }),
-    );
-    return;
-  }
-  res.innerHTML = `<div class="alert">${esc(d.error || 'Error ' + r.status)}</div>`;
+// VLAN opcional (número y nombre) en los formularios de asignación y reserva.
+const camposVlan = (prefijo) => ({
+  vlan: h('input', { id: prefijo + '-vlan', type: 'number', min: 1, max: 4094, step: 1, inputmode: 'numeric', placeholder: '1–4094' }),
+  vlanNombre: h('input', { id: prefijo + '-vlan-nombre', maxlength: 80, placeholder: 'p. ej. Branch_Data' }),
+});
+const cuerpoVlan = ({ vlan, vlanNombre }) => ({
+  ...(vlan.value.trim() ? { vlan: Number(vlan.value) } : {}),
+  ...(vlanNombre.value.trim() ? { vlan_nombre: vlanNombre.value.trim() } : {}),
+});
+
+// Pool y máscara de los formularios: NINGÚN pool viene elegido; la máscara se habilita al elegirlo y solo ofrece las que caben en él.
+function selectorPoolMascara(prefijo, pools) {
+  const pool = h(
+    'select',
+    { id: prefijo + '-pool', required: true },
+    h('option', { value: '' }, 'Elige un pool…'),
+    pools.map((p) => h('option', { value: p.id }, `${p.id} · ${p.ambiente} · ${p.cidr}`)),
+  );
+  const mascara = h('select', { id: prefijo + '-mascara', disabled: true }, h('option', { value: '' }, 'Elige primero un pool'));
+  const disp = h(
+    'div',
+    { id: prefijo + '-disp', class: 'card', style: 'flex:1 1 100%' },
+    h('p', { class: 'muted' }, 'Elige un pool para ver cuánto espacio libre tiene y de qué tamaños.'),
+  );
+  pool.addEventListener('change', () => cargarDisponibilidad(disp, pool.value, mascara));
+  return { pool, mascara, disp };
+}
+
+// Formulario «Nueva asignación» (solo admin): entrega definitiva e inmediata, sin reserva ni aprobación de otra persona.
+function formularioNuevaAsignacion(pools, recargar) {
+  const campo = (etiqueta, control) => h('label', null, etiqueta, control);
+  const { pool, mascara, disp } = selectorPoolMascara('na', pools);
+  const vpc = h('input', { id: 'na-vpc', required: true, maxlength: 120, placeholder: 'vpc-mi-proyecto' });
+  const cidr = h('input', { id: 'na-cidr', placeholder: 'opcional: vacío = el primer libre' });
+  const vl = camposVlan('na');
+  const boton = h('button', { class: 'btn', type: 'submit', id: 'na-go' }, 'Asignar');
+  const res = h('div', { id: 'na-res', 'aria-live': 'polite', style: 'flex:1 1 100%' });
+  const enviar = async (e) => {
+    e.preventDefault();
+    if (!pool.value) return msg(res, 'Elige un pool.', 'error');
+    if (!cidr.value.trim() && !mascara.value) return msg(res, 'Elige una máscara o escribe un CIDR.', 'error');
+    const body = {
+      pool: pool.value,
+      vpc: vpc.value.trim(),
+      ...(cidr.value.trim() ? { cidr: cidr.value.trim() } : { mascara: +mascara.value }),
+      ...cuerpoVlan(vl),
+    };
+    boton.disabled = true;
+    const r = await api('/api/v1/solicitudes', { body });
+    boton.disabled = false;
+    const d = r.data || {};
+    if (r.ok) {
+      ASIG.aviso = `✔ Asignado ${d.cidr} (${d.codigo || 'sin ID'}) en ${d.pool_id} para ${d.vpc}. Ticket ${d.ticket}.`;
+      ASIG.formAbierto = false;
+      return recargar();
+    }
+    if (d.error === 'solapamiento' && d.conflicto) {
+      const x = d.conflicto;
+      return res.replaceChildren(
+        h(
+          'div',
+          { class: 'alert', role: 'alert' },
+          h('b', null, '⚠ Solapamiento detectado'),
+          h('br'),
+          `${body.cidr} se cruza con ${x.cidr} de ${x.vpc} (pidió ${x.solicitante}, ticket ${x.ticket}). No se asignó nada.`,
+        ),
+        h('b', null, 'Segmentos libres sugeridos'),
+        ...((d.sugeridos || []).length
+          ? d.sugeridos.map((s) =>
+              h(
+                'div',
+                { class: 'sug' },
+                h('code', null, s),
+                h(
+                  'button',
+                  {
+                    class: 'btn',
+                    type: 'button',
+                    onclick: (ev) => {
+                      cidr.value = s;
+                      ev.currentTarget.closest('form').requestSubmit();
+                    },
+                  },
+                  'Usar',
+                ),
+              ),
+            )
+          : [h('p', { class: 'muted' }, 'No hay segmentos libres de ese tamaño.')]),
+      );
+    }
+    msg(res, errorApi(r), 'error');
+  };
+  const form = h(
+    'form',
+    { class: 'filtros', style: 'margin-top:12px', 'aria-label': 'Nueva asignación', onsubmit: enviar },
+    campo('Pool', pool),
+    campo('Proyecto / VPC', vpc),
+    campo('Máscara', mascara),
+    campo('CIDR manual', cidr),
+    campo('VLAN (opcional)', vl.vlan),
+    campo('Nombre VLAN / subred (opcional)', vl.vlanNombre),
+    boton,
+    res,
+    disp,
+  );
+  return h(
+    'details',
+    { class: 'card', style: 'margin:0 0 14px', open: ASIG.formAbierto, ontoggle: (e) => (ASIG.formAbierto = e.target.open) },
+    h('summary', { style: 'cursor:pointer;font-weight:600' }, '＋ Nueva asignación (directa, solo admin)'),
+    h(
+      'p',
+      { class: 'muted', style: 'max-width:760px' },
+      'Entrega el segmento ',
+      h('b', null, 'de inmediato y de forma definitiva'),
+      ', sin reserva ni aprobación de otra persona; queda en el historial a tu nombre. Para el flujo normal (pedir, aprobar, asignar) usa Reservas → Nueva reserva.',
+    ),
+    form,
+  );
 }
 
 let ultimoJira = null; // resultado de la última simulación (se muestra tras recargar la pestaña)
@@ -574,6 +693,7 @@ async function renderImportar() {
   };
 
   const partes = [
+    h('p', null, h('button', { type: 'button', class: 'btn sec', id: 'imp-volver', onclick: () => show('pools') }, '← Volver a Pools')),
     h('h2', null, 'Importar segmentos que ya existen'),
     h(
       'p',
@@ -583,7 +703,7 @@ async function renderImportar() {
       ': no se escribe nada hasta que confirmes. Si no hay pools que los contengan, el IPAM crea uno por proveedor, ambiente y familia de red. Los segmentos que se ',
       h('b', null, 'solapan con otro pool'),
       ' los apruebas o rechazas tú; los que chocan dentro del mismo pool no se pueden importar. Columnas reconocidas: ',
-      h('code', null, 'cidr, proyecto, proveedor, ambiente, tipo, ticket, descripcion'),
+      h('code', null, 'cidr, proyecto, proveedor, ambiente, tipo, ticket, descripcion, vlan, nombre vlan'),
       ' (solo el CIDR es obligatorio). ',
       h('a', { href: '/plantilla-importacion.csv', download: '' }, 'Descargar plantilla de ejemplo'),
       '.',
@@ -611,7 +731,7 @@ function resultadoSimulacion(estado) {
   const aplicar = async () => {
     if (
       !confirm(
-        `¿Importar ${aplicables} segmento${aplicables === 1 ? '' : 's'}${sim.pools_a_crear.length ? ` y crear ${sim.pools_a_crear.length} pool${sim.pools_a_crear.length === 1 ? '' : 's'}` : ''}? Queda en la auditoría.`,
+        `¿Importar ${aplicables} segmento${aplicables === 1 ? '' : 's'}${sim.pools_a_crear.length ? ` y crear ${sim.pools_a_crear.length} pool${sim.pools_a_crear.length === 1 ? '' : 's'}` : ''}? Queda registrado a tu nombre.`,
       )
     )
       return;
@@ -730,17 +850,6 @@ function resultadoSimulacion(estado) {
   ];
 }
 
-async function renderAudit() {
-  try {
-    const a = await get('/api/auditoria');
-    $('audit').innerHTML =
-      `<h2>Auditoría</h2><div class="card tablewrap"><table><tr><th>Fecha</th><th>Usuario</th><th>Rol</th><th>Acción</th><th>Detalle</th></tr>
-  ${a.map((x) => `<tr><td>${new Date(x.ts).toLocaleString('es-CL')}</td><td>${esc(x.usuario)}</td><td>${esc(x.rol || '—')}</td><td>${esc(x.accion)}</td><td><code>${esc(JSON.stringify(x.detalle))}</code></td></tr>`).join('')}</table></div>`;
-  } catch (e) {
-    fail('audit', e);
-  }
-}
-
 /* ===== Ayudante para construir DOM sin innerHTML: todo texto entra como nodo de texto (nada de lo que escriba un usuario se interpreta como HTML) ===== */
 const h = (tag, attrs, ...hijos) => {
   const e = document.createElement(tag);
@@ -787,26 +896,38 @@ function tabla(titulo, cabeceras, filas, vacio) {
 
 /* ===== Reservas (todos los roles; opera según permisos: dueño o admin) ===== */
 // Disponibilidad del pool elegido, por máscara: direcciones por bloque, utilizables y cuántos bloques libres quedan.
-// También rotula el selector de máscara («/24 · 15 libres») y un clic en una fila elige esa máscara.
+// Rehace el selector de máscara con SOLO las que caben en el pool («/24 · 15 libres»; las agotadas, deshabilitadas). Un clic en una fila elige esa máscara.
 async function cargarDisponibilidad(contenedor, poolId, selectMascara) {
+  contenedor.dataset.pool = poolId;
+  if (!poolId) {
+    selectMascara.replaceChildren(h('option', { value: '' }, 'Elige primero un pool'));
+    selectMascara.disabled = true;
+    return contenedor.replaceChildren(h('p', { class: 'muted' }, 'Elige un pool para ver cuánto espacio libre tiene y de qué tamaños.'));
+  }
   contenedor.replaceChildren(h('p', { class: 'muted' }, 'Calculando disponibilidad…'));
   const r = await api('/api/v1/pools/' + encodeURIComponent(poolId) + '/disponibilidad');
+  if (contenedor.dataset.pool !== poolId) return; // se eligió otro pool mientras tanto
   if (!r.ok) return contenedor.replaceChildren(h('p', { class: 'muted' }, 'No se pudo calcular la disponibilidad.'));
   const d = r.data;
-  const porMascara = new Map(d.por_mascara.map((x) => [x.mascara, x]));
   const elegida = selectMascara.value;
-  for (const op of selectMascara.options) {
-    const x = porMascara.get(Number(op.value));
-    op.textContent = x ? `/${op.value} · ${fmt(x.bloques_libres)} libre${x.bloques_libres === 1 ? '' : 's'}` : `/${op.value} · no cabe aquí`;
-  }
-  selectMascara.value = elegida;
-  const pct = d.total ? (d.ocupadas / d.total) * 100 : 0;
+  selectMascara.replaceChildren(
+    h('option', { value: '' }, 'Elige una máscara…'),
+    ...d.por_mascara.map((x) =>
+      h(
+        'option',
+        { value: x.mascara, disabled: !x.bloques_libres },
+        `/${x.mascara} · ${x.bloques_libres ? `${fmt(x.bloques_libres)} libre${x.bloques_libres === 1 ? '' : 's'}` : 'sin espacio'}`,
+      ),
+    ),
+  );
+  selectMascara.disabled = false;
+  if (d.por_mascara.some((x) => String(x.mascara) === elegida && x.bloques_libres)) selectMascara.value = elegida;
   contenedor.replaceChildren(
     h(
       'p',
       { style: 'margin:0 0 8px' },
       h('b', null, d.pool),
-      ` (${d.cidr}): ${fmt(d.libres)} de ${fmt(d.total)} direcciones libres · ${pct.toFixed(1).replace('.', ',')} % ocupado.`,
+      ` (${d.cidr}): ${fmt(d.libres)} de ${fmt(d.total)} direcciones libres · ${pct(d.total ? d.ocupadas / d.total : 0)} ocupado (asignado + reservado).`,
     ),
     h(
       'div',
@@ -824,9 +945,10 @@ async function cargarDisponibilidad(contenedor, poolId, selectMascara) {
             'tr',
             {
               class: x.bloques_libres ? 'elegible' : 'agotado',
-              style: 'cursor:pointer',
+              style: x.bloques_libres ? 'cursor:pointer' : '',
               title: x.bloques_libres ? 'Elegir esta máscara' : 'No queda espacio de este tamaño',
               onclick: () => {
+                if (!x.bloques_libres) return;
                 selectMascara.value = String(x.mascara);
                 selectMascara.dispatchEvent(new Event('change'));
               },
@@ -846,31 +968,21 @@ async function cargarDisponibilidad(contenedor, poolId, selectMascara) {
 // Formulario «Nueva reserva» (solicitante y admin): aparta un rango por un tiempo; un admin debe aprobarla para que sea asignación.
 function formularioNuevaReserva(pools, estado, recargar) {
   const campo = (etiqueta, control) => h('label', null, etiqueta, control);
-  const pool = h(
-    'select',
-    { id: 'nr-pool', required: true },
-    pools.map((p) => h('option', { value: p.id }, `${p.id} (${p.cidr})`)),
-  );
+  const { pool, mascara, disp } = selectorPoolMascara('nr', pools);
   const vpc = h('input', { id: 'nr-vpc', required: true, maxlength: 120, placeholder: 'vpc-mi-proyecto' });
   const ticket = h('input', { id: 'nr-ticket', maxlength: 60, placeholder: 'opcional (si no, se genera NET-xxx)' });
-  const mascara = h(
-    'select',
-    { id: 'nr-mascara' },
-    MASCARAS.map((n) => h('option', { value: n, selected: n === 24 }, '/' + n)),
-  );
   const cidr = h('input', { id: 'nr-cidr', placeholder: 'opcional: vacío = el primer rango libre' });
+  const vl = camposVlan('nr');
   const ttl = h('input', { id: 'nr-ttl', type: 'number', min: 1, max: 72, value: 24 });
   const boton = h('button', { class: 'btn', type: 'submit', id: 'nr-go' }, 'Reservar');
-  const disp = h('div', { id: 'nr-disp', class: 'card', style: 'flex:1 1 100%' });
-  const actualizar = () => cargarDisponibilidad(disp, pool.value, mascara);
-  pool.addEventListener('change', actualizar);
-  mascara.addEventListener('change', () => {});
-  setTimeout(actualizar, 0);
   const enviar = async (e) => {
     e.preventDefault();
+    if (!pool.value) return msg(estado, 'Elige un pool.', 'error');
+    if (!cidr.value.trim() && !mascara.value) return msg(estado, 'Elige una máscara o escribe un CIDR.', 'error');
     boton.disabled = true;
-    const cuerpo = { pool: pool.value, vpc: vpc.value.trim(), mascara: +mascara.value, ttl_horas: +ttl.value || 24 };
+    const cuerpo = { pool: pool.value, vpc: vpc.value.trim(), ttl_horas: +ttl.value || 24, ...cuerpoVlan(vl) };
     if (cidr.value.trim()) cuerpo.cidr = cidr.value.trim();
+    else cuerpo.mascara = +mascara.value;
     if (ticket.value.trim()) cuerpo.ticket = ticket.value.trim();
     const r = await api('/api/v1/reservas', { body: cuerpo, headers: { 'Idempotency-Key': crypto.randomUUID() } });
     boton.disabled = false;
@@ -888,15 +1000,267 @@ function formularioNuevaReserva(pools, estado, recargar) {
     h(
       'form',
       { class: 'filtros', style: 'margin-top:12px', 'aria-label': 'Nueva reserva', onsubmit: enviar },
-      campo('Bloque base', pool),
+      campo('Pool', pool),
       campo('Proyecto / VPC', vpc),
       campo('Máscara', mascara),
       campo('CIDR manual', cidr),
+      campo('VLAN (opcional)', vl.vlan),
+      campo('Nombre VLAN / subred (opcional)', vl.vlanNombre),
       campo('Ticket', ticket),
       campo('Vigencia (horas, máx. 72)', ttl),
       boton,
       disp,
     ),
+  );
+}
+
+/* ===== Ficha de detalle (panel lateral, al estilo de NetBox): un pool o un segmento, con su historial ===== */
+const ip2n = (ip) => ip.split('.').reduce((n, o) => n * 256 + Number(o), 0);
+const n2ip = (n) => [24, 16, 8, 0].map((s) => Math.floor(n / 2 ** s) % 256).join('.');
+function rango(cidr) {
+  const [ip, l] = String(cidr).split('/');
+  const len = Number(l);
+  const total = 2 ** (32 - len);
+  const ini = Math.floor(ip2n(ip) / total) * total;
+  return { primera: n2ip(ini), ultima: n2ip(ini + total - 1), total, utilizables: len >= 31 ? total : total - 2, len };
+}
+const datos = (pares) =>
+  h(
+    'dl',
+    { class: 'datos' },
+    pares.filter(Boolean).flatMap(([k, v]) => [h('dt', null, k), h('dd', null, v === null || v === undefined || v === '' ? '—' : v)]),
+  );
+const ACCIONES = {
+  asignar: 'asignó',
+  liberar: 'liberó',
+  reservar: 'reservó',
+  confirmar_reserva: 'aprobó la reserva de',
+  liberar_reserva: 'liberó la reserva de',
+  jira_reserva_creada: 'Jira reservó',
+  jira_reserva_aprobada: 'Jira registró la aprobación de',
+};
+const describir = (d = {}) =>
+  [d.cidr, d.vpc && `para ${d.vpc}`, d.vlan && `VLAN ${d.vlan}`, d.ticket && `ticket ${d.ticket}`, d.motivo && `motivo: «${d.motivo}»`]
+    .filter(Boolean)
+    .join(' · ');
+
+/** Historial de un pool o de un segmento (solo admin: sale de la bitácora de auditoría). */
+async function historial(filtro) {
+  const filas = await get('/api/v1/auditoria?' + new URLSearchParams(filtro));
+  if (!filas.length)
+    return h('p', { class: 'muted' }, 'Sin acciones registradas. Los segmentos importados o de la semilla muestran su origen y fecha en Detalle.');
+  return h(
+    'ol',
+    { class: 'historial', 'aria-label': 'Historial' },
+    filas.map((f) =>
+      h(
+        'li',
+        null,
+        h('time', { datetime: f.ts }, fechaHora(f.ts)),
+        ' · ',
+        h('b', null, f.usuario),
+        ` ${ACCIONES[f.accion] || f.accion} `,
+        describir(f.detalle),
+      ),
+    ),
+  );
+}
+
+/** Abre el panel lateral con pestañas. Cada pestaña se construye al elegirla: construir(cerrar) → Node. */
+function abrirPanel(titulo, subtitulo, pestanas) {
+  abrirDialogo((dlg, cerrar) => {
+    dlg.classList.add('ficha');
+    dlg.setAttribute('aria-labelledby', 'ficha-titulo');
+    const cuerpo = h('div', { class: 'ficha-cuerpo', role: 'tabpanel', id: 'ficha-panel' });
+    const botones = pestanas.map((p, i) =>
+      h('button', { type: 'button', role: 'tab', id: 'ficha-tab-' + i, 'aria-controls': 'ficha-panel', onclick: () => elegir(i) }, p.nombre),
+    );
+    const elegir = async (i) => {
+      botones.forEach((b, j) => b.setAttribute('aria-selected', String(i === j)));
+      cuerpo.setAttribute('aria-labelledby', 'ficha-tab-' + i);
+      cuerpo.replaceChildren(h('p', { class: 'muted' }, 'Cargando…'));
+      try {
+        cuerpo.replaceChildren(await pestanas[i].construir(cerrar));
+      } catch (e) {
+        cuerpo.replaceChildren(h('div', { class: 'alert' }, 'No se pudo cargar: ' + e.message));
+      }
+    };
+    dlg.append(
+      h(
+        'div',
+        { class: 'ficha-cab' },
+        h('div', null, h('h2', { id: 'ficha-titulo' }, titulo), h('p', { class: 'muted' }, subtitulo)),
+        h('button', { type: 'button', class: 'btn sec', onclick: cerrar }, 'Cerrar'),
+      ),
+      h('div', { class: 'ficha-tabs', role: 'tablist', 'aria-label': 'Secciones de la ficha' }, botones),
+      cuerpo,
+    );
+    elegir(0);
+  });
+}
+
+async function fichaPool(id) {
+  const pools = await get('/api/v1/pools');
+  const p = pools.find((x) => x.id === id);
+  if (!p) return alert('Ese pool ya no existe.');
+  const r = rango(p.cidr);
+  const res = p.uso_reservado || 0;
+  abrirPanel(
+    p.cidr,
+    `Pool ${p.id} · ${p.tipo} · ${p.ambiente} · ${p.proveedor}`,
+    [
+      {
+        nombre: 'Detalle',
+        construir: async () => {
+          const d = await get('/api/v1/pools/' + encodeURIComponent(id) + '/disponibilidad');
+          const mayor = d.por_mascara.find((x) => x.bloques_libres > 0);
+          return h(
+            'div',
+            null,
+            h('p', { class: 'ficha-uso' }, barraUso(p.uso, res), ` ocupado (asignado ${pct(p.uso)} · reservado ${pct(res)})`),
+            datos([
+              ['Pool', p.id],
+              ['CIDR base', h('code', null, p.cidr)],
+              ['Primera dirección', r.primera],
+              ['Última dirección', r.ultima],
+              ['Tipo', p.tipo],
+              ['Ambiente', h('span', { class: 'tag ' + p.ambiente }, p.ambiente)],
+              ['Proveedor', p.proveedor],
+              ['Direcciones', fmt(r.total)],
+              ['Utilizables', fmt(r.utilizables)],
+              ['Libres', `${fmt(d.libres)} (${pct(d.total ? d.libres / d.total : 0)})`],
+              ['Bloque libre más grande', mayor ? `/${mayor.mascara} (${fmt(mayor.direcciones)} direcciones)` : 'sin espacio'],
+              ['Asignaciones', fmt(p.asignaciones)],
+              ['Reservas vigentes', fmt(p.reservas_vigentes || 0)],
+            ]),
+          );
+        },
+      },
+      {
+        nombre: 'Segmentos',
+        construir: async (cerrar) => {
+          const [asig, reservas] = await Promise.all([
+            get('/api/asignaciones'),
+            get('/api/v1/reservas?' + new URLSearchParams({ pool: id, estado: 'reservada' })),
+          ]);
+          const filas = [
+            ...asig.filter((a) => a.pool_id === id).map((a) => ({ ...a, estado: 'asignada' })),
+            ...reservas.map((x) => ({ ...x, estado: 'reservada' })),
+          ].sort((a, b) => ip2n(a.cidr.split('/')[0]) - ip2n(b.cidr.split('/')[0]));
+          if (!filas.length) return h('p', { class: 'muted' }, 'Este pool todavía no tiene segmentos asignados ni reservados.');
+          return tabla(
+            'Segmentos del pool',
+            ['Segmento', 'Estado', 'Proyecto / VPC', 'VLAN', 'Direcciones'],
+            filas.map((x) =>
+              h(
+                'tr',
+                null,
+                h(
+                  'td',
+                  null,
+                  x.estado === 'asignada'
+                    ? h(
+                        'button',
+                        {
+                          type: 'button',
+                          class: 'enlace',
+                          onclick: () => {
+                            cerrar();
+                            fichaAsignacion(x.id);
+                          },
+                        },
+                        h('code', null, x.cidr),
+                      )
+                    : h('code', null, x.cidr),
+                ),
+                h('td', null, h('span', { class: 'tag ' + (x.estado === 'asignada' ? 'confirmada' : 'reservada') }, x.estado)),
+                h('td', null, x.vpc),
+                h('td', null, textoVlan(x)),
+                h('td', null, fmt(size(x.cidr))),
+              ),
+            ),
+            '',
+          );
+        },
+      },
+      puede('admin') && { nombre: 'Historial', construir: () => historial({ pool: id }) },
+    ].filter(Boolean),
+  );
+}
+
+async function fichaAsignacion(id) {
+  const [todas, pools] = await Promise.all([get('/api/asignaciones'), get('/api/v1/pools')]);
+  const a = todas.find((x) => String(x.id) === String(id));
+  if (!a) return alert('Esa asignación ya no existe (¿se liberó?).');
+  const p = pools.find((x) => x.id === a.pool_id);
+  const r = rango(a.cidr);
+  abrirPanel(
+    a.cidr,
+    `${a.codigo || 'Asignación'} · ${a.vpc}`,
+    [
+      {
+        nombre: 'Detalle',
+        construir: async (cerrar) =>
+          h(
+            'div',
+            null,
+            datos([
+              ['ID', h('code', null, a.codigo || String(a.id))],
+              ['Segmento', h('code', null, a.cidr)],
+              ['Primera dirección', r.primera],
+              ['Última dirección', r.ultima],
+              ['Máscara', '/' + r.len],
+              ['Direcciones', fmt(r.total)],
+              ['Utilizables', fmt(r.utilizables)],
+              [
+                'Pool',
+                h(
+                  'button',
+                  {
+                    type: 'button',
+                    class: 'enlace',
+                    onclick: () => {
+                      cerrar();
+                      fichaPool(a.pool_id);
+                    },
+                  },
+                  p ? `${a.pool_id} (${p.cidr})` : a.pool_id,
+                ),
+              ],
+              p && ['Ambiente', h('span', { class: 'tag ' + p.ambiente }, p.ambiente)],
+              p && ['Proveedor', p.proveedor],
+              ['Proyecto / VPC', a.vpc],
+              ['VLAN', a.vlan],
+              ['Nombre VLAN / subred', a.vlan_nombre],
+              ['Ticket', a.ticket],
+              ['Origen', a.origen],
+              ['Solicitó', a.solicitante],
+              ['Creada', fechaHora(a.creado_en)],
+            ]),
+            puede('admin')
+              ? h(
+                  'p',
+                  { style: 'margin-top:18px' },
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      class: 'btn peligro',
+                      onclick: async () => {
+                        if (await liberarAsignacion(a.id, a.cidr)) {
+                          cerrar();
+                          show(VISTA);
+                        }
+                      },
+                    },
+                    'Liberar segmento',
+                  ),
+                )
+              : null,
+          ),
+      },
+      puede('admin') && { nombre: 'Historial', construir: () => historial({ pool: a.pool_id, cidr: a.cidr }) },
+    ].filter(Boolean),
   );
 }
 
@@ -1012,6 +1376,7 @@ async function renderReservas() {
         h('td', null, h('code', null, r.cidr)),
         h('td', null, r.pool_id),
         h('td', null, r.vpc),
+        h('td', null, textoVlan(r)),
         h('td', null, r.solicitante),
         h('td', null, r.ticket),
         h('td', null, h('span', { class: 'tag ' + r.estado }, r.estado)),
@@ -1055,7 +1420,7 @@ async function renderReservas() {
       estado,
       tabla(
         'Reservas de rangos IP',
-        ['Segmento', 'Pool', 'Proyecto / VPC', 'Solicitante', 'Ticket', 'Estado', 'Creada', 'Vence en', 'Acciones'],
+        ['Segmento', 'Pool', 'Proyecto / VPC', 'VLAN', 'Solicitante', 'Ticket', 'Estado', 'Creada', 'Vence en', 'Acciones'],
         filas,
         'No hay reservas con estos filtros.',
       ),
@@ -1263,12 +1628,10 @@ function render(t) {
     pools: renderPools,
     asig: renderAsig,
     reservas: renderReservas,
-    sol: renderSol,
     jira: renderJira,
     tokens: renderTokens,
     usuarios: renderUsuarios,
     importar: renderImportar,
-    audit: renderAudit,
   })[t]();
 }
 
@@ -1294,11 +1657,8 @@ async function iniciar() {
   }
   YO = await r.json();
   const nav = $('nav');
-  nav.querySelector('[data-t="sol"]').hidden = !puede('admin');
   nav.querySelector('[data-t="tokens"]').hidden = !puede('admin');
   nav.querySelector('[data-t="usuarios"]').hidden = !(puede('admin') && (YO.modo === 'oidc' || YO.cuentas_locales));
-  nav.querySelector('[data-t="audit"]').hidden = !puede('admin');
-  nav.querySelector('[data-t="importar"]').hidden = !puede('admin');
   $('yo').innerHTML =
     YO.modo === 'oidc'
       ? `${esc(YO.nombre)} · <b>${esc(YO.rol)}</b> <button id="salir">Salir</button>`

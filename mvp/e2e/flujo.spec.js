@@ -1,21 +1,41 @@
 const { test, expect } = require('@playwright/test');
+const AxeBuilder = require('@axe-core/playwright').default;
 
-test('solicitar → ver en asignaciones → exportar a Excel → liberar', async ({ page }) => {
-  const vpc = `e2e-${Date.now()}`;
+// Abre «Nueva asignación» (dentro de Asignaciones; reemplaza a la antigua pestaña «Asignar directo»).
+async function abrirNuevaAsignacion(page) {
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Estado de pools' })).toBeVisible();
+  await page.locator('#nav').getByRole('button', { name: 'Asignaciones', exact: true }).click();
+  await page.locator('#asig summary', { hasText: 'Nueva asignación' }).click();
+}
 
-  await page.getByRole('button', { name: 'Asignar directo', exact: true }).click();
-  await page.selectOption('#s-pool', 'gke-nodos-qa');
-  await page.fill('#s-vpc', vpc);
-  await page.fill('#s-cidr', '');
-  await page.selectOption('#s-len', '24');
-  await page.click('#s-go');
-  await expect(page.locator('#s-res .ok')).toContainText('Asignado');
+test('nueva asignación con VLAN → ver en la tabla → ficha con historial → exportar a Excel → liberar', async ({ page }) => {
+  const vpc = `e2e-${Date.now()}`;
+  await abrirNuevaAsignacion(page);
+  // Ningún pool viene elegido y la máscara espera al pool.
+  await expect(page.locator('#na-pool')).toHaveValue('');
+  await expect(page.locator('#na-mascara')).toBeDisabled();
+  await page.selectOption('#na-pool', 'gke-nodos-qa');
+  await page.fill('#na-vpc', vpc);
+  await page.selectOption('#na-mascara', '24');
+  await page.fill('#na-vlan', '210');
+  await page.fill('#na-vlan-nombre', 'e2e-vlan');
+  await page.click('#na-go');
+  await expect(page.locator('#asig-msg .ok')).toContainText('Asignado');
 
-  await page.getByRole('button', { name: 'Asignaciones' }).click();
-  const fila = page.locator('tr', { hasText: vpc });
+  const fila = page.locator('#asig tr', { hasText: vpc });
   await expect(fila).toBeVisible();
+  await expect(fila).toContainText('210 · e2e-vlan');
+
+  // Ficha del segmento: detalle e historial.
+  await fila.locator('button.enlace').click();
+  const ficha = page.getByRole('dialog');
+  await expect(ficha.getByRole('heading', { level: 2 })).toHaveText(/\/24$/);
+  await expect(ficha).toContainText('Primera dirección');
+  await expect(ficha).toContainText('e2e-vlan');
+  await ficha.getByRole('tab', { name: 'Historial' }).click();
+  await expect(ficha.getByRole('list', { name: 'Historial' })).toContainText('asignó');
+  await ficha.getByRole('button', { name: 'Cerrar' }).click();
+  await expect(ficha).toHaveCount(0);
 
   const [descarga] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: /Exportar a Excel/ }).click()]);
   expect(descarga.suggestedFilename()).toMatch(/^ipam-segmentos-\d{4}-\d{2}-\d{2}\.xlsx$/);
@@ -23,20 +43,19 @@ test('solicitar → ver en asignaciones → exportar a Excel → liberar', async
   page.once('dialog', (d) => d.accept('prueba e2e: ya no se necesita'));
   await fila.getByRole('button', { name: 'Liberar' }).click();
   await expect(page.locator('tr', { hasText: vpc })).toHaveCount(0);
-  // El motivo queda en la auditoría.
+  // El motivo queda registrado.
   const aud = await (await page.request.get('/api/v1/auditoria')).json();
   expect(aud.some((f) => f.accion === 'liberar' && f.detalle.motivo === 'prueba e2e: ya no se necesita')).toBe(true);
 });
 
 test('un CIDR solapado muestra la alerta y sugiere segmentos libres', async ({ page }) => {
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Asignar directo', exact: true }).click();
-  await page.selectOption('#s-pool', 'gke-pods-prod');
-  await page.fill('#s-vpc', 'vpc-e2e-solapado');
-  await page.fill('#s-cidr', '10.64.8.0/22');
-  await page.click('#s-go');
-  await expect(page.locator('#s-res .alert')).toContainText('Solapamiento detectado');
-  await expect(page.locator('#s-res .sug').first()).toBeVisible();
+  await abrirNuevaAsignacion(page);
+  await page.selectOption('#na-pool', 'gke-pods-prod');
+  await page.fill('#na-vpc', 'vpc-e2e-solapado');
+  await page.fill('#na-cidr', '10.64.8.0/22');
+  await page.click('#na-go');
+  await expect(page.locator('#na-res .alert')).toContainText('Solapamiento detectado');
+  await expect(page.locator('#na-res .sug').first()).toBeVisible();
 });
 
 test('el filtro por ambiente y proveedor acota Pools, Asignaciones y Reservas', async ({ page }) => {
@@ -74,21 +93,43 @@ test('cada asignación muestra su ID (ASG-000123) y se puede buscar por él', as
   await expect(filas).toHaveCount(total);
 });
 
-test('al elegir un pool se ve cuántas direcciones y bloques libres quedan por cada máscara', async ({ page }) => {
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Asignar directo', exact: true }).click();
-  await page.selectOption('#s-pool', 'gke-nodos-qa'); // 10.20.0.0/16 con un /20 asignado en la semilla
+test('al elegir un pool se ve cuántas direcciones y bloques libres quedan, y solo las máscaras que caben en él', async ({ page }) => {
+  await abrirNuevaAsignacion(page);
+  await page.selectOption('#na-pool', 'gke-nodos-qa'); // 10.20.0.0/16 con un /20 asignado en la semilla
   const tabla = page.getByRole('table', { name: 'Disponibilidad por máscara' });
   await expect(tabla).toBeVisible();
   const fila24 = tabla.locator('tr', { has: page.locator('code', { hasText: /^\/24$/ }) });
   await expect(fila24).toContainText('256'); // direcciones por bloque
   await expect(fila24).toContainText('254'); // utilizables
-  await expect(page.locator('#s-len option[value="24"]')).toContainText('libres');
+  await expect(page.locator('#na-mascara option[value="24"]')).toContainText('libres');
+  // Nada más grande que el propio pool (/16): ya no aparece «no cabe aquí».
+  await expect(page.locator('#na-mascara option[value="15"]')).toHaveCount(0);
+  await expect(page.locator('#na-mascara option[value="8"]')).toHaveCount(0);
+  await expect(page.locator('#na-mascara')).toHaveValue('');
   // Un clic en una fila elige esa máscara.
   await tabla.locator('tr', { has: page.locator('code', { hasText: /^\/26$/ }) }).click();
-  await expect(page.locator('#s-len')).toHaveValue('26');
+  await expect(page.locator('#na-mascara')).toHaveValue('26');
   // La misma información está en «Nueva reserva».
   await page.getByRole('button', { name: 'Reservas', exact: true }).click();
   await page.locator('#reservas summary').click();
+  await expect(page.locator('#nr-pool')).toHaveValue('');
+  await page.selectOption('#nr-pool', 'gke-nodos-qa');
   await expect(page.locator('#nr-disp').getByRole('table', { name: 'Disponibilidad por máscara' })).toBeVisible();
+});
+
+test('ficha de un pool: uso asignado + reservado, segmentos e historial, accesible', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#pools').getByRole('button', { name: 'gke-nodos-qa', exact: true }).click();
+  const ficha = page.getByRole('dialog');
+  await expect(ficha.getByRole('heading', { level: 2 })).toHaveText('10.20.0.0/16');
+  await expect(ficha).toContainText('Bloque libre más grande');
+  await expect(ficha).toContainText('Asignado');
+  const axe = await new AxeBuilder({ page }).include('dialog').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
+  expect(axe.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(' | ')}`)).toEqual([]);
+  await ficha.getByRole('tab', { name: 'Segmentos' }).click();
+  await expect(ficha.getByRole('table')).toContainText('10.20.0.0/20');
+  await ficha.getByRole('tab', { name: 'Historial' }).click();
+  await expect(ficha.getByRole('tabpanel')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(ficha).toHaveCount(0);
 });

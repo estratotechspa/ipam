@@ -101,7 +101,7 @@ test('reservas: listar, filtrar, confirmar y liberar con confirmación y cuenta 
   await page.getByLabel('Estado').selectOption('');
   await page.getByLabel('Solicitante').fill('svc:' + t.nombre);
   await expect(page.locator('#reservas tbody tr')).toHaveCount(1);
-  await page.getByLabel('Pool').selectOption(r.pool_id);
+  await page.locator('#res-f-pool').selectOption(r.pool_id);
   await expect(page.locator('tr', { hasText: r.vpc })).toBeVisible();
 
   // Confirmar pide confirmación; al aceptar pasa a confirmada (definitiva).
@@ -225,6 +225,7 @@ test('Nueva reserva desde la interfaz: se crea, queda pendiente y un admin la ap
   await page.selectOption('#nr-pool', 'gke-nodos-qa');
   await page.fill('#nr-vpc', vpc);
   await page.selectOption('#nr-mascara', '26');
+  await page.fill('#nr-vlan', '300');
   await page.click('#nr-go');
   await expect(page.getByRole('status')).toContainText('Falta la aprobación de un admin');
   const fila = page.locator('tr', { hasText: vpc });
@@ -235,5 +236,6 @@ test('Nueva reserva desde la interfaz: se crea, queda pendiente y un admin la ap
   await expect(page.locator('tr', { hasText: vpc })).toContainText('confirmada');
   const a = (await (await page.request.get('/api/v1/asignaciones')).json()).find((x) => x.vpc === vpc);
   expect(a.cidr).toMatch(/\/26$/);
+  expect(a.vlan).toBe(300); // la VLAN de la reserva pasa a la asignación
   await page.request.delete(`/api/v1/asignaciones/${a.id}`, { headers: { 'X-Requested-With': 'ipam' } });
 });

@@ -38,47 +38,57 @@ Los **agentes** (tokens de servicio) tienen rol `lector` o `agente` y no usan la
 Es la pantalla de inicio. Arriba hay cuatro números:
 - **Pools:** cuántos rangos grandes existen.
 - **Asignaciones activas:** cuántos segmentos están entregados.
-- **Uso promedio:** el **promedio simple** del porcentaje de uso de cada pool (direcciones asignadas ÷ direcciones del pool). Cada pool pesa igual sin importar su tamaño, y **no cuenta las reservas** (esas se ven aparte en la columna de reservas). Con el filtro activo, el promedio es solo de los pools mostrados.
+- **Uso total:** direcciones **ocupadas** (asignadas + reservadas) de todos los pools ÷ direcciones totales. Está **ponderado por tamaño**: un `/12` pesa más que un `/28`. Con el filtro activo, es solo de los pools mostrados.
 - **Solapamientos:** siempre debe ser **0**; la base de datos los impide, así que el número está para tu tranquilidad.
 
-Debajo, una fila por pool: su **tipo** (Nodos, Pods, Servicios), **ambiente**, **proveedor** (p. ej. GCP), **CIDR base** (el rango grande), cuántas asignaciones tiene y una **barra de uso**. Úsala para detectar pools que se llenan; con alertas configuradas ([OBSERVABILIDAD](ops/OBSERVABILIDAD.md)) avisan al pasar de 80 % y 90 %.
-**Exportar a Excel** baja una planilla con todo.
+Debajo, una fila por pool: su **tipo** (Nodos, Pods, Servicios), **ambiente**, **proveedor** (p. ej. GCP), **CIDR base** (el rango grande), cuántas **asignaciones** y **reservas vigentes** tiene, y la **barra de uso** en dos colores: **azul = asignado** (definitivo) y **ámbar = reservado** (apartado, esperando aprobación); el número es la suma. Es la misma cuenta que se ve en la ficha y al elegir un pool en un formulario. Con alertas configuradas ([OBSERVABILIDAD](ops/OBSERVABILIDAD.md)) avisan al pasar de 80 % y 90 %.
+
+**Cómo se calcula el uso de un pool:** se suman las direcciones de cada segmento asignado o reservado (un `/24` son 256, incluidas la de red y la de difusión) y se dividen por las direcciones del pool. Ejemplo: un `/20` (4.096) con un `/24` asignado y un `/25` reservado → 256 + 128 = 384 → **9,4 %** (6,3 % asignado + 3,1 % reservado).
+
+- **Haz clic en el nombre de un pool** para abrir su **ficha** (ver más abajo).
+- **Importar segmentos** (solo admin) abre la importación masiva (ver más abajo); **← Volver a Pools** regresa.
+- **Exportar a Excel** baja una planilla con todo.
 
 **Filtro por ambiente y proveedor:** arriba de la tabla hay dos listas, **Ambiente** (`dev`, `qa`, `pre`, `prod`) y **Proveedor** (p. ej. GCP). Al elegir una, los números y la tabla muestran solo esos pools. El filtro **se conserva** al pasar a Asignaciones y Reservas, que también quedan acotadas; **Limpiar filtro** lo quita.
 
-### Asignaciones — «lo ya entregado»
-La lista oficial de segmentos definitivos: **ID** (`ASG-000123`, único por asignación: el mismo rango, si se libera y se vuelve a asignar, tendrá otro ID), **segmento**, **pool**, **proyecto/VPC**, cuántas **direcciones** son, quién lo **solicitó**, el **origen** (`panel`, `jira`, `agente`, `semilla`, `importado`), el **ticket** y la **fecha**.
-- **Buscar** por ID, segmento, proyecto, ticket o quién lo pidió (cuadro «Buscar», junto al filtro).
-- **Exportar a Excel** para auditorías o reportes (incluye el ID).
-- **Respaldo JSON** (solo admin): copia lógica completa para llevar el IPAM a otra infraestructura ([MIGRACION](ops/MIGRACION.md)).
-- **Liberar** (solo admin): devuelve el segmento al pool. Pide el **motivo**, que queda en la auditoría junto con quién lo hizo. Hazlo solo cuando la red realmente se eliminó.
+### Ficha de detalle — «todo sobre un pool o un segmento»
+Al hacer clic en un **pool** (pestaña Pools) o en el **ID** de una asignación (`ASG-000123`, pestaña Asignaciones) se abre un panel a la derecha, como en NetBox. Se cierra con **Cerrar** o la tecla Esc.
+- **Ficha de un pool:** *Detalle* (CIDR, primera y última dirección, direcciones y utilizables, libres, **bloque libre más grande**, uso asignado y reservado), *Segmentos* (todo lo asignado y reservado dentro del pool, ordenado; un clic en un segmento abre su ficha) e *Historial*.
+- **Ficha de un segmento:** ID, CIDR, primera y última dirección, máscara, direcciones y utilizables, pool (con enlace a su ficha), ambiente, proveedor, proyecto/VPC, **VLAN**, ticket, origen, quién lo pidió y cuándo; *Historial*; y **Liberar segmento** (solo admin).
+- **Historial** (solo admin): quién asignó, reservó, aprobó o liberó ese pool o segmento, cuándo y con qué motivo. Sale de la bitácora de auditoría, que se sigue registrando aunque ya no tenga pestaña propia. Los segmentos importados o de la semilla muestran su origen y fecha en *Detalle*.
 
-### Importar — «cargar los segmentos que ya existen» (solo admin)
-Para partir con el inventario real (una planilla Excel o un CSV) en vez de escribir segmento por segmento. **Primero se simula y nada se escribe hasta que confirmas.**
-1. Prepara el archivo (`.xlsx` o `.csv`, separado por coma, punto y coma o tabulador). Basta una columna **cidr**; las demás son opcionales: **proyecto/VPC**, **proveedor**, **ambiente**, **tipo**, **ticket**, **descripción**. Se aceptan encabezados equivalentes (`prefijo`, `subred`, `red`, `project`, `nube`, `entorno`…) y las columnas desconocidas se ignoran. Hay una plantilla en la misma pestaña (`plantilla-importacion.csv`). Máximo 5.000 filas por archivo.
+### Asignaciones — «lo ya entregado»
+La lista oficial de segmentos definitivos: **ID** (`ASG-000123`, único por asignación: el mismo rango, si se libera y se vuelve a asignar, tendrá otro ID), **segmento**, **pool**, **proyecto/VPC**, **VLAN** (número y nombre, si se indicó), cuántas **direcciones** son, quién lo **solicitó**, el **origen** (`panel`, `jira`, `agente`, `semilla`, `importado`), el **ticket** y la **fecha**.
+- **Nueva asignación** (solo admin; reemplaza a la antigua pestaña «Asignar directo»): ver abajo.
+- **Buscar** por ID, segmento, proyecto, VLAN, ticket o quién lo pidió (cuadro «Buscar», junto al filtro).
+- Un clic en el **ID** abre la **ficha** del segmento.
+- **Exportar a Excel** para auditorías o reportes (incluye el ID y la VLAN).
+- **Respaldo JSON** (solo admin): copia lógica completa para llevar el IPAM a otra infraestructura ([MIGRACION](ops/MIGRACION.md)).
+- **Liberar** (solo admin): devuelve el segmento al pool. Pide el **motivo**, que queda en el historial junto con quién lo hizo. Hazlo solo cuando la red realmente se eliminó.
+
+**Nueva asignación — «entrégalo ya, definitivo» (solo admin).** Entrega un segmento **de inmediato y de forma definitiva**, **sin reserva y sin aprobación de otra persona**; queda en el historial a nombre del admin que lo hizo.
+1. Elige el **pool**. **Ningún pool viene elegido** de antemano, y la **máscara** se habilita recién al elegirlo.
+2. Escribe el **proyecto / VPC** (obligatorio).
+3. Elige la **máscara**: la lista ofrece **solo los tamaños que caben en ese pool** (desde la máscara del pool hasta `/32`) y dice cuántos bloques libres quedan de cada uno («/24 · 15 libres»); los agotados aparecen como «sin espacio» y no se pueden elegir. O escribe un **CIDR manual** si necesitas un rango específico (debe caer dentro del pool).
+4. Opcional: **VLAN** (número de 1 a 4094) y **nombre de la VLAN o subred**.
+5. Pulsa **Asignar**.
+
+Al elegir el pool aparece la **disponibilidad por máscara**: direcciones por bloque (totales y utilizables), **bloques libres** y direcciones libres; un clic en una fila elige esa máscara. En IPv4 un bloque `/30` o mayor pierde dos direcciones (red y difusión). Si el rango choca con otro, el IPAM **no asigna nada**: te muestra con quién choca y ofrece **segmentos libres** con un botón «Usar».
+
+### Importar — «cargar los segmentos que ya existen» (solo admin, desde Pools)
+Se abre con **Importar segmentos** en la pestaña Pools. Para partir con el inventario real (una planilla Excel o un CSV) en vez de escribir segmento por segmento. **Primero se simula y nada se escribe hasta que confirmas.**
+1. Prepara el archivo (`.xlsx` o `.csv`, separado por coma, punto y coma o tabulador). Basta una columna **cidr**; las demás son opcionales: **proyecto/VPC**, **proveedor**, **ambiente**, **tipo**, **ticket**, **vlan**, **nombre vlan**, **descripción**. Se aceptan encabezados equivalentes (`prefijo`, `subred`, `red`, `project`, `nube`, `entorno`, `vlan id`…) y las columnas desconocidas se ignoran. Hay una plantilla en la misma vista (`plantilla-importacion.csv`). Máximo 5.000 filas por archivo.
 2. Si el archivo no trae proveedor o ambiente, elígelos como **valor por defecto** (se aplican a las filas que no lo traen).
 3. Pulsa **Simular importación**. Cada fila queda en uno de estos estados:
    - **Listo para importar**: entra en el pool más pequeño del mismo proveedor y ambiente que lo contiene; si no hay ninguno, el IPAM propone **crear un pool** automático (`imp-<proveedor>-<ambiente>-10`, `-172` o `-192` según la red privada).
    - **Ya registrado**: ese mismo segmento ya está en el mismo pool; se omite (importar dos veces el mismo archivo no duplica).
    - **Solapa con otro pool**: choca con un segmento de **otro** pool. No se importa salvo que marques **Aprobar** en esa fila.
-   - **Choca dentro del mismo pool** e **Inválida** (CIDR mal escrito o desalineado, ambiente inválido…): no se pueden importar. Si el CIDR está desalineado, el detalle sugiere la red correcta.
-4. Pulsa **Importar N segmentos**. Es **todo o nada**: si la base rechaza algo, no se importa ninguno. Los segmentos quedan con origen `importado` y la importación queda en la **Auditoría**.
-
-### Asignar directo — «entrégalo ya, definitivo» (solo admin)
-Formulario para entregar un segmento **de inmediato y de forma definitiva**, **sin reserva y sin aprobación de otra persona**. Queda en la auditoría a nombre del admin que lo hizo.
-1. Elige el **pool** (el bloque base del ambiente y tipo correctos).
-2. Escribe el **proyecto / VPC** (obligatorio).
-3. Deja **CIDR manual** vacío para que el IPAM entregue el primer segmento libre del tamaño que elijas en **Máscara**, de `/8` a `/32` (`/22` = 1.024 direcciones, `/24` = 256, `/26` = 64, `/28` = 16…). Si necesitas un rango específico, escríbelo; debe caer dentro del pool.
-4. Pulsa **Asignar**.
-
-Al elegir el pool, a la derecha aparece la **disponibilidad por máscara**: cuántas direcciones tiene cada bloque (totales y utilizables), **cuántos bloques libres quedan** y cuántas direcciones libres suman; el selector de máscara también muestra «/24 · 15 libres». Un clic en una fila elige esa máscara. La misma tabla aparece en **Nueva reserva**. Cuenta asignaciones y reservas vigentes; en IPv4 un bloque `/30` o menor pierde dos direcciones (red y difusión).
-
-Si el rango choca con otro, el IPAM **no asigna nada**: te muestra con quién choca y ofrece **segmentos libres** con un botón «Usar».
-Para el flujo normal (pedir, aprobar, asignar) usa **Reservas → Nueva reserva**.
+   - **Choca dentro del mismo pool** e **Inválida** (CIDR mal escrito o desalineado, ambiente o VLAN inválidos…): no se pueden importar. Si el CIDR está desalineado, el detalle sugiere la red correcta.
+4. Pulsa **Importar N segmentos**. Es **todo o nada**: si la base rechaza algo, no se importa ninguno. Los segmentos quedan con origen `importado` y la importación queda registrada.
 
 ### Reservas — «apartado, esperando aprobación»
 Aquí viven las reservas tentativas que crean los agentes, Jira y las personas. Una reserva **aparta** un rango sin entregarlo todavía:
-- **Nueva reserva** (botón arriba, para solicitante y admin): eliges bloque base, proyecto/VPC, máscara o CIDR, ticket opcional y vigencia (hasta 72 h). **Un admin debe aprobarla** (Confirmar) para que sea asignación.
+- **Nueva reserva** (botón arriba, para solicitante y admin): eliges pool (ninguno viene elegido), proyecto/VPC, máscara (solo las que caben) o CIDR, VLAN opcional, ticket opcional y vigencia (hasta 72 h). Al confirmarla, la VLAN pasa a la asignación. **Un admin debe aprobarla** (Confirmar) para que sea asignación.
 - **Estados:** `reservada` (vigente, con **cuenta regresiva**), `confirmada` (ya es asignación), `liberada` (se devolvió) y `expirada` (nadie la aprobó a tiempo).
 - Por defecto expira a las **24 horas** (máximo 72); si nadie hace nada, el rango vuelve solo al pool.
 - Puedes **confirmar** o **liberar** las tuyas (el admin, las de todos). Las reservas que llegan desde **Jira** (solicitante `jira-webhook`) solo las puede aprobar un **admin**: confirmar equivale a dar la **aprobación manual** para asignar el CIDR. Un agente debe indicar **quién aprobó** y **dónde consta** (un MR, un ticket): así queda registro de la aprobación humana.
@@ -106,10 +116,9 @@ Hay dos formas de manejar cuentas; el IPAM usa la que corresponda a cómo está 
   3. El admin puede **Restablecer clave** (genera otra temporal), **Desactivar** (rige al instante) o **Eliminar**.
   4. El **administrador de emergencia** (las variables `APP_USER` y `APP_PASS`) siempre puede entrar, así nadie queda fuera.
 
-Nadie puede desactivarse ni eliminarse a sí mismo. Todo queda en la **Auditoría** (nunca las claves).
+Nadie puede desactivarse ni eliminarse a sí mismo. Todo queda registrado en la bitácora de auditoría (nunca las claves).
 
-### Auditoría — «quién hizo qué» (solo admin)
-Bitácora de **solo lectura**: fecha, usuario, rol, acción y detalle de cada cambio (asignar, liberar, confirmar, crear o revocar tokens…). Nadie puede modificarla ni borrarla, ni siquiera la aplicación. Para investigar un incidente, busca por fecha y usuario; el identificador de petición (`request_id`) enlaza con los logs.
+**¿Y la pestaña Auditoría?** Se quitó de la barra: el historial de cada pool y segmento se ve en su **ficha**. La bitácora completa se sigue registrando (es de solo inserción) y un admin la puede consultar por la API (`GET /api/v1/auditoria`, con filtros `pool` y `cidr`) para investigar un incidente; el `request_id` enlaza con los logs.
 
 ## 4 · Tareas comunes
 **Dar un rango a un proyecto nuevo (flujo automático, el recomendado)**
@@ -120,8 +129,10 @@ Bitácora de **solo lectura**: fecha, usuario, rol, acción y detalle de cada ca
 Detalle técnico en [API-Y-AGENTES](API-Y-AGENTES.md) y [ARQUITECTURA](ARQUITECTURA.md).
 
 - **Pedir un rango:** Reservas → Nueva reserva; un admin la aprueba.
-- **Entregar un rango ya (admin):** pestaña Asignar directo.
-- **Saber cuánto queda en un pool:** pestaña Pools, barra de uso.
+- **Entregar un rango ya (admin):** Asignaciones → Nueva asignación.
+- **Saber cuánto queda en un pool:** pestaña Pools, barra de uso; o clic en el pool → ficha (bloque libre más grande).
+- **Ver quién tocó un segmento (admin):** clic en su ID → ficha → Historial.
+- **Cargar el inventario existente (admin):** Pools → Importar segmentos.
 - **Devolver un rango:** Asignaciones → Liberar (admin).
 - **Entregar un informe:** Exportar a Excel.
 - **Crear una llave para un pipeline:** pestaña Tokens.

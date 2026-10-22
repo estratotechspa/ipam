@@ -20,7 +20,7 @@ Cómo se controla quién entra y qué puede hacer. El análisis de amenazas est�
 | Ver pools, asignaciones, reservas | ✔ | ✔ | ✔ | ✔ |
 | Reservar (también «Nueva reserva» en la interfaz) y liberar **sus** reservas | | ✔ | ✔ | ✔ |
 | **Aprobar** (confirmar) reservas | | solo las suyas, con `aprobado_por` | | ✔ (todas) |
-| Asignar directo (sin reserva) | | | | ✔ |
+| Nueva asignación directa (sin reserva) | | | | ✔ |
 | Liberar asignaciones, confirmar/liberar reservas ajenas | | | | ✔ |
 | Tokens, **usuarios** (pre-registrar, crear cuentas locales, desactivar, eliminar, restablecer clave), auditoría, respaldo e importación | | | | ✔ |
 Los usuarios pueden ser `lector`, `solicitante` o `admin`; los tokens, `lector` o `agente`.
@@ -63,6 +63,6 @@ Imagen mínima (Chainguard) fijada por digest, usuario no root (65532), sistema 
 
 ## 8 · Qué hacer ante un incidente
 1. Revoca los tokens sospechosos (pestaña Tokens).
-2. Revisa la **Auditoría** por fecha y usuario; el `request_id` lleva a los logs.
+2. Revisa la bitácora de auditoría (`GET /api/v1/auditoria`, o el historial en la ficha de cada pool o segmento) por fecha y usuario; el `request_id` lleva a los logs.
 3. Rota `SESSION_SECRET` (cierra todas las sesiones) y las contraseñas de los roles de base de datos.
 4. Más pasos en el [RUNBOOK](ops/RUNBOOK.md). Reporte de vulnerabilidades: [SECURITY.md](../SECURITY.md).
