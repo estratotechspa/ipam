@@ -40,7 +40,7 @@ gitleaks() {
 
 semgrep() {
   titulo "semgrep (SAST)"
-  reglas="--config p/javascript --config p/nodejs --config p/owasp-top-ten --metrics=off --quiet --error --exclude node_modules --exclude *.test.js"
+  reglas="--config p/javascript --config p/nodejs --config p/owasp-top-ten --metrics=off --quiet --error --no-git-ignore --exclude node_modules --exclude .gitlab-ci-local --exclude *.test.js"
   if local_; then
     # shellcheck disable=SC2086
     command semgrep scan $reglas "$RAIZ/mvp/src" "$RAIZ/mvp/public" "$RAIZ/scripts"
@@ -53,7 +53,7 @@ semgrep() {
 
 trivy_fs() {
   titulo "trivy (dependencias, secretos y configuración)"
-  opciones="--scanners vuln,secret,misconfig --severity HIGH,CRITICAL --ignore-unfixed --skip-dirs node_modules --skip-dirs mvp/node_modules --skip-dirs .terraform --exit-code 1"
+  opciones="--scanners vuln,secret,misconfig --severity HIGH,CRITICAL --ignore-unfixed --skip-dirs node_modules --skip-dirs mvp/node_modules --skip-dirs .terraform --skip-dirs .gitlab-ci-local --exit-code 1"
   if local_; then
     # shellcheck disable=SC2086
     sin_ruido command trivy fs $opciones --ignorefile "$RAIZ/.trivyignore.yaml" "$RAIZ"
