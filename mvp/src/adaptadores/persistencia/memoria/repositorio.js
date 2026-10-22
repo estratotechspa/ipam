@@ -5,6 +5,7 @@
 const crypto = require('node:crypto');
 const { parse, overlap } = require('../../../dominio/cidr');
 const { ConflictoDeDatos } = require('../../../aplicacion/resultado');
+const { SOLICITANTE_JIRA } = require('../../../dominio/reserva');
 
 /** @param {{reloj?: {ahora: () => Date}, pools?: any[]}} [o] */
 function crearRepositorioMemoria({ reloj = { ahora: () => new Date() }, pools = [] } = {}) {
@@ -129,7 +130,14 @@ function crearRepositorioMemoria({ reloj = { ahora: () => new Date() }, pools = 
       return datos.asignaciones.length < n;
     },
     async insertarAsignacionDeReserva(r) {
-      return metodos.insertarAsignacion({ pool: r.pool_id, cidr: r.cidr, vpc: r.vpc, solicitante: r.solicitante, ticket: r.ticket, origen: 'agente' });
+      return metodos.insertarAsignacion({
+        pool: r.pool_id,
+        cidr: r.cidr,
+        vpc: r.vpc,
+        solicitante: r.solicitante,
+        ticket: r.ticket,
+        origen: r.solicitante === SOLICITANTE_JIRA ? 'jira' : 'agente',
+      });
     },
     async purgarLimite() {
       return 0;

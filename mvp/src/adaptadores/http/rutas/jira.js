@@ -29,7 +29,7 @@ function montar(app, { casos, tickets, publicador, validacion }) {
       return res
         .status(r.tipo === 'ambiguo' ? 422 : r.tipo === 'conflicto' ? 409 : r.tipo === 'no_encontrado' ? 404 : 400)
         .json({ ticket: b.ticket, error: r.error });
-    res.json({ ticket: r.ticket, pool: r.pool, cidr: r.cidr });
+    res.json({ ticket: r.ticket, pool: r.pool, cidr: r.cidr, estado: r.estado, reserva: r.reserva, expira_en: r.expira_en });
   });
 
   // Simulador para la demo: arma un ticket de Jira, lo firma y lo procesa por el mismo camino del webhook.
@@ -38,7 +38,7 @@ function montar(app, { casos, tickets, publicador, validacion }) {
     const cuerpo = Buffer.from(JSON.stringify({ ambiente, tipo, mascara, vpc }));
     const r = await casos.jira.simular({ ambiente, tipo, mascara, vpc }, firmar(cuerpo).slice(0, 23) + '…');
     if (!r.ok) return enviarFallo(res, r, { legado: false });
-    res.json({ ticket: r.ticket, pool: r.pool, cidr: r.cidr });
+    res.json({ ticket: r.ticket, pool: r.pool, cidr: r.cidr, estado: r.estado, reserva: r.reserva, expira_en: r.expira_en });
   });
 }
 

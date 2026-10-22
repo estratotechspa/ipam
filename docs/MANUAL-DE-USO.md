@@ -59,11 +59,11 @@ Para una red nueva de un proyecto GCP, lo normal es que la pida el pipeline por 
 Aquí viven las reservas tentativas que crean los agentes. Una reserva **aparta** un rango sin entregarlo todavía:
 - **Estados:** `reservada` (vigente, con **cuenta regresiva**), `confirmada` (ya es asignación), `liberada` (se devolvió) y `expirada` (nadie la aprobó a tiempo).
 - Por defecto expira a las **24 horas** (máximo 72); si nadie hace nada, el rango vuelve solo al pool.
-- Puedes **confirmar** o **liberar** las tuyas (el admin, las de todos). Un agente debe indicar **quién aprobó** y **dónde consta** (un MR, un ticket): así queda registro de la aprobación humana.
+- Puedes **confirmar** o **liberar** las tuyas (el admin, las de todos). Las reservas que llegan desde **Jira** (solicitante `jira-webhook`) solo las puede aprobar un **admin**: confirmar equivale a dar la **aprobación manual** para asignar el CIDR. Un agente debe indicar **quién aprobó** y **dónde consta** (un MR, un ticket): así queda registro de la aprobación humana.
 - Los filtros muestran por estado, pool o solicitante.
 
 ### Jira — «integración con tickets»
-Explica y permite probar la conexión con Jira en los dos sentidos: el IPAM puede **crear un ticket** cuando asigna, y un ticket de Jira puede **pedir un segmento** por webhook. Con la integración desactivada (lo normal en el POC) el número de ticket lo genera el IPAM (`NET-xxx`). **Simular ticket entrante** sirve para demostrar el flujo sin Jira real. El **registro de eventos** muestra lo que pasó.
+Explica y permite probar la conexión con Jira en los dos sentidos: el IPAM puede **crear un ticket** cuando asigna, y un ticket de Jira puede **pedir un segmento** por webhook. **Un ticket nunca asigna directo:** el IPAM crea una **reserva** (24 h) y un **admin debe aprobarla** en la pestaña Reservas (botón Confirmar); recién ahí nace la asignación y se actualiza el ticket. Si nadie aprueba, la reserva expira sola y el rango vuelve al pool. Con la integración desactivada (lo normal en el POC) el número de ticket lo genera el IPAM (`NET-xxx`). **Simular ticket entrante** sirve para demostrar el flujo sin Jira real. El **registro de eventos** muestra lo que pasó.
 
 ### Tokens — «credenciales para agentes» (solo admin)
 Aquí se crean las llaves que usan los pipelines y agentes:

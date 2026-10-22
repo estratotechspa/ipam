@@ -66,3 +66,6 @@ dialog .fila-botones{display:flex;gap:10px;justify-content:flex-end;margin-top:1
 .token-valor{font:13px ui-monospace,monospace;letter-spacing:0}
 .ayuda{color:var(--mut);font-size:12px;margin:2px 0 0}
 .vacio{padding:26px;text-align:center;color:var(--mut)}
+
+.flow .box.aprob{border-color:#b7791f;background:#fff7e6;color:#5c3d00}
+@media (prefers-color-scheme:dark){.flow .box.aprob{background:#3a2a08;color:#ffd98a;border-color:#d69e2e}}

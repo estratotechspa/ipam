@@ -12,12 +12,15 @@ const { crearTokens } = require('./tokens');
 /** Une todos los casos de uso con sus puertos. @param {any} deps */
 function crearCasos({ repo, eventos, auditor, tickets, reloj, config, instancia, generadorToken }) {
   const asignaciones = crearAsignaciones({ repo, eventos, tickets });
+  // Jira reserva y la aprobación (confirmar la reserva) lo avisa de vuelta: los dos casos de uso se conocen por este gancho.
+  const reservas = crearReservas({ repo, eventos, config, alConfirmar: (...args) => jira.alAprobar(...args) });
+  const jira = crearJira({ repo, eventos, auditor, tickets, asignaciones, reservas });
   return {
     asignaciones,
     respaldo: crearRespaldo({ repo, reloj, rolesUsuario: ROLES_USUARIO }),
-    jira: crearJira({ repo, eventos, auditor, tickets, asignaciones }),
+    jira,
     admin: crearAdministracion({ repo, rolesUsuario: ROLES_USUARIO }),
-    reservas: crearReservas({ repo, eventos, config }),
+    reservas,
     tokens: crearTokens({ repo, generador: generadorToken, config }),
     barrido: crearBarrido({ repo, eventos, intervaloMs: config.reservas.barredorIntervaloSeg * 1000, instancia }),
   };

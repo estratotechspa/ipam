@@ -8,6 +8,7 @@ Ningún cambio automático debe volverse definitivo sin la aprobación de una pe
 - **El paso de aprobación va en un ambiente protegido** del pipeline (GitLab *protected environments* / GitHub *environments* con revisores). Es la única garantía real: el IPAM guarda quién dice haber aprobado pero **no puede comprobarlo** ([LIMITACIONES](LIMITACIONES.md)).
 - **Quien aprueba no es quien escribió el cambio** (separación de funciones).
 - Si el apply falla o se rechaza: **liberar**. Si nadie decide: la reserva **expira sola** (24 h; ajustable hasta 72 h).
+- **Jira también pasa por aprobación:** un ticket solo crea una reserva; un admin la aprueba en la pestaña Reservas antes de que se asigne el CIDR.
 - Revisa el plan antes de aprobar, no solo el rango reservado. Diseño completo en [ARQUITECTURA](ARQUITECTURA.md#4--reservas-tentativas-y-human-in-the-loop).
 
 ## 2 · Pipelines

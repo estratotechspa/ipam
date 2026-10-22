@@ -26,6 +26,9 @@ const estadoEfectivo = (/** @type {Reserva} */ r, /** @type {Date} */ ahora) =>
   r.estado === 'reservada' && new Date(r.expira_en).getTime() <= ahora.getTime() ? 'expirada' : r.estado;
 
 /** Solo el dueño o un admin opera sobre una reserva. */
+/** Quien figura como solicitante de las reservas que crea el webhook de Jira (no es una persona: la aprobación la da un admin). */
+const SOLICITANTE_JIRA = 'jira-webhook';
+
 const puedeOperar = (/** @type {Actor} */ actor, /** @type {{solicitante: string}} */ reserva) => actor.rol === 'admin' || actor.nombre === reserva.solicitante;
 
 /**
@@ -130,6 +133,7 @@ module.exports = {
   ESTADOS,
   estadoEfectivo,
   puedeOperar,
+  SOLICITANTE_JIRA,
   validarTtl,
   validarClaveIdem,
   validarTicket,

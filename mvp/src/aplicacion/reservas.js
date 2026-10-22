@@ -168,9 +168,9 @@ async function reservarEnTransaccion(tx, { actor, d, p, config }) {
  * Reservas tentativas: el agente pide un rango, queda apartado un tiempo (TTL) y solo se vuelve asignación definitiva si
  * alguien lo confirma. Sin confirmar, expira solo. La expiración perezosa (al consultar, con el reloj de la base) garantiza
  * la corrección; el barredor solo limpia.
- * @param {{repo: any, eventos: import('./puertos').PublicadorEventos, config: any}} deps
+ * @param {{repo: any, eventos: import('./puertos').PublicadorEventos, config: any, alConfirmar?: (actor: any, reserva: any, asignacion: any, aprobacion: {aprobado_por: string, referencia?: string | null}) => Promise<void>}} deps
  */
-function crearReservas({ repo, eventos, config }) {
+function crearReservas({ repo, eventos, config, alConfirmar }) {
   /** @param {Array<{id: string, cidr: string, pool_id: string, solicitante: string}>|undefined} lista */
   const publicarExpiradas = async (lista) => {
     for (const e of lista || []) await eventos.publicar('reserva_expirada', { reserva: e.id, cidr: e.cidr, pool: e.pool_id, solicitante: e.solicitante });
@@ -257,6 +257,14 @@ function crearReservas({ repo, eventos, config }) {
         aprobado_por: ap.aprobadoPor || actor.nombre,
         referencia: ap.referencia,
       });
+    // Gancho opcional (p. ej. avisar a Jira): un fallo ahí nunca deshace la confirmación.
+    if (!r.repetida && alConfirmar) {
+      try {
+        await alConfirmar(actor, r.reserva, r.asignacion, { aprobado_por: ap.aprobadoPor || actor.nombre, referencia: ap.referencia });
+      } catch (e) {
+        await eventos.publicar('reserva_gancho_error', { reserva: id, motivo: e instanceof Error ? e.message : String(e) });
+      }
+    }
     return ok({
       reserva: presentar(r.reserva),
       asignacion: r.asignacion,

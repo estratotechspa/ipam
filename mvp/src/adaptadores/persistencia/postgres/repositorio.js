@@ -3,6 +3,7 @@
 // El IPAM es dueño de sus tablas: ningún otro servicio debe leerlas ni escribirlas; se integran por la API.
 const { ConflictoDeDatos } = require('../../../aplicacion/resultado');
 const { reintentar } = require('./resiliencia');
+const { SOLICITANTE_JIRA } = require('../../../dominio/reserva');
 
 const COLUMNAS_ASIGNACION = 'id, pool_id, cidr::text, vpc, solicitante, ticket, origen, creado_en';
 // Fracción del pool que ocupan los segmentos asignados (para la barra de uso de la interfaz).
@@ -155,10 +156,14 @@ function consultas(x) {
     async insertarAsignacionDeReserva(r) {
       await q("select set_config('ipam.reserva_confirmando', $1, true)", [r.id]);
       return (
-        await q(
-          `insert into asignaciones (pool_id, cidr, vpc, solicitante, ticket, origen) values ($1,$2,$3,$4,$5,'agente') returning ${COLUMNAS_ASIGNACION}`,
-          [r.pool_id, r.cidr, r.vpc, r.solicitante, r.ticket],
-        )
+        await q(`insert into asignaciones (pool_id, cidr, vpc, solicitante, ticket, origen) values ($1,$2,$3,$4,$5,$6) returning ${COLUMNAS_ASIGNACION}`, [
+          r.pool_id,
+          r.cidr,
+          r.vpc,
+          r.solicitante,
+          r.ticket,
+          r.solicitante === SOLICITANTE_JIRA ? 'jira' : 'agente',
+        ])
       ).rows[0];
     },
   };

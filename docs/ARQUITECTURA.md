@@ -75,6 +75,20 @@ sequenceDiagram
     I-->>I: expira sola (TTL)
   end
 ```
+**Tickets de Jira: el mismo principio.** El webhook **no asigna**: crea una reserva (solicitante `jira-webhook`, idempotente por ticket) y un **admin** la aprueba en la pestaña Reservas. Solo entonces se asigna el CIDR (origen `jira`) y se actualiza el ticket.
+```mermaid
+sequenceDiagram
+  autonumber
+  participant J as Jira
+  participant I as IPAM
+  participant A as Admin
+  J->>I: webhook firmado (ticket, ambiente, tipo, máscara, VPC)
+  I-->>J: 200 reserva pendiente de aprobación
+  A->>I: Confirmar la reserva (aprobación manual)
+  I-->>I: crea la asignación (origen jira)
+  I->>J: actualiza el ticket con el rango
+  Note over I: sin aprobación, la reserva expira sola
+```
 **Por qué así:** un agente puede equivocarse o ser engañado. Si pudiera asignar directo, un error consumiría rangos de forma permanente. Con la reserva, lo peor que pasa es que un rango queda apartado un día. Reglas:
 - Un agente **nunca** asigna directo: solo reserva, confirma lo suyo y libera lo suyo.
 - Confirmar exige `aprobado_por` y `referencia`; ambos van a la auditoría.

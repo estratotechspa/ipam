@@ -16,6 +16,8 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y 
 - Contrato YAML de redes (propuesta pendiente de validar), ejemplos y pipeline de GitLab para el repo de infraestructura del cliente.
 
 ### Cambiado
+- **Jira ya no asigna directo:** el webhook (y el simulador) crea una **reserva** y un **admin** debe aprobarla en la pestaña Reservas; recién ahí se asigna el CIDR (origen `jira`) y se actualiza el ticket. Idempotente por ticket; sin aprobación, expira sola.
+- Filtro por ambiente y proveedor en Pools, Asignaciones y Reservas; las máscaras van de /8 a /32 en toda la interfaz.
 - En producción el servicio **no arranca** sin autenticación (salvo `ALLOW_ANONYMOUS=true`); el chart de Helm falla sin autenticación.
 - Los errores no devuelven detalles internos (solo `request_id`); el webhook de Jira sin secreto queda deshabilitado en producción.
 - Las pruebas se ejecutan en serie y cada archivo usa su propia base de datos temporal.

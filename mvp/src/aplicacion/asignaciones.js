@@ -91,7 +91,7 @@ function crearAsignaciones({ repo, eventos, tickets }) {
     return ok({ libres: libres(p.cidr, await repo.ocupados(poolId), len, 3) });
   }
 
-  return { asignar, liberar, sugerirLibres };
+  return { asignar, liberar, sugerirLibres, sincronizarTickets };
 }
 
 module.exports = { crearAsignaciones };

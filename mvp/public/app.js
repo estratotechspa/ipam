@@ -202,6 +202,7 @@ async function solicitar() {
   res.innerHTML = `<div class="alert">${esc(d.error || 'Error ' + r.status)}</div>`;
 }
 
+let ultimoJira = null; // resultado de la última simulación (se muestra tras recargar la pestaña)
 async function renderJira() {
   let ev = [],
     je = { activa: false };
@@ -218,18 +219,28 @@ async function renderJira() {
   $('jira').innerHTML = `<h2>Integración bidireccional con Jira ${estado}</h2>
   <div class="card"><b>Sentido 1 · IPAM → Jira</b><div class="flow"><div class="box">Panel / API<br>solicita segmento</div><span class="arrow">→</span><div class="box">IPAM<br>valida y asigna</div><span class="arrow">→</span><div class="box jira">Jira crea ticket<br>NET-1xx</div><span class="arrow">→</span><div class="box">Guarda<br>ticket_jira_id</div></div>
   <span class="muted">Con la integración desactivada, el número de ticket lo genera el IPAM (secuencia NET-xxx). Al activarla (JIRA_ENABLED=true) se crea el ticket real en Jira.</span></div>
-  <div class="card" style="margin-top:16px"><b>Sentido 2 · Jira → IPAM</b><div class="flow"><div class="box jira">Ticket «Solicitud de Segmento IPAM»<br>ambiente, tipo, pool, máscara, VPC</div><span class="arrow">→</span><div class="box">Webhook<br>(firmado HMAC)</div><span class="arrow">→</span><div class="box">IPAM calcula<br>y asigna</div><span class="arrow">→</span><div class="box jira">Actualiza ticket<br>con el rango</div></div>
+  <div class="card" style="margin-top:16px"><b>Sentido 2 · Jira → IPAM</b><div class="flow"><div class="box jira">Ticket «Solicitud de Segmento IPAM»<br>ambiente, tipo, pool, máscara, VPC</div><span class="arrow">→</span><div class="box">Webhook<br>(firmado HMAC)</div><span class="arrow">→</span><div class="box">IPAM calcula<br>y <b>reserva</b> (24 h)</div><span class="arrow">→</span><div class="box aprob">✋ Aprobación manual<br>de un admin (Reservas)</div><span class="arrow">→</span><div class="box">IPAM<br>asigna el CIDR</div><span class="arrow">→</span><div class="box jira">Actualiza ticket<br>con el rango</div></div><p class="muted" style="margin:10px 0 0">Nada se asigna sin aprobación humana: si nadie aprueba, la reserva <b>expira sola</b> y el rango vuelve al pool.</p>
   <div class="row"><div style="flex:1;min-width:240px"><b>Simular ticket entrante</b>
    <label>Ambiente</label><select id="j-amb"><option>prod</option><option>qa</option><option>dev</option></select>
    <label>Tipo</label><select id="j-tipo"><option>Nodos</option><option selected>Pods</option><option>Servicios</option><option>Control plane</option></select>
    <label>Máscara</label><select id="j-len">${MASCARAS.map((n) => `<option ${n === 22 ? 'selected' : ''} value="${n}">/${n}</option>`).join('')}</select>
-   <label>VPC</label><input id="j-vpc" value="vpc-nueva"><p><button class="btn" id="j-go">Enviar webhook</button></p></div>
+   <label>VPC</label><input id="j-vpc" value="vpc-nueva"><p><button class="btn" id="j-go">Enviar webhook</button></p><div id="j-res" role="status"></div></div>
   <div style="flex:2;min-width:260px"><b>Registro de eventos</b><div class="log">${esc(ev.map(linea).join('\n')) || '(sin eventos)'}</div></div></div></div>`;
+  if (ultimoJira) {
+    $('j-res').className = ultimoJira.ok ? 'ok' : 'alert';
+    $('j-res').textContent = ultimoJira.texto;
+  }
   $('j-go').onclick = async () => {
     $('j-go').disabled = true;
-    await api('/api/jira/simular', {
+    const r = await api('/api/jira/simular', {
       body: { ambiente: $('j-amb').value, tipo: $('j-tipo').value, mascara: +$('j-len').value, vpc: $('j-vpc').value.trim() || 'vpc-sin-nombre' },
     });
+    ultimoJira = r.ok
+      ? {
+          ok: true,
+          texto: `Ticket ${r.data.ticket}: se reservó ${r.data.cidr} en ${r.data.pool}. Falta la aprobación manual de un admin en la pestaña Reservas; si no se aprueba, expira sola.`,
+        }
+      : { ok: false, texto: (r.data && (r.data.mensaje || r.data.error)) || 'Error ' + r.status };
     renderJira();
   };
 }

@@ -184,3 +184,36 @@ test('accesibilidad (axe): las pestañas Reservas y Tokens y el diálogo no tien
   const dialogo = await new AxeBuilder({ page }).include('dialog').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
   expect(dialogo.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(' | ')}`)).toEqual([]);
 });
+
+test('Jira → reserva → aprobación manual de un admin → asignación (nada se asigna sin aprobar)', async ({ page }) => {
+  const vpc = `jira-e2e-${Date.now()}`;
+  await irA(page, 'Jira');
+  await expect(page.getByText('Aprobación manual')).toBeVisible();
+  await page.selectOption('#j-amb', 'qa');
+  await page.selectOption('#j-tipo', 'Nodos');
+  await page.selectOption('#j-len', '26');
+  await page.fill('#j-vpc', vpc);
+  await page.click('#j-go');
+  await expect(page.locator('#j-res')).toContainText('Falta la aprobación manual');
+
+  // Aún no hay asignación para ese proyecto…
+  const sinAprobar = (await (await page.request.get('/api/v1/asignaciones')).json()).some((a) => a.vpc === vpc);
+  expect(sinAprobar).toBe(false);
+  // …sí hay una reserva de «jira-webhook» esperando.
+  await irA(page, 'Reservas');
+  const fila = page.locator('tr', { hasText: vpc });
+  await expect(fila).toContainText('jira-webhook');
+  await expect(fila).toContainText('reservada');
+
+  // Un admin la aprueba: recién entonces se asigna, con origen «jira».
+  page.once('dialog', (d) => d.accept());
+  await fila.getByRole('button', { name: /Confirmar/ }).click();
+  await expect(page.locator('tr', { hasText: vpc })).toContainText('confirmada');
+  const asignadas = await (await page.request.get('/api/v1/asignaciones')).json();
+  const a = asignadas.find((x) => x.vpc === vpc);
+  expect(a.origen).toBe('jira');
+  expect(a.cidr).toMatch(/\/26$/);
+
+  // Limpieza: liberar la asignación.
+  await page.request.delete(`/api/v1/asignaciones/${a.id}`, { headers: { 'X-Requested-With': 'ipam' } });
+});

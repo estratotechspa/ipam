@@ -540,8 +540,23 @@ const schemas = {
   JiraResultado: {
     type: 'object',
     required: ['ticket', 'cidr'],
-    properties: { ticket: { type: 'string' }, pool: { type: 'string' }, cidr: { $ref: '#/components/schemas/Cidr' } },
-    example: { ticket: 'NET-9001', pool: 'gke-nodos-qa', cidr: '10.220.32.0/24' },
+    description: 'El ticket NO asigna: crea una reserva tentativa que un admin debe aprobar (confirmar) para volverse asignación.',
+    properties: {
+      ticket: { type: 'string' },
+      pool: { type: 'string' },
+      cidr: { $ref: '#/components/schemas/Cidr' },
+      estado: { type: 'string', enum: ['pendiente_de_aprobacion'] },
+      reserva: { type: 'string', format: 'uuid', description: 'Id de la reserva a aprobar en la pestaña Reservas.' },
+      expira_en: { type: 'string', format: 'date-time' },
+    },
+    example: {
+      ticket: 'NET-9001',
+      pool: 'gke-nodos-qa',
+      cidr: '10.220.32.0/24',
+      estado: 'pendiente_de_aprobacion',
+      reserva: '5f0c2a1e-8c52-4d0e-9f6b-2f2a7c1d9a10',
+      expira_en: '2026-10-23T14:00:00.000Z',
+    },
   },
   Respaldo: {
     type: 'object',
@@ -1052,7 +1067,7 @@ function rutasDeJira(p) {
       tag: 'Jira',
       summary: 'Simula un ticket entrante (demo)',
       body: cuerpo('JiraSimular', schemas.JiraSimular.example),
-      ok: { 200: respuesta('Procesado.', 'JiraResultado') },
+      ok: { 200: respuesta('Reserva creada, pendiente de aprobación de un admin.', 'JiraResultado') },
       extra: {
         ...e403,
         404: respuesta('Sin pool.', 'Error'),
@@ -1066,10 +1081,10 @@ function rutasDeJira(p) {
       tag: 'Jira',
       summary: 'Webhook de Jira (firmado)',
       description:
-        'Firma HMAC-SHA256 en `x-hub-signature-256`, comparada en tiempo constante. En producción sin `JIRA_WEBHOOK_SECRET` queda deshabilitado (503).',
+        'Firma HMAC-SHA256 en `x-hub-signature-256`, comparada en tiempo constante. En producción sin `JIRA_WEBHOOK_SECRET` queda deshabilitado (503). **No asigna directo:** crea una reserva tentativa (24 h por defecto) que un **admin debe aprobar** en la pestaña Reservas; recién ahí nace la asignación y se actualiza el ticket. Sin aprobación, expira sola. Es idempotente por ticket.',
       params: [param('x-hub-signature-256', 'header', 'sha256=HMAC(cuerpo, JIRA_WEBHOOK_SECRET)', { type: 'string' }, true)],
       body: cuerpo('JiraTicket', schemas.JiraTicket.example),
-      ok: { 200: respuesta('Asignado.', 'JiraResultado') },
+      ok: { 200: respuesta('Reserva creada, pendiente de aprobación.', 'JiraResultado') },
       seguridad: publico,
       extra: {
         429: ref('LimiteExcedido'),

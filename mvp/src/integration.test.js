@@ -78,7 +78,7 @@ test('asignar y liberar devuelve el espacio', opts, async () => {
   await fetch(`${base}/api/asignaciones/${(await b.json()).id}`, { method: 'DELETE', headers: { 'X-Requested-With': 'ipam' } });
 });
 
-test('webhook de Jira: firma inválida → 401; firma válida → asigna', opts, async () => {
+test('webhook de Jira: firma inválida → 401; firma válida → RESERVA y solo la aprobación de un admin asigna', opts, async () => {
   const cuerpo = JSON.stringify({ ticket: 'NET-9001', ambiente: 'qa', tipo: 'Nodos', mascara: 24, vpc: 'vpc-webhook' });
   const mal = await fetch(base + '/webhook/jira', {
     method: 'POST',
@@ -86,14 +86,29 @@ test('webhook de Jira: firma inválida → 401; firma válida → asigna', opts,
     body: cuerpo,
   });
   assert.equal(mal.status, 401);
-  const bien = await fetch(base + '/webhook/jira', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-hub-signature-256': firma(cuerpo) },
-    body: cuerpo,
-  });
+  const enviar = () =>
+    fetch(base + '/webhook/jira', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-hub-signature-256': firma(cuerpo) }, body: cuerpo });
+  const bien = await enviar();
   assert.equal(bien.status, 200);
   const d = await bien.json();
   assert.equal(d.ticket, 'NET-9001');
+  assert.equal(d.estado, 'pendiente_de_aprobacion');
+  assert.ok(d.reserva);
+
+  // Sin aprobación NO hay asignación: el rango solo está apartado.
+  const antes = (await (await fetch(base + '/api/asignaciones')).json()).find((x) => x.ticket === 'NET-9001');
+  assert.equal(antes, undefined, 'el webhook no debe asignar sin aprobación');
+  // Un reintento de Jira con el mismo ticket no duplica la reserva.
+  const otra = await (await enviar()).json();
+  assert.equal(otra.reserva, d.reserva);
+
+  // Un admin aprueba (confirma la reserva): recién ahí nace la asignación, con origen «jira».
+  const ok = await fetch(`${base}/api/reservas/${d.reserva}/confirmar`, {
+    method: 'POST',
+    headers: { 'X-Requested-With': 'ipam', 'Content-Type': 'application/json' },
+    body: '{}',
+  });
+  assert.equal(ok.status, 200);
   const a = (await (await fetch(base + '/api/asignaciones')).json()).find((x) => x.ticket === 'NET-9001');
   assert.equal(a.origen, 'jira');
   await fetch(`${base}/api/asignaciones/${a.id}`, { method: 'DELETE', headers: { 'X-Requested-With': 'ipam' } });
