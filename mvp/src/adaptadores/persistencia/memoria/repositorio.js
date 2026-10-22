@@ -49,7 +49,8 @@ function crearRepositorioMemoria({ reloj = { ahora: () => new Date() }, pools = 
     },
     async insertarAsignacion({ pool, cidr, vpc, solicitante, ticket, origen }) {
       if (datos.asignaciones.some((x) => x.pool_id === pool && cruza(x.cidr, cidr))) throw new ConflictoDeDatos('solapamiento', '23P01');
-      const a = { id: ++datos.idAsignacion, pool_id: pool, cidr, vpc, solicitante, ticket, origen, creado_en: ahora() };
+      const id = ++datos.idAsignacion;
+      const a = { id, codigo: `ASG-${String(id).padStart(6, '0')}`, pool_id: pool, cidr, vpc, solicitante, ticket, origen, creado_en: ahora() };
       datos.asignaciones.push(a);
       return { ...a };
     },

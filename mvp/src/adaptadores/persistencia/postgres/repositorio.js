@@ -5,7 +5,7 @@ const { ConflictoDeDatos } = require('../../../aplicacion/resultado');
 const { reintentar } = require('./resiliencia');
 const { SOLICITANTE_JIRA } = require('../../../dominio/reserva');
 
-const COLUMNAS_ASIGNACION = 'id, pool_id, cidr::text, vpc, solicitante, ticket, origen, creado_en';
+const COLUMNAS_ASIGNACION = 'id, codigo, pool_id, cidr::text, vpc, solicitante, ticket, origen, creado_en';
 // Fracción del pool que ocupan los segmentos asignados (para la barra de uso de la interfaz).
 const USO_POOL = `coalesce(sum(2^(32-masklen(a.cidr))),0)::float8 / (2^(32-masklen(p.cidr)))::float8`;
 
@@ -387,7 +387,7 @@ function crearRepositorio(db) {
       await db.query('update asignaciones set ticket=$1 where id=$2', [ticket, id]);
     },
     async liberarAsignacion(id) {
-      return (await db.query('delete from asignaciones where id=$1 returning cidr::text, ticket, pool_id', [id])).rows[0] || null;
+      return (await db.query('delete from asignaciones where id=$1 returning id, codigo, cidr::text, ticket, pool_id', [id])).rows[0] || null;
     },
     async poolsConUso({ ambiente, tipo } = {}) {
       return (
@@ -417,7 +417,7 @@ function crearRepositorio(db) {
     async asignacionesParaExcel() {
       const filas = (
         await db.query(
-          `select a.id, a.pool_id, p.tipo, p.ambiente, p.proveedor, p.cidr::text as pool_cidr, a.cidr::text, a.vpc,
+          `select a.id, a.codigo, a.pool_id, p.tipo, p.ambiente, p.proveedor, p.cidr::text as pool_cidr, a.cidr::text, a.vpc,
                 a.solicitante, a.ticket, a.origen, a.creado_en
            from asignaciones a join pools p on p.id = a.pool_id order by p.ambiente desc, a.pool_id, a.cidr`,
         )

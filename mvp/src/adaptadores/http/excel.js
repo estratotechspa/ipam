@@ -19,6 +19,7 @@ function construirLibro({ filas, pools }, creador) {
     wb,
     'Segmentos',
     [
+      { header: 'ID', key: 'id', width: 12 },
       { header: 'Segmento (CIDR)', key: 'cidr', width: 20 },
       { header: 'Máscara', key: 'mascara', width: 9 },
       { header: 'Direcciones', key: 'dir', width: 13, style: { numFmt: '#,##0' } },
@@ -36,6 +37,7 @@ function construirLibro({ filas, pools }, creador) {
     filas.map((r) => {
       const len = Number(r.cidr.split('/')[1]);
       return {
+        id: r.codigo,
         cidr: r.cidr,
         mascara: `/${len}`,
         dir: 2 ** (32 - len),

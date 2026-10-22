@@ -204,6 +204,16 @@ insert into esquema_version (version, descripcion) values (5, 'fase 5: contadore
   on conflict (version) do nothing;
 
 -- ============================================================================
+-- Identificador legible de la asignación (ASG-000123): se deriva del número interno, que no se reutiliza al liberar.
+-- Identifica la ASIGNACIÓN (no el rango): el mismo CIDR puede asignarse de nuevo más adelante y tendrá otro ID.
+-- ============================================================================
+alter table asignaciones add column if not exists codigo text generated always as ('ASG-' || lpad(id::text, 6, '0')) stored;
+create unique index if not exists asignaciones_codigo_idx on asignaciones (codigo);
+
+insert into esquema_version (version, descripcion) values (6, 'id legible de asignacion (ASG-000123)')
+  on conflict (version) do nothing;
+
+-- ============================================================================
 -- Permisos del rol de la aplicación (solo si existe `ipam_app`; ver db/roles.sql)
 -- ============================================================================
 -- Se ejecuta con el rol migrador (dueño de las tablas) y se repite en cada migración. Sin el rol, no hace nada (desarrollo local).

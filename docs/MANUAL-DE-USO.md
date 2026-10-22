@@ -47,10 +47,11 @@ Debajo, una fila por pool: su **tipo** (Nodos, Pods, Servicios), **ambiente**, *
 **Filtro por ambiente y proveedor:** arriba de la tabla hay dos listas, **Ambiente** (`dev`, `qa`, `pre`, `prod`) y **Proveedor** (p. ej. GCP). Al elegir una, los números y la tabla muestran solo esos pools. El filtro **se conserva** al pasar a Asignaciones y Reservas, que también quedan acotadas; **Limpiar filtro** lo quita.
 
 ### Asignaciones — «lo ya entregado»
-La lista oficial de segmentos definitivos: **segmento**, **pool**, **proyecto/VPC**, cuántas **direcciones** son, quién lo **solicitó**, el **origen** (`panel`, `jira`, `agente`, `semilla`), el **ticket** y la **fecha**.
-- **Exportar a Excel** para auditorías o reportes.
+La lista oficial de segmentos definitivos: **ID** (`ASG-000123`, único por asignación: el mismo rango, si se libera y se vuelve a asignar, tendrá otro ID), **segmento**, **pool**, **proyecto/VPC**, cuántas **direcciones** son, quién lo **solicitó**, el **origen** (`panel`, `jira`, `agente`, `semilla`), el **ticket** y la **fecha**.
+- **Buscar** por ID, segmento, proyecto, ticket o quién lo pidió (cuadro «Buscar», junto al filtro).
+- **Exportar a Excel** para auditorías o reportes (incluye el ID).
 - **Respaldo JSON** (solo admin): copia lógica completa para llevar el IPAM a otra infraestructura ([MIGRACION](ops/MIGRACION.md)).
-- **Liberar** (solo admin): devuelve el segmento al pool. Queda en la auditoría. Hazlo solo cuando la red realmente se eliminó.
+- **Liberar** (solo admin): devuelve el segmento al pool. Pide el **motivo**, que queda en la auditoría junto con quién lo hizo. Hazlo solo cuando la red realmente se eliminó.
 
 ### Asignar directo — «entrégalo ya, definitivo» (solo admin)
 Formulario para entregar un segmento **de inmediato y de forma definitiva**, **sin reserva y sin aprobación de otra persona**. Queda en la auditoría a nombre del admin que lo hizo.

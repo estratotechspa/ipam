@@ -207,6 +207,12 @@ const schemas = {
     required: ['id', 'pool_id', 'cidr', 'vpc', 'solicitante', 'ticket', 'origen'],
     properties: {
       id: { type: 'string', pattern: '^\\d+$', description: 'Identificador numérico (como texto).' },
+      codigo: {
+        type: 'string',
+        pattern: '^ASG-\\d{6,}$',
+        description:
+          'ID legible de la asignación (ASG-000123). Identifica la asignación, no el rango: el mismo CIDR puede asignarse otra vez más adelante con otro ID.',
+      },
       pool_id: { type: 'string' },
       cidr: { $ref: '#/components/schemas/Cidr' },
       vpc: { type: 'string' },

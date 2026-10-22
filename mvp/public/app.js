@@ -126,29 +126,53 @@ async function renderPools() {
   }
 }
 
+let busquedaAsig = ''; // texto del buscador de Asignaciones
 async function renderAsig() {
   try {
     const [todosPools, todasAsig] = await Promise.all([get('/api/pools'), get('/api/asignaciones')]);
     const deEsePool = new Map(todosPools.map((p) => [p.id, p]));
-    const a = todasAsig.filter((x) => deEsePool.has(x.pool_id) && pasaFiltro(deEsePool.get(x.pool_id)));
+    const q = busquedaAsig.trim().toLowerCase();
+    const a = todasAsig
+      .filter((x) => deEsePool.has(x.pool_id) && pasaFiltro(deEsePool.get(x.pool_id)))
+      .filter((x) => !q || [x.codigo, x.cidr, x.vpc, x.ticket, x.solicitante, x.pool_id, x.origen].join(' ').toLowerCase().includes(q));
     $('asig').innerHTML =
-      `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h2>Asignaciones</h2><span><a class="btn" href="/api/exportar.xlsx" download>⬇ Exportar a Excel</a> ${puede('admin') ? '<a class="btn sec" href="/api/exportar.json" download title="Respaldo completo para llevar el IPAM a otra infraestructura">⬇ Respaldo JSON</a>' : ''}</span></div><div class="card tablewrap"><table><tr><th>Segmento</th><th>Pool</th><th>Proyecto / VPC</th><th>Direcciones</th><th>Solicitó</th><th>Origen</th><th>Ticket</th><th>Fecha</th><th></th></tr>
+      `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h2>Asignaciones</h2><span><a class="btn" href="/api/exportar.xlsx" download>⬇ Exportar a Excel</a> ${puede('admin') ? '<a class="btn sec" href="/api/exportar.json" download title="Respaldo completo para llevar el IPAM a otra infraestructura">⬇ Respaldo JSON</a>' : ''}</span></div><div class="card tablewrap"><table><tr><th>ID</th><th>Segmento</th><th>Pool</th><th>Proyecto / VPC</th><th>Direcciones</th><th>Solicitó</th><th>Origen</th><th>Ticket</th><th>Fecha</th><th></th></tr>
   ${a
     .map(
       (
         x,
-      ) => `<tr><td><code>${esc(x.cidr)}</code></td><td>${esc(x.pool_id)}</td><td>${esc(x.vpc)}</td><td>${fmt(size(x.cidr))}</td><td>${esc(x.solicitante)}</td><td>${esc(x.origen)}</td><td>${esc(x.ticket)}</td><td>${fecha(x.creado_en)}</td>
+      ) => `<tr><td><code>${esc(x.codigo || '')}</code></td><td><code>${esc(x.cidr)}</code></td><td>${esc(x.pool_id)}</td><td>${esc(x.vpc)}</td><td>${fmt(size(x.cidr))}</td><td>${esc(x.solicitante)}</td><td>${esc(x.origen)}</td><td>${esc(x.ticket)}</td><td>${fecha(x.creado_en)}</td>
   <td>${puede('admin') ? `<button class="btn sec" data-del="${x.id}" data-c="${esc(x.cidr)}">Liberar</button>` : ''}</td></tr>`,
     )
     .join('')}</table></div>`;
-    $('asig').prepend(barraFiltro(todosPools, renderAsig));
+    const buscador = h('input', {
+      id: 'f-buscar',
+      type: 'search',
+      value: busquedaAsig,
+      placeholder: 'ID, segmento, proyecto, ticket…',
+      oninput: async (e) => {
+        busquedaAsig = e.target.value;
+        await renderAsig();
+        const el = document.getElementById('f-buscar');
+        if (el) {
+          el.focus();
+          el.setSelectionRange(busquedaAsig.length, busquedaAsig.length);
+        }
+      },
+    });
+    const barra = barraFiltro(todosPools, renderAsig);
+    barra.insertBefore(h('label', null, 'Buscar', buscador), barra.firstChild);
+    $('asig').prepend(barra);
     $('asig')
       .querySelectorAll('[data-del]')
       .forEach(
         (b) =>
           (b.onclick = async () => {
-            if (!confirm('¿Liberar ' + b.dataset.c + '?')) return;
-            await api('/api/asignaciones/' + b.dataset.del, { method: 'DELETE', body: {} });
+            const motivo = prompt('¿Por qué se libera ' + b.dataset.c + '? (queda en la auditoría)');
+            if (motivo === null) return;
+            if (!motivo.trim()) return alert('Indica el motivo: queda registrado en la auditoría.');
+            const r = await api('/api/asignaciones/' + b.dataset.del, { method: 'DELETE', body: { motivo: motivo.trim() } });
+            if (!r.ok) alert((r.data && (r.data.mensaje || r.data.error)) || 'No se pudo liberar');
             renderAsig();
           }),
       );

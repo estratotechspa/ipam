@@ -32,9 +32,13 @@ function montar(app, { casos, audita, validacion }) {
 
   api(app, 'delete', '/asignaciones/:id', requiere('admin'), async (req, res) => {
     if (!/^\d+$/.test(req.params.id)) return error(res, 404, 'no_encontrado', 'No existe');
+    // Motivo opcional (la interfaz lo exige): queda en la auditoría junto con quién liberó.
+    const motivo = typeof req.body?.motivo === 'string' ? req.body.motivo.trim() : '';
+    if (motivo.length > 200 || /\p{Cc}/u.test(motivo))
+      return error(res, 400, 'validacion', 'El motivo debe tener hasta 200 caracteres y sin caracteres de control.');
     const r = await asignaciones.liberar(req.params.id);
     if (!r.ok) return enviarFallo(res, r);
-    await audita(req, 'liberar', r.liberado);
+    await audita(req, 'liberar', motivo ? { ...r.liberado, motivo } : r.liberado);
     res.json({ liberado: r.liberado });
   });
 

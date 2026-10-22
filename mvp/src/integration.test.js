@@ -111,6 +111,8 @@ test('webhook de Jira: firma inválida → 401; firma válida → RESERVA y solo
   assert.equal(ok.status, 200);
   const a = (await (await fetch(base + '/api/asignaciones')).json()).find((x) => x.ticket === 'NET-9001');
   assert.equal(a.origen, 'jira');
+  assert.match(a.codigo, /^ASG-\d{6,}$/, 'la asignación lleva su ID legible');
+  assert.equal(a.codigo, `ASG-${String(a.id).padStart(6, '0')}`);
   await fetch(`${base}/api/asignaciones/${a.id}`, { method: 'DELETE', headers: { 'X-Requested-With': 'ipam' } });
 });
 

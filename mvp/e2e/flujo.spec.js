@@ -20,9 +20,12 @@ test('solicitar → ver en asignaciones → exportar a Excel → liberar', async
   const [descarga] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: /Exportar a Excel/ }).click()]);
   expect(descarga.suggestedFilename()).toMatch(/^ipam-segmentos-\d{4}-\d{2}-\d{2}\.xlsx$/);
 
-  page.once('dialog', (d) => d.accept());
+  page.once('dialog', (d) => d.accept('prueba e2e: ya no se necesita'));
   await fila.getByRole('button', { name: 'Liberar' }).click();
   await expect(page.locator('tr', { hasText: vpc })).toHaveCount(0);
+  // El motivo queda en la auditoría.
+  const aud = await (await page.request.get('/api/v1/auditoria')).json();
+  expect(aud.some((f) => f.accion === 'liberar' && f.detalle.motivo === 'prueba e2e: ya no se necesita')).toBe(true);
 });
 
 test('un CIDR solapado muestra la alerta y sugiere segmentos libres', async ({ page }) => {
@@ -54,4 +57,19 @@ test('el filtro por ambiente y proveedor acota Pools, Asignaciones y Reservas', 
   await page.getByRole('button', { name: 'Limpiar filtro' }).first().click();
   await page.getByRole('button', { name: 'Pools', exact: true }).click();
   await expect(page.locator('#pools #f-ambiente')).toHaveValue('');
+});
+
+test('cada asignación muestra su ID (ASG-000123) y se puede buscar por él', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Asignaciones', exact: true }).click();
+  const filas = page.locator('#asig tbody tr').filter({ has: page.locator('td') });
+  await expect(filas.first()).toBeVisible();
+  const total = await filas.count();
+  const id = (await filas.first().locator('td').first().textContent()).trim();
+  expect(id).toMatch(/^ASG-\d{6,}$/);
+  await page.fill('#f-buscar', id);
+  await expect(filas).toHaveCount(1);
+  await expect(filas.first()).toContainText(id);
+  await page.fill('#f-buscar', '');
+  await expect(filas).toHaveCount(total);
 });
