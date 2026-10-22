@@ -8,9 +8,16 @@ const COLUMNAS_ASIGNACION = 'id, pool_id, cidr::text, vpc, solicitante, ticket, 
 // Fracción del pool que ocupan los segmentos asignados (para la barra de uso de la interfaz).
 const USO_POOL = `coalesce(sum(2^(32-masklen(a.cidr))),0)::float8 / (2^(32-masklen(p.cidr)))::float8`;
 
+// Reservas: el estado «real» considera el plazo con el reloj de la BASE (no el de cada réplica): una reserva «reservada» vencida cuenta como expirada.
+const ESTADO_EFECTIVO = `case when estado = 'reservada' and expira_en <= now() then 'expirada' else estado end`;
+const COLUMNAS_RESERVA = `id, pool_id, cidr::text, vpc, solicitante, ticket, creado_en, expira_en, resuelto_en, asignacion_id,
+  ${ESTADO_EFECTIVO} as estado, estado as estado_registrado,
+  case when estado = 'reservada' and expira_en > now() then floor(extract(epoch from (expira_en - now())))::int else 0 end as segundos_restantes`;
+const RESERVA_VIGENTE = `estado = 'reservada' and expira_en > now()`;
+
 /** Traduce los errores de restricción de PostgreSQL a un error de negocio. */
 function traducir(e) {
-  if (e && (e.code === '23P01' || e.code === '23514' || e.code === '23503')) return new ConflictoDeDatos(e.message, e.code);
+  if (e && (e.code === '23P01' || e.code === '23514' || e.code === '23503' || e.code === '23505')) return new ConflictoDeDatos(e.message, e.code);
   return e;
 }
 
@@ -24,12 +31,19 @@ function consultas(x) {
     async buscarPools({ ambiente, tipo }) {
       return (await q('select id, tipo, ambiente, proveedor, cidr::text from pools where ambiente=$1 and tipo=$2 order by id', [ambiente, tipo])).rows;
     },
+    /** Rangos ocupados de un pool: asignaciones + reservas vigentes. */
     async ocupados(poolId) {
-      return (await q('select cidr::text from asignaciones where pool_id=$1', [poolId])).rows.map((r) => r.cidr);
-    },
-    async conflicto(poolId, cidr) {
       return (await q(
-        'select cidr::text, vpc, solicitante, ticket, creado_en from asignaciones where pool_id=$1 and cidr && $2::cidr limit 1', [poolId, cidr])).rows[0] || null;
+        `select cidr::text from asignaciones where pool_id=$1
+         union all select cidr::text from reservas where pool_id=$1 and ${RESERVA_VIGENTE}`, [poolId])).rows.map((r) => r.cidr);
+    },
+    /** Primer rango (asignado o reservado) que se solapa con `cidr`, o null. */
+    async conflicto(poolId, cidr) {
+      const a = (await q(
+        `select 'asignacion' as fuente, cidr::text, vpc, solicitante, ticket, creado_en from asignaciones where pool_id=$1 and cidr && $2::cidr limit 1`, [poolId, cidr])).rows[0];
+      if (a) return a;
+      return (await q(
+        `select 'reserva' as fuente, cidr::text, vpc, solicitante, ticket, creado_en, expira_en from reservas where pool_id=$1 and ${RESERVA_VIGENTE} and cidr && $2::cidr limit 1`, [poolId, cidr])).rows[0] || null;
     },
     async siguienteTicket() {
       return (await q("select 'NET-' || nextval('ticket_seq') as t")).rows[0].t;
@@ -38,6 +52,63 @@ function consultas(x) {
       return (await q(
         `insert into asignaciones (pool_id, cidr, vpc, solicitante, ticket, origen) values ($1,$2,$3,$4,$5,$6) returning ${COLUMNAS_ASIGNACION}`,
         [pool, cidr, vpc, solicitante, ticket, origen])).rows[0];
+    },
+    async asignacionPorId(id) {
+      if (id === null || id === undefined) return null;
+      return (await q(`select ${COLUMNAS_ASIGNACION} from asignaciones where id=$1`, [id])).rows[0] || null;
+    },
+    // ---------- Reservas ----------
+    async reservaPorClave(solicitante, clave) {
+      return (await q(`select ${COLUMNAS_RESERVA} from reservas where solicitante=$1 and clave_idem=$2`, [solicitante, clave])).rows[0] || null;
+    },
+    async reservaPorId(id, { bloquear = false } = {}) {
+      // FOR UPDATE: nadie más cambia esta reserva mientras decidimos.
+      return (await q(`select ${COLUMNAS_RESERVA} from reservas where id=$1 ${bloquear ? 'for update' : ''}`, [id])).rows[0] || null;
+    },
+    async listarReservas({ estado, pool, solicitante, limite }) {
+      return (await q(
+        `select ${COLUMNAS_RESERVA} from reservas
+          where ($1::text is null or ${ESTADO_EFECTIVO} = $1) and ($2::text is null or pool_id = $2) and ($3::text is null or solicitante = $3)
+          order by creado_en desc, id limit $4`, [estado, pool, solicitante, limite])).rows;
+    },
+    async contarVigentesDe(solicitante) {
+      return (await q(`select count(*)::int as n from reservas where solicitante=$1 and ${RESERVA_VIGENTE}`, [solicitante])).rows[0].n;
+    },
+    async insertarReserva({ pool, cidr, vpc, solicitante, ticket, ttlHoras, clave }) {
+      return (await q(
+        `with nueva as (
+           insert into reservas (pool_id, cidr, vpc, solicitante, ticket, clave_idem, expira_en)
+           values ($1,$2,$3,$4,$5,$6, now() + make_interval(hours => $7::int)) returning *)
+         select ${COLUMNAS_RESERVA} from nueva`, [pool, cidr, vpc, solicitante, ticket, clave, ttlHoras])).rows[0];
+    },
+    /** Marca como expiradas las reservas vencidas (de un pool o, con null, de todos). Devuelve las que cambió. */
+    async expirarVencidas(poolId) {
+      return (await q(
+        `update reservas set estado = 'expirada', resuelto_en = now()
+          where estado = 'reservada' and expira_en <= now() and ($1::text is null or pool_id = $1)
+          returning id, cidr::text, pool_id, solicitante`, [poolId])).rows;
+    },
+    async marcarExpirada(id) {
+      return (await q(
+        `update reservas set estado = 'expirada', resuelto_en = now() where id = $1 and estado = 'reservada' returning id, cidr::text, pool_id, solicitante`, [id])).rows[0];
+    },
+    async marcarConfirmada(id, asignacionId) {
+      return (await q(
+        `with r as (update reservas set estado = 'confirmada', resuelto_en = now(), asignacion_id = $2 where id = $1 returning *) select ${COLUMNAS_RESERVA} from r`, [id, asignacionId])).rows[0];
+    },
+    async marcarLiberada(id) {
+      return (await q(
+        `with r as (update reservas set estado = 'liberada', resuelto_en = now() where id = $1 returning *) select ${COLUMNAS_RESERVA} from r`, [id])).rows[0];
+    },
+    async borrarAsignacion(id) {
+      return (await q('delete from asignaciones where id=$1', [id])).rowCount > 0;
+    },
+    /** Crea la asignación definitiva de una reserva. El ajuste local le dice al disparador que ese rango es el de ESA reserva. */
+    async insertarAsignacionDeReserva(r) {
+      await q("select set_config('ipam.reserva_confirmando', $1, true)", [r.id]);
+      return (await q(
+        `insert into asignaciones (pool_id, cidr, vpc, solicitante, ticket, origen) values ($1,$2,$3,$4,$5,'agente') returning ${COLUMNAS_ASIGNACION}`,
+        [r.pool_id, r.cidr, r.vpc, r.solicitante, r.ticket])).rows[0];
     },
   };
 }
@@ -86,7 +157,6 @@ function crearRepositorio(db) {
       async insertarUsuarioSiNoExiste(u) {
         return (await q('insert into usuarios (email,nombre,rol) values ($1,$2,$3) on conflict (email) do nothing', [String(u.email).toLowerCase(), u.nombre || '', u.rol])).rowCount;
       },
-      async expirarReservasVencidas() { return []; },
       async purgarLimite() { return 0; },
       async ajustarSecuenciaTicket() {
         await q("select setval('ticket_seq', greatest((select last_value from ticket_seq), coalesce((select max(substring(ticket from 5)::int) from asignaciones where ticket ~ '^NET-[0-9]+$'),0)))");
@@ -98,14 +168,16 @@ function crearRepositorio(db) {
    * Ejecuta `fn` solo si esta réplica obtiene el advisory lock del barredor y nadie lo ejecutó hace poco.
    * El lock es de transacción (pg_try_advisory_xact_lock): se libera solo y funciona tras un pooler en modo sesión.
    */
-  async function conBarredor({ ahora, minimoMs, instancia }, fn) {
+  async function conBarredor({ minimoMs, instancia }, fn) {
     return transaccion(async (tx) => {
       const lock = (await tx.consultar("select pg_try_advisory_xact_lock(hashtext('ipam:barredor')) as ok")).rows[0].ok;
       if (!lock) return { ejecutado: false, motivo: 'otra_instancia' };
-      const est = (await tx.consultar('select ultima_ejecucion from barredor_estado where id = 1')).rows[0];
-      if (est && est.ultima_ejecucion && ahora.getTime() - new Date(est.ultima_ejecucion).getTime() < minimoMs) return { ejecutado: false, motivo: 'reciente' };
+      // «Hace poco» se mide con el reloj de la base: todas las réplicas coinciden.
+      const reciente = (await tx.consultar(
+        'select coalesce(ultima_ejecucion > now() - make_interval(secs => $1::float8 / 1000), false) as r from barredor_estado where id = 1', [minimoMs])).rows[0];
+      if (reciente && reciente.r) return { ejecutado: false, motivo: 'reciente' };
       const inicio = Date.now();
-      const resultado = await fn(tx, ahora);
+      const resultado = await fn(tx);
       await tx.consultar('update barredor_estado set ultima_ejecucion = now(), duracion_ms = $1, instancia = $2 where id = 1', [Date.now() - inicio, instancia]);
       return { ejecutado: true, ...resultado };
     });
@@ -123,10 +195,13 @@ function crearRepositorio(db) {
     },
     async poolsConUso({ ambiente, tipo } = {}) {
       return (await db.query(
-        `select p.id, p.tipo, p.ambiente, p.proveedor, p.cidr::text, count(a.id)::int as asignaciones, ${USO_POOL} as uso
-           from pools p left join asignaciones a on a.pool_id = p.id
+        `select p.id, p.tipo, p.ambiente, p.proveedor, p.cidr::text, a.n::int as asignaciones, a.tam / (2^(32-masklen(p.cidr)))::float8 as uso,
+                r.n::int as reservas_vigentes, r.tam / (2^(32-masklen(p.cidr)))::float8 as uso_reservado
+           from pools p
+           left join lateral (select count(*) as n, coalesce(sum(2^(32-masklen(cidr))),0)::float8 as tam from asignaciones where pool_id = p.id) a on true
+           left join lateral (select count(*) as n, coalesce(sum(2^(32-masklen(cidr))),0)::float8 as tam from reservas where pool_id = p.id and ${RESERVA_VIGENTE}) r on true
           where ($1::text is null or p.ambiente = $1) and ($2::text is null or p.tipo = $2)
-          group by p.id order by p.ambiente desc, p.id`, [ambiente || null, tipo || null])).rows;
+          order by p.ambiente desc, p.id`, [ambiente || null, tipo || null])).rows;
     },
     async resumen() {
       return (await db.query(
@@ -179,4 +254,4 @@ function crearRepositorio(db) {
   };
 }
 
-module.exports = { crearRepositorio, consultas, traducir, COLUMNAS_ASIGNACION, USO_POOL };
+module.exports = { crearRepositorio, consultas, traducir, COLUMNAS_ASIGNACION, USO_POOL, ESTADO_EFECTIVO, RESERVA_VIGENTE };

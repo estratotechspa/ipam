@@ -14,6 +14,7 @@ const sistema = require('./rutas/sistema');
 const asignacionesRutas = require('./rutas/asignaciones');
 const administracionRutas = require('./rutas/administracion');
 const jiraRutas = require('./rutas/jira');
+const reservasRutas = require('./rutas/reservas');
 
 const RUTAS_IMPORTAR = new Set(['/api/importar', '/api/v1/importar']);
 
@@ -60,6 +61,7 @@ function crearApp(deps) {
   asignacionesRutas.montar(app, dep);
   administracionRutas.montar(app, dep);
   jiraRutas.montar(app, dep);
+  reservasRutas.montar(app, dep);
 
   app.use(express.static(path.join(__dirname, '..', '..', '..', 'public')));
   app.use(noEncontrada);

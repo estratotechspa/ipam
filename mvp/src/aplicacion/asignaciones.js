@@ -5,9 +5,9 @@ const { ok, fallo } = require('./resultado');
 
 /**
  * Casos de uso de asignaciones (segmentos definitivos).
- * @param {{repo: any, eventos: import('./puertos').PublicadorEventos, tickets: import('./puertos').TicketsExternos, reloj: import('./puertos').Reloj}} deps
+ * @param {{repo: any, eventos: import('./puertos').PublicadorEventos, tickets: import('./puertos').TicketsExternos}} deps
  */
-function crearAsignaciones({ repo, eventos, tickets, reloj }) {
+function crearAsignaciones({ repo, eventos, tickets }) {
   /** Validaciones que no dependen del estado de la base. */
   function validar({ vpc, cidr, mascara }, base, pool) {
     if (!vpc || !String(vpc).trim()) return fallo('validacion', 'Indica el proyecto / VPC.');
@@ -37,15 +37,14 @@ function crearAsignaciones({ repo, eventos, tickets, reloj }) {
 
     const r = await repo.transaccion(async (tx) => {
       await tx.bloquear(`pool:${pool}`);
-      const ahora = reloj.ahora();
-      const ocup = await tx.ocupados(pool, ahora);
+      const ocup = await tx.ocupados(pool);
       let objetivo = cidr ? String(cidr).trim() : null;
       if (!objetivo) {
         [objetivo] = libres(p.cidr, ocup, Number(mascara), 1);
         if (!objetivo) return fallo('conflicto', `No quedan segmentos /${mascara} libres en ${pool}.`);
       }
       const c = /** @type {NonNullable<ReturnType<typeof parse>>} */ (parse(objetivo));
-      const x = await tx.conflicto(pool, objetivo, ahora);
+      const x = await tx.conflicto(pool, objetivo);
       if (x) return fallo('conflicto', 'solapamiento', { conflicto: x, sugeridos: libres(p.cidr, ocup, c.len, 3) });
       const t = ticket || (await tx.siguienteTicket());
       const asignacion = await tx.insertarAsignacion({ pool, cidr: objetivo, vpc: String(vpc).trim(), solicitante, ticket: t, origen });
@@ -89,7 +88,7 @@ function crearAsignaciones({ repo, eventos, tickets, reloj }) {
     if (!p) return fallo('no_encontrado', 'Pool no existe');
     const len = Number(mascara);
     if (!Number.isInteger(len) || len < 8 || len > 32) return fallo('validacion', 'mascara inválida');
-    return ok({ libres: libres(p.cidr, await repo.ocupados(poolId, reloj.ahora()), len, 3) });
+    return ok({ libres: libres(p.cidr, await repo.ocupados(poolId), len, 3) });
   }
 
   return { asignar, liberar, sugerirLibres };

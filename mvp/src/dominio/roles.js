@@ -1,11 +1,14 @@
 // @ts-check
 'use strict';
 // Roles y reglas de acceso (puras). Orden de menor a mayor poder.
-// Los usuarios pueden ser lector, solicitante o admin. Los tokens de servicio, lector o agente (se agrega en la fase 2).
+// lector < agente < solicitante < admin.
+// Los usuarios pueden ser lector, solicitante o admin. Los tokens de servicio, lector o agente.
+// «agente» puede reservar, confirmar y liberar SUS reservas, pero no asigna directo ni administra.
 
 /** @typedef {'lector'|'agente'|'solicitante'|'admin'} Rol */
-const ORDEN = ['lector', 'solicitante', 'admin'];
+const ORDEN = ['lector', 'agente', 'solicitante', 'admin'];
 const ROLES_USUARIO = ['lector', 'solicitante', 'admin'];
+const ROLES_TOKEN = ['lector', 'agente'];
 
 /** ¿`rol` alcanza el nivel `minimo`? @param {string|undefined} rol @param {string} minimo */
 const tiene = (rol, minimo) => ORDEN.indexOf(String(rol)) >= 0 && ORDEN.indexOf(String(rol)) >= ORDEN.indexOf(minimo);
@@ -42,4 +45,4 @@ function dominioPermitido(claims, dominios) {
   return dominios.includes(dom);
 }
 
-module.exports = { ORDEN, ROLES_USUARIO, tiene, lista, resolverRol, dominioPermitido };
+module.exports = { ORDEN, ROLES_USUARIO, ROLES_TOKEN, tiene, lista, resolverRol, dominioPermitido };

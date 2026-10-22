@@ -29,6 +29,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1",
+    "fast-check": "^3.23.2",
     "oidc-provider": "^9.12.2"
   }
 }

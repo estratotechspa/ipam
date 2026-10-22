@@ -18,7 +18,7 @@ create table if not exists asignaciones (
   vpc         text not null,
   solicitante text not null,
   ticket      text not null,
-  origen      text not null default 'panel' check (origen in ('panel','jira','semilla')),
+  origen      text not null default 'panel' check (origen in ('panel','jira','semilla','agente')),
   creado_en   timestamptz not null default now(),
   -- Garantía en la base: dos segmentos del mismo pool nunca se solapan (también con concurrencia).
   constraint sin_solapamiento exclude using gist (pool_id with =, cidr inet_ops with &&)
@@ -100,4 +100,70 @@ create table if not exists barredor_estado (
 insert into barredor_estado (id) values (1) on conflict (id) do nothing;
 
 insert into esquema_version (version, descripcion) values (2, 'fase 0: version del esquema, auditoria de solo insercion, estado del barredor')
+  on conflict (version) do nothing;
+
+-- ============================================================================
+-- Fase 1 · reservas tentativas (human-in-the-loop: sin confirmar, expiran solas)
+-- ============================================================================
+-- El origen «agente» debe ser válido también en bases ya existentes (idempotente: solo cambia la restricción si aún no lo incluye).
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conrelid = 'asignaciones'::regclass and contype = 'c' and pg_get_constraintdef(oid) like '%''agente''%') then
+    alter table asignaciones drop constraint if exists asignaciones_origen_check;
+    alter table asignaciones add constraint asignaciones_origen_check check (origen in ('panel','jira','semilla','agente'));
+  end if;
+end $$;
+
+create table if not exists reservas (
+  id            uuid primary key default gen_random_uuid(),
+  pool_id       text not null references pools(id),
+  cidr          cidr not null,
+  vpc           text not null,
+  solicitante   text not null,
+  ticket        text not null,
+  estado        text not null default 'reservada' check (estado in ('reservada','confirmada','liberada','expirada')),
+  clave_idem    text,                                  -- Idempotency-Key del agente (única por solicitante)
+  creado_en     timestamptz not null default now(),
+  expira_en     timestamptz not null,
+  resuelto_en   timestamptz,
+  asignacion_id bigint references asignaciones(id) on delete set null,
+  -- Garantía en la base: dos reservas vigentes del mismo pool nunca se solapan (también con concurrencia).
+  constraint reservas_sin_solapamiento exclude using gist (pool_id with =, cidr inet_ops with &&) where (estado = 'reservada')
+);
+create unique index if not exists reservas_solicitante_clave_idx on reservas (solicitante, clave_idem);
+create index if not exists reservas_estado_expira_idx on reservas (estado, expira_en);
+create index if not exists reservas_pool_idx on reservas (pool_id);
+create index if not exists reservas_solicitante_idx on reservas (solicitante);
+
+-- La reserva debe caer dentro del CIDR base de su pool y no pisar una asignación existente.
+create or replace function reserva_valida() returns trigger language plpgsql as $$
+begin
+  if not (new.cidr <<= (select cidr from pools where id = new.pool_id)) then
+    raise exception 'El segmento % queda fuera del pool %', new.cidr, new.pool_id using errcode = '23514';
+  end if;
+  if new.estado = 'reservada' and exists (select 1 from asignaciones a where a.pool_id = new.pool_id and a.cidr && new.cidr) then
+    raise exception 'El segmento % se solapa con una asignación del pool %', new.cidr, new.pool_id using errcode = '23P01';
+  end if;
+  return new;
+end $$;
+drop trigger if exists trg_reserva_valida on reservas;
+create trigger trg_reserva_valida before insert on reservas
+  for each row execute function reserva_valida();
+
+-- Una asignación (panel, Jira, importación…) no puede pisar una reserva VIGENTE de otra persona. Al confirmar, la propia reserva se
+-- exceptúa con el ajuste local «ipam.reserva_confirmando» (lo fija la transacción de confirmación).
+create or replace function asignacion_respeta_reservas() returns trigger language plpgsql as $$
+begin
+  if exists (select 1 from reservas r
+              where r.pool_id = new.pool_id and r.estado = 'reservada' and r.expira_en > now() and r.cidr && new.cidr
+                and r.id::text is distinct from nullif(current_setting('ipam.reserva_confirmando', true), '')) then
+    raise exception 'El segmento % se solapa con una reserva vigente del pool %', new.cidr, new.pool_id using errcode = '23P01';
+  end if;
+  return new;
+end $$;
+drop trigger if exists trg_asignacion_respeta_reservas on asignaciones;
+create trigger trg_asignacion_respeta_reservas before insert on asignaciones
+  for each row execute function asignacion_respeta_reservas();
+
+insert into esquema_version (version, descripcion) values (3, 'fase 1: reservas tentativas y origen agente')
   on conflict (version) do nothing;

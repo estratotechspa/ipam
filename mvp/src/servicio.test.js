@@ -136,6 +136,10 @@ test('`npm run migrar`: se puede aplicar dos veces y migra desde el esquema viej
     }
     assert.equal((await viejo.sql('select count(*)::int as n from asignaciones')).rows[0].n, 12, 'los datos siguen ahí');
     assert.ok((await viejo.sql('select max(version) as v from esquema_version')).rows[0].v >= 2);
+    // El origen «agente» ya es válido en la base migrada, y la tabla de reservas existe con sus garantías.
+    await viejo.sql("insert into asignaciones (pool_id, cidr, vpc, solicitante, ticket, origen) values ('gke-nodos-qa','10.20.250.0/24','v','x','NET-A','agente')");
+    await viejo.sql("insert into reservas (pool_id, cidr, vpc, solicitante, ticket, expira_en) values ('gke-nodos-qa','10.20.251.0/24','v','x','NET-B', now() + interval '1 hour')");
+    await assert.rejects(viejo.sql("insert into reservas (pool_id, cidr, vpc, solicitante, ticket, expira_en) values ('gke-nodos-qa','10.20.251.0/25','v','x','NET-C', now() + interval '1 hour')"), (e) => e.code === '23P01');
     // La auditoría quedó de solo inserción.
     await viejo.sql("insert into auditoria (usuario, accion) values ('t','x')");
     await assert.rejects(viejo.sql("update auditoria set accion='y'"), /solo inserción/);
