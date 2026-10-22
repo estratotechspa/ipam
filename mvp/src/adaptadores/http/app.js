@@ -83,6 +83,7 @@ function crearApp(deps) {
       rechazo: (motivo) => metricas.authRechazo(motivo),
       autenticarToken: (t) => casos.tokens.autenticar(t),
       auditar,
+      usuariosLocales: { buscar: (e) => repo.usuarioPorEmail(e), marcarAcceso: (e) => repo.marcarAcceso(e) },
       frenoFuerzaBruta: { bloqueada: (ip) => limite.bloqueadaPorFallos(ip), fallo: (ip) => limite.registrarFallo(ip) },
     }),
   );

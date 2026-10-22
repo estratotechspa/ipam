@@ -13,6 +13,7 @@ const { crearMetricas } = require('./adaptadores/metricas/prom');
 const tickets = require('./adaptadores/tickets/jira');
 const generadorToken = require('./adaptadores/auth/token');
 const { crearCasos } = require('./aplicacion');
+const contrasenas = require('./adaptadores/auth/contrasena');
 const { crearLimite } = require('./aplicacion/limite');
 const { crearAlmacenPostgres } = require('./adaptadores/limite/postgres');
 const { crearAlmacenMemoria } = require('./adaptadores/limite/memoria');
@@ -44,7 +45,7 @@ function construir() {
       repo.registrarAuditoria({ usuario, rol, accion, detalle, ip, requestId: contexto.actual().request_id }).catch((e) => log.error('auditoría', e)),
   };
   const auditar = (accion, usuario, rol, detalle = {}, ip = null) => auditor.registrar({ accion, usuario, rol, detalle, ip });
-  const casos = crearCasos({ repo, eventos: publicador, auditor, tickets, reloj, config, instancia, generadorToken });
+  const casos = crearCasos({ repo, eventos: publicador, auditor, tickets, reloj, config, instancia, generadorToken, contrasenas });
   // Puerto AlmacenLimite: PostgreSQL por defecto (varias réplicas comparten contadores); «memoria» solo para pruebas.
   const almacen = config.limite.almacen === 'memoria' ? crearAlmacenMemoria() : crearAlmacenPostgres(db);
   const limite = crearLimite({ almacen, config, auditor, log, metricas });

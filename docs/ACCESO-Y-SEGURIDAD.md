@@ -7,6 +7,7 @@ Cómo se controla quién entra y qué puede hacer. El análisis de amenazas est�
 |---|---|---|
 | **OIDC (SSO)** | Uso real con personas | `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `PUBLIC_URL` |
 | **Basic** | POC y demos | `APP_USER` + `APP_PASS` (**hash scrypt**, no texto plano) + `SESSION_SECRET` |
+| **Basic + cuentas locales** | Probar varias personas sin SSO | Lo anterior + `AUTH_LOCAL=true` (el admin crea cuentas desde la pestaña Usuarios) |
 | **Tokens de servicio** | Agentes y pipelines | Se crean en la pestaña Tokens (siempre disponibles junto a los anteriores) |
 | **Abierto** | Solo desarrollo local | `ALLOW_ANONYMOUS=true` (en producción exige esa variable explícita) |
 
@@ -21,10 +22,19 @@ Cómo se controla quién entra y qué puede hacer. El análisis de amenazas est�
 | **Aprobar** (confirmar) reservas | | solo las suyas, con `aprobado_por` | | ✔ (todas) |
 | Asignar directo (sin reserva) | | | | ✔ |
 | Liberar asignaciones, confirmar/liberar reservas ajenas | | | | ✔ |
-| Tokens, usuarios, auditoría, respaldo e importación | | | | ✔ |
+| Tokens, **usuarios** (pre-registrar, crear cuentas locales, desactivar, eliminar, restablecer clave), auditoría, respaldo e importación | | | | ✔ |
 Los usuarios pueden ser `lector`, `solicitante` o `admin`; los tokens, `lector` o `agente`.
 
 **Cómo se decide el rol con SSO** (en orden): correos admin de la configuración (`OIDC_ADMIN_EMAILS`) → rol asignado en la pestaña Usuarios → grupos del proveedor (`OIDC_ADMIN_GROUPS`, `OIDC_REQUESTER_GROUPS`, `OIDC_READER_GROUPS`) → `OIDC_DEFAULT_ROLE` (`lector`).
+
+## 2b · Cuentas de usuario
+- **SSO (camino A):** el admin pre-registra por correo y da de baja; una cuenta **desactivada no obtiene rol** al iniciar sesión (salvo los correos de `OIDC_ADMIN_EMAILS`, que son la salida de emergencia por configuración).
+- **Cuentas locales (camino B, `AUTH_LOCAL=true`, solo modo Basic):**
+  - La contraseña se guarda **solo como hash scrypt**; la clave temporal (16 caracteres aleatorios) se muestra **una vez** y obliga a cambiarla antes de usar la API (mínimo 12 caracteres, distinta de la actual).
+  - Desactivar rige **al instante** (se consulta en cada petición). Los intentos fallidos cuentan para el freno por IP. Un usuario inexistente y una clave errónea responden igual (401), y se verifica un hash de relleno para que el tiempo no delate si la cuenta existe.
+  - `APP_USER`/`APP_PASS` es el administrador de emergencia: nunca queda fuera nadie aunque se borren las cuentas.
+  - **Límites:** no hay MFA, ni recuperación de clave por correo, ni bloqueo por cuenta (solo por IP). Es para POC; para uso real usa SSO.
+- Nadie puede desactivarse ni eliminarse a sí mismo; todo queda en la auditoría sin claves.
 
 ## 3 · Tokens de servicio
 - Formato `ipam_` + 43 caracteres (256 bits aleatorios). Se muestra **una sola vez**; en la base solo vive su hash SHA-256.

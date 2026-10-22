@@ -24,7 +24,7 @@ const lista = (v) =>
  * Rol que le toca a una persona que inició sesión con OIDC.
  * Prioridad: correos admin de la configuración > rol asignado en la base > grupos del proveedor > rol por defecto.
  * @param {Record<string, any>} claims  datos del proveedor (email, groups…)
- * @param {{rol?: string|null}|null|undefined} filaDb
+ * @param {{rol?: string|null, activo?: boolean}|null|undefined} filaDb
  * @param {{correosAdmin: string[], correosSolicitante: string[], correosLector: string[], claimGrupos: string,
  *          gruposAdmin: string[], gruposSolicitante: string[], gruposLector: string[], rolPorDefecto: string}} cfg
  * @returns {string|null} null = sin acceso
@@ -32,6 +32,7 @@ const lista = (v) =>
 function resolverRol(claims, filaDb, cfg) {
   const email = String(claims.email || '').toLowerCase();
   if (cfg.correosAdmin.includes(email)) return 'admin';
+  if (filaDb && filaDb.activo === false) return null; // dado de baja por un admin
   if (filaDb && filaDb.rol) return filaDb.rol;
   const g = claims[cfg.claimGrupos || 'groups'];
   const grupos = (Array.isArray(g) ? g : typeof g === 'string' ? [g] : []).map((x) => String(x).toLowerCase());

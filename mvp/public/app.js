@@ -270,34 +270,249 @@ async function renderJira() {
   };
 }
 
-async function renderUsuarios() {
-  try {
-    const u = await get('/api/usuarios');
-    $('usuarios').innerHTML =
-      `<h2>Usuarios</h2><p class="muted">El rol asignado aquí rige desde el próximo inicio de sesión de cada persona. «Heredar» usa los grupos / la configuración del proveedor.</p>
-  <div class="card tablewrap"><table><tr><th>Correo</th><th>Nombre</th><th>Último acceso</th><th>Rol asignado</th></tr>
-  ${
-    u
-      .map(
-        (x) => `<tr><td>${esc(x.email)}</td><td>${esc(x.nombre)}</td><td>${x.ultimo_acceso ? new Date(x.ultimo_acceso).toLocaleString('es-CL') : '—'}</td>
-  <td><select data-u="${esc(x.email)}"><option value="">Heredar</option>${['lector', 'solicitante', 'admin'].map((r) => `<option ${x.rol === r ? 'selected' : ''}>${r}</option>`).join('')}</select></td></tr>`,
-      )
-      .join('') || '<tr><td colspan="4" class="muted">Nadie ha iniciado sesión todavía.</td></tr>'
-  }</table></div>`;
-    $('usuarios')
-      .querySelectorAll('select[data-u]')
-      .forEach(
-        (s) =>
-          (s.onchange = async () => {
-            const r = await api('/api/usuarios/' + encodeURIComponent(s.dataset.u), { method: 'PUT', body: { rol: s.value || null } });
-            if (!r.ok) alert((r.data && r.data.error) || 'No se pudo guardar');
-            renderUsuarios();
-          }),
+// ---- Diálogos simples (clave temporal, cambio de contraseña) ----
+function abrirDialogo(construir, { cerrable = true } = {}) {
+  const dlg = h('dialog', { 'aria-modal': 'true' });
+  const cerrar = () => {
+    if (dlg.open) dlg.close();
+    dlg.remove();
+  };
+  dlg.addEventListener('close', () => dlg.remove());
+  if (!cerrable) dlg.addEventListener('cancel', (e) => e.preventDefault());
+  document.body.append(dlg);
+  construir(dlg, cerrar);
+  dlg.showModal();
+  return dlg;
+}
+
+/** Muestra UNA vez la clave temporal de una cuenta local (nunca se guarda ni se vuelve a mostrar). */
+function mostrarClaveTemporal(usuario, clave, titulo) {
+  abrirDialogo((dlg, cerrar) => {
+    const estado = h('div', { id: 'ct-copia', 'aria-live': 'polite' });
+    const valor = h('input', { id: 'ct-valor', class: 'token-valor', readonly: true, 'aria-label': 'Clave temporal', onfocus: (e) => e.target.select() });
+    valor.value = clave;
+    const copiar = h(
+      'button',
+      {
+        class: 'btn',
+        type: 'button',
+        id: 'ct-copiar',
+        onclick: async () => {
+          try {
+            await navigator.clipboard.writeText(valor.value);
+            msg(estado, 'Copiada al portapapeles.', 'ok');
+          } catch {
+            valor.focus();
+            valor.select();
+            msg(estado, 'No se pudo copiar sola: el texto quedó seleccionado, copia con Ctrl+C.', 'error');
+          }
+        },
+      },
+      'Copiar',
+    );
+    dlg.replaceChildren(
+      h(
+        'div',
+        null,
+        h('h3', null, titulo + ': ' + usuario),
+        h(
+          'div',
+          { class: 'aviso', role: 'alert' },
+          h('b', null, 'Cópiala ahora. '),
+          'No se podrá ver de nuevo. La persona deberá cambiarla al entrar por primera vez.',
+        ),
+        h('label', { for: 'ct-valor' }, 'Clave temporal'),
+        valor,
+        estado,
+        h('div', { class: 'fila-botones' }, copiar, h('button', { class: 'btn sec', type: 'button', id: 'ct-cerrar', onclick: cerrar }, 'Cerrar')),
+      ),
+    );
+    copiar.focus();
+  });
+}
+
+/** Cambio de la contraseña propia (cuentas locales). Si es obligatorio (clave temporal), el diálogo no se puede cerrar. */
+function dialogoCambioClave({ obligatorio = false } = {}) {
+  abrirDialogo(
+    (dlg, cerrar) => {
+      const estado = h('div', { id: 'cc-msg', 'aria-live': 'polite' });
+      const actual = h('input', { id: 'cc-actual', type: 'password', required: true, autocomplete: 'current-password' });
+      const nueva = h('input', { id: 'cc-nueva', type: 'password', required: true, minlength: 12, autocomplete: 'new-password' });
+      const repite = h('input', { id: 'cc-repite', type: 'password', required: true, minlength: 12, autocomplete: 'new-password' });
+      const boton = h('button', { class: 'btn', type: 'submit', id: 'cc-go' }, 'Cambiar contraseña');
+      const enviar = async (e) => {
+        e.preventDefault();
+        if (nueva.value !== repite.value) return msg(estado, 'La contraseña nueva y su repetición no coinciden.', 'error');
+        boton.disabled = true;
+        const r = await api('/api/v1/yo/clave', { body: { actual: actual.value, nueva: nueva.value } });
+        boton.disabled = false;
+        if (!r.ok) return msg(estado, errorApi(r), 'error');
+        msg(estado, 'Contraseña cambiada. El navegador te pedirá entrar de nuevo con la nueva.', 'ok');
+        setTimeout(() => location.reload(), 1200);
+      };
+      dlg.replaceChildren(
+        h(
+          'form',
+          { onsubmit: enviar, 'aria-label': 'Cambiar contraseña' },
+          h('h3', null, obligatorio ? 'Debes cambiar tu contraseña' : 'Cambiar mi contraseña'),
+          obligatorio ? h('p', { class: 'muted' }, 'Entraste con una clave temporal. Elige una propia de al menos 12 caracteres para seguir.') : null,
+          h('label', { for: 'cc-actual' }, 'Contraseña actual'),
+          actual,
+          h('label', { for: 'cc-nueva' }, 'Contraseña nueva (mínimo 12 caracteres)'),
+          nueva,
+          h('label', { for: 'cc-repite' }, 'Repite la contraseña nueva'),
+          repite,
+          estado,
+          h('div', { class: 'fila-botones' }, boton, obligatorio ? null : h('button', { class: 'btn sec', type: 'button', onclick: cerrar }, 'Cancelar')),
+        ),
       );
+      actual.focus();
+    },
+    { cerrable: !obligatorio },
+  );
+}
+
+// ---- Pestaña Usuarios (admin). SSO: pre-registro por correo y baja. Cuentas locales (AUTH_LOCAL): clave temporal de un solo uso. ----
+async function renderUsuarios() {
+  const raiz = $('usuarios');
+  try {
+    const usuarios = await get('/api/v1/usuarios');
+    const local = YO.modo !== 'oidc'; // en modo SSO se pre-registra; en modo Basic con AUTH_LOCAL se crean cuentas locales
+    const estado = h('div', { id: 'us-msg', 'aria-live': 'polite' });
+    const recargar = () => renderUsuarios();
+
+    const email = h('input', {
+      id: 'us-email',
+      required: true,
+      maxlength: 120,
+      placeholder: local ? 'nombre de usuario' : 'correo@empresa.cl',
+      autocomplete: 'off',
+    });
+    const nombre = h('input', { id: 'us-nombre', maxlength: 120, placeholder: 'opcional' });
+    const rol = h(
+      'select',
+      { id: 'us-rol' },
+      ['lector', 'solicitante', 'admin'].map((r) => h('option', { value: r }, r)),
+    );
+    const boton = h('button', { class: 'btn', type: 'submit', id: 'us-crear' }, local ? 'Crear cuenta local' : 'Pre-registrar');
+    const crear = async (e) => {
+      e.preventDefault();
+      boton.disabled = true;
+      const r = await api('/api/v1/usuarios', { body: { email: email.value.trim(), nombre: nombre.value.trim(), rol: rol.value, local } });
+      boton.disabled = false;
+      if (!r.ok) return msg(estado, errorApi(r), 'error');
+      if (r.data.clave_temporal) mostrarClaveTemporal(r.data.email, r.data.clave_temporal, 'Cuenta creada');
+      else RES_USUARIOS.aviso = `Pre-registrado ${r.data.email} como ${r.data.rol}: entrará con su proveedor de identidad con ese rol.`;
+      recargar();
+    };
+
+    const accion = async (ruta, metodo, confirmacion, alTerminar) => {
+      if (confirmacion && !confirm(confirmacion)) return;
+      const r = await api(ruta, { method: metodo, body: {} });
+      if (!r.ok) return msg(estado, errorApi(r), 'error');
+      if (alTerminar) alTerminar(r.data);
+      recargar();
+    };
+    const boton2 = (texto, onclick, extra = {}) => h('button', { class: 'btn sec', type: 'button', onclick, ...extra }, texto);
+    const ruta = (u) => '/api/v1/usuarios/' + encodeURIComponent(u.email);
+    const filas = usuarios.map((u) => {
+      const yoMismo = u.email === YO.usuario;
+      return h(
+        'tr',
+        { class: u.activo ? '' : 'inactivo' },
+        h('td', null, u.email),
+        h('td', null, u.nombre || '—'),
+        h('td', null, u.local ? 'Local' : 'SSO'),
+        h(
+          'td',
+          null,
+          h(
+            'select',
+            {
+              'aria-label': 'Rol de ' + u.email,
+              onchange: async (e) => {
+                const r = await api(ruta(u), { method: 'PUT', body: { rol: e.target.value || null } });
+                if (!r.ok) msg(estado, errorApi(r), 'error');
+                recargar();
+              },
+            },
+            u.local ? null : h('option', { value: '' }, 'Heredar'),
+            ['lector', 'solicitante', 'admin'].map((r) => h('option', { value: r, selected: u.rol === r }, r)),
+          ),
+        ),
+        h('td', null, u.activo ? 'Activo' : 'Desactivado', u.debe_cambiar_clave ? ' · clave temporal' : ''),
+        h('td', null, fechaHora(u.ultimo_acceso)),
+        h(
+          'td',
+          { class: 'acciones' },
+          u.activo
+            ? boton2(
+                'Desactivar',
+                () => accion(ruta(u) + '/desactivar', 'POST', `¿Desactivar a ${u.email}? No podrá entrar hasta que lo reactives (su historial se conserva).`),
+                { disabled: yoMismo },
+              )
+            : boton2('Activar', () => accion(ruta(u) + '/activar', 'POST')),
+          u.local
+            ? boton2('Restablecer clave', () =>
+                accion(ruta(u) + '/restablecer-clave', 'POST', `¿Restablecer la clave de ${u.email}? Se generará una clave temporal nueva.`, (d) =>
+                  mostrarClaveTemporal(d.email, d.clave_temporal, 'Clave restablecida'),
+                ),
+              )
+            : null,
+          boton2('Eliminar', () => accion(ruta(u), 'DELETE', `¿Eliminar a ${u.email}? Para conservar su historial prefiere Desactivar.`), {
+            disabled: yoMismo,
+            class: 'btn peligro',
+          }),
+        ),
+      );
+    });
+    if (RES_USUARIOS.aviso) {
+      msg(estado, RES_USUARIOS.aviso, 'ok');
+      RES_USUARIOS.aviso = null;
+    }
+    raiz.replaceChildren(
+      h('h2', null, 'Usuarios'),
+      h(
+        'p',
+        { class: 'muted' },
+        local
+          ? 'Cuentas locales con contraseña (modo de pruebas). La clave temporal se muestra una sola vez y la persona debe cambiarla al entrar. El administrador de emergencia (variables APP_USER y APP_PASS) siempre puede entrar. Para uso real, configura SSO.'
+          : 'Las personas entran con tu proveedor de identidad (SSO). Aquí puedes pre-registrarlas con su rol antes de que entren, cambiarlo o darlas de baja; el cambio rige desde su próximo inicio de sesión. «Heredar» usa los grupos del proveedor.',
+      ),
+      h(
+        'details',
+        { class: 'card', style: 'margin:0 0 14px' },
+        h('summary', { style: 'cursor:pointer;font-weight:600' }, local ? '＋ Nueva cuenta local' : '＋ Pre-registrar a una persona'),
+        h(
+          'form',
+          { class: 'filtros', style: 'margin-top:12px', onsubmit: crear, 'aria-label': 'Nuevo usuario' },
+          h('label', null, local ? 'Usuario' : 'Correo', email),
+          h('label', null, 'Nombre', nombre),
+          h('label', null, 'Rol', rol),
+          boton,
+        ),
+      ),
+      estado,
+      h(
+        'div',
+        { class: 'card tablewrap' },
+        h(
+          'table',
+          null,
+          h(
+            'tr',
+            null,
+            ['Usuario', 'Nombre', 'Tipo', 'Rol', 'Estado', 'Último acceso', ''].map((t) => h('th', null, t)),
+          ),
+          filas.length ? filas : h('tr', null, h('td', { colspan: 7, class: 'muted' }, 'Todavía no hay usuarios.')),
+        ),
+      ),
+    );
   } catch (e) {
     fail('usuarios', e);
   }
 }
+const RES_USUARIOS = { aviso: null };
 async function renderAudit() {
   try {
     const a = await get('/api/auditoria');
@@ -800,7 +1015,7 @@ async function iniciar() {
   const nav = $('nav');
   nav.querySelector('[data-t="sol"]').hidden = !puede('admin');
   nav.querySelector('[data-t="tokens"]').hidden = !puede('admin');
-  nav.querySelector('[data-t="usuarios"]').hidden = !(puede('admin') && YO.modo === 'oidc');
+  nav.querySelector('[data-t="usuarios"]').hidden = !(puede('admin') && (YO.modo === 'oidc' || YO.cuentas_locales));
   nav.querySelector('[data-t="audit"]').hidden = !puede('admin');
   $('yo').innerHTML =
     YO.modo === 'oidc'
@@ -808,6 +1023,9 @@ async function iniciar() {
       : YO.modo === 'none'
         ? '<span class="tag qa">Sin autenticación (demo)</span>'
         : `${esc(YO.usuario)}`;
+  if (YO.local) {
+    $('yo').append(' ', h('button', { id: 'mi-clave', type: 'button', onclick: () => dialogoCambioClave() }, 'Mi contraseña'));
+  }
   const salir = $('salir');
   if (salir)
     salir.onclick = async () => {
@@ -815,5 +1033,6 @@ async function iniciar() {
       location.href = (x.data && x.data.redirect) || '/';
     };
   show('pools');
+  if (YO.debe_cambiar_clave) dialogoCambioClave({ obligatorio: true }); // clave temporal: no se puede seguir sin cambiarla
 }
 iniciar();

@@ -214,6 +214,17 @@ insert into esquema_version (version, descripcion) values (6, 'id legible de asi
   on conflict (version) do nothing;
 
 -- ============================================================================
+-- Cuentas de usuario administrables: baja lógica (activo) y cuentas locales con contraseña (solo hash scrypt, nunca en claro).
+-- ============================================================================
+alter table usuarios add column if not exists activo boolean not null default true;
+alter table usuarios add column if not exists clave_hash text;                              -- nulo = cuenta SSO (OIDC); con valor = cuenta local
+alter table usuarios add column if not exists debe_cambiar_clave boolean not null default false;
+alter table usuarios add column if not exists creado_por text;
+
+insert into esquema_version (version, descripcion) values (7, 'cuentas de usuario: activo, clave local con hash, cambio obligatorio')
+  on conflict (version) do nothing;
+
+-- ============================================================================
 -- Permisos del rol de la aplicación (solo si existe `ipam_app`; ver db/roles.sql)
 -- ============================================================================
 -- Se ejecuta con el rol migrador (dueño de las tablas) y se repite en cada migración. Sin el rol, no hace nada (desarrollo local).

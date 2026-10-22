@@ -187,6 +187,31 @@ test('roles por grupo: solicitante reserva pero no asigna directo ni libera; el 
   assert.equal((await jefe.api('/api/asignaciones/' + asig.id, { method: 'DELETE' })).status, 200);
 });
 
+test('SSO (camino A): el admin pre-registra por correo con su rol y puede dar de baja; la baja impide iniciar sesión', opts, async () => {
+  const root = new Navegador();
+  await root.entrar('root@empresa.cl');
+  const alta = await root.api('/api/usuarios', {
+    method: 'POST',
+    body: JSON.stringify({ email: 'preregistrada@empresa.cl', nombre: 'Pre', rol: 'solicitante' }),
+  });
+  assert.equal(alta.status, 201);
+  const n = new Navegador();
+  await n.entrar('preregistrada@empresa.cl');
+  assert.equal((await (await n.api('/api/me')).json()).rol, 'solicitante', 'entra con el rol pre-asignado');
+  // Baja: no puede iniciar sesión de nuevo (aunque el proveedor la autentique).
+  assert.equal((await root.api('/api/usuarios/preregistrada@empresa.cl/desactivar', { method: 'POST' })).status, 200);
+  const baja = new Navegador();
+  const r = await baja.entrar('preregistrada@empresa.cl');
+  assert.equal(r.status, 403);
+  // Reactivada, vuelve a entrar.
+  assert.equal((await root.api('/api/usuarios/preregistrada@empresa.cl/activar', { method: 'POST' })).status, 200);
+  const otra = new Navegador();
+  await otra.entrar('preregistrada@empresa.cl');
+  assert.equal((await (await otra.api('/api/me')).json()).rol, 'solicitante');
+  // Un admin no puede desactivarse a sí mismo.
+  assert.equal((await root.api('/api/usuarios/root@empresa.cl/desactivar', { method: 'POST' })).status, 409);
+});
+
 test('un administrador cambia el rol de otra persona y rige en su próximo login', opts, async () => {
   const root = new Navegador();
   await root.entrar('root@empresa.cl');
@@ -248,7 +273,15 @@ test('modo OIDC: un token de servicio entra por Bearer sin cookie ni X-Requested
   const creado = await (await root.api('/api/tokens', { method: 'POST', body: JSON.stringify({ nombre, rol: 'lector' }) })).json();
   assert.match(creado.token, /^ipam_/);
   const me = await fetch(base + '/api/me', { headers: { Authorization: `Bearer ${creado.token}` } });
-  assert.deepEqual(await me.json(), { modo: 'token', usuario: `svc:${nombre}`, nombre: `svc:${nombre}`, rol: 'lector' });
+  assert.deepEqual(await me.json(), {
+    modo: 'token',
+    usuario: `svc:${nombre}`,
+    nombre: `svc:${nombre}`,
+    rol: 'lector',
+    local: false,
+    debe_cambiar_clave: false,
+    cuentas_locales: false,
+  });
   const malo = await fetch(base + '/api/pools', { headers: { Authorization: `Bearer ipam_${'C'.repeat(43)}` }, redirect: 'manual' });
   assert.equal(malo.status, 401);
   assert.equal((await malo.json()).error, 'token_invalido');

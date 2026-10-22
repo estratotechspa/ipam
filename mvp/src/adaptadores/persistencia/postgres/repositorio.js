@@ -173,7 +173,45 @@ function consultas(x) {
 function consultasDeAdministracion(db) {
   return {
     async listarUsuarios() {
-      return (await db.query('select email, nombre, rol, ultimo_acceso from usuarios order by email')).rows;
+      return (
+        await db.query(
+          `select email, nombre, rol, activo, (clave_hash is not null) as local, debe_cambiar_clave, ultimo_acceso, creado_en, creado_por
+           from usuarios order by email`,
+        )
+      ).rows;
+    },
+    async usuarioPorEmail(email) {
+      return (await db.query('select email, nombre, rol, activo, clave_hash, debe_cambiar_clave from usuarios where email=$1', [email])).rows[0] || null;
+    },
+    /** Alta explícita por un admin. Devuelve null si ya existe. */
+    async crearUsuario({ email, nombre, rol, claveHash, debeCambiar, creadoPor }) {
+      return (
+        (
+          await db.query(
+            `insert into usuarios (email, nombre, rol, clave_hash, debe_cambiar_clave, creado_por) values ($1,$2,$3,$4,$5,$6)
+             on conflict (email) do nothing returning email, nombre, rol, activo`,
+            [email, nombre, rol, claveHash, debeCambiar, creadoPor],
+          )
+        ).rows[0] || null
+      );
+    },
+    async fijarActivo(email, activo) {
+      return (await db.query('update usuarios set activo=$2 where email=$1', [email, activo])).rowCount > 0;
+    },
+    async fijarClave(email, claveHash, debeCambiar) {
+      return (
+        (await db.query('update usuarios set clave_hash=$2, debe_cambiar_clave=$3 where email=$1 and clave_hash is not null', [email, claveHash, debeCambiar]))
+          .rowCount > 0
+      );
+    },
+    async eliminarUsuario(email) {
+      return (await db.query('delete from usuarios where email=$1', [email])).rowCount > 0;
+    },
+    /** Último acceso de una cuenta local, como mucho una vez por minuto (no escribe en cada petición). */
+    async marcarAcceso(email) {
+      await db.query("update usuarios set ultimo_acceso=now() where email=$1 and (ultimo_acceso is null or ultimo_acceso < now() - interval '1 minute')", [
+        email,
+      ]);
     },
     async asignarRol(email, rol) {
       await db.query('insert into usuarios (email, rol) values ($1,$2) on conflict (email) do update set rol = excluded.rol', [email, rol]);
@@ -183,7 +221,7 @@ function consultasDeAdministracion(db) {
       return (
         await db.query(
           `insert into usuarios (email, nombre, ultimo_acceso) values ($1,$2,now())
-         on conflict (email) do update set nombre = excluded.nombre, ultimo_acceso = now() returning rol`,
+         on conflict (email) do update set nombre = excluded.nombre, ultimo_acceso = now() returning rol, activo`,
           [email, nombre],
         )
       ).rows[0];

@@ -84,6 +84,12 @@ def('APP_USER', 'texto', '', 'Usuario del modo Basic (un solo usuario, rol admin
 def('APP_PASS', 'texto', '', 'Contraseña del modo Basic. Acepta texto plano o un hash `scrypt$…` (recomendado; ver `npm run hash-password`).', {
   secreta: true,
 });
+def(
+  'AUTH_LOCAL',
+  'booleano',
+  false,
+  'Habilita cuentas locales con contraseña (solo en modo Basic): el admin las crea, desactiva, elimina y restablece desde la pestaña Usuarios. APP_USER/APP_PASS sigue siendo el administrador de emergencia. Para uso real, prefiere OIDC.',
+);
 def('SESSION_SECRET', 'texto', '', 'Clave (≥ 32 caracteres) con la que se firma la cookie de sesión OIDC.', { secreta: true });
 def('SESSION_HORAS', 'entero', 8, 'Duración de la sesión OIDC.', { min: 1, max: 720 });
 def('COOKIE_SECURE', 'texto', 'auto', 'Atributo Secure de las cookies: «auto» (si PUBLIC_URL es https o la petición llegó por HTTPS), «true» o «false».', {
@@ -292,6 +298,7 @@ const config = {
     return {
       modo: issuer ? 'oidc' : user && pass ? 'basic' : 'none',
       permitirAnonimo: valor('ALLOW_ANONYMOUS'),
+      cuentasLocales: issuer ? false : Boolean(user && pass) && valor('AUTH_LOCAL'),
       appUser: user,
       appPass: pass,
       sesionSecreto: texto('SESSION_SECRET'),
@@ -443,6 +450,9 @@ function validarAutenticacion(ctx) {
     errores.push('NODE_ENV=production sin autenticación: configura OIDC (OIDC_ISSUER…) o Basic (APP_USER y APP_PASS). Solo para demos: ALLOW_ANONYMOUS=true.');
   }
   if (a.modo === 'none' && a.permitirAnonimo) avisos.push('ALLOW_ANONYMOUS=true: cualquiera que llegue al servicio actúa como admin. Solo para demos.');
+  if (intenta(() => valor('AUTH_LOCAL')) && a.modo !== 'basic')
+    avisos.push('AUTH_LOCAL=true se ignora: las cuentas locales solo existen en modo Basic (APP_USER y APP_PASS) y sin OIDC.');
+  if (a.cuentasLocales) avisos.push('AUTH_LOCAL=true: hay cuentas locales con contraseña. Pensado para POC; para uso real configura OIDC.');
   if (a.modo === 'basic') avisos.push('Modo Basic: pensado para POC y demos. Para uso real configura OIDC. Guarda APP_PASS como hash scrypt.');
   if (a.modo === 'basic' && !String(a.appPass).startsWith('scrypt$')) avisos.push('APP_PASS está en texto plano: usa un hash (npm run hash-password).');
 }

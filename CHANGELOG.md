@@ -15,6 +15,9 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y 
 - **CI portable** para GitHub y GitLab con la lógica en `Makefile` y `scripts/ci/`; Renovate.
 - Contrato YAML de redes (propuesta pendiente de validar), ejemplos y pipeline de GitLab para el repo de infraestructura del cliente.
 
+### Agregado
+- **Cuentas de usuario administrables** (esquema versión 7): el admin pre-registra por correo y da de baja (SSO), o crea cuentas locales con clave temporal de un solo uso, cambio obligatorio, restablecer, desactivar y eliminar (`AUTH_LOCAL=true`, modo Basic). `POST/DELETE /usuarios`, `/usuarios/{email}/desactivar|activar|restablecer-clave` y `POST /yo/clave`.
+
 ### Cambiado
 - Cada asignación tiene un **ID legible** (`ASG-000123`, columna generada; esquema versión 6): visible y buscable en la interfaz, en la API (`codigo`) y en el Excel. **Liberar** pide un motivo que queda en la auditoría. Hay que migrar el esquema antes de desplegar esta versión.
 - **Nueva reserva** desde la interfaz (solicitante y admin). **Asignar directo** (antes «Solicitar») pasa a ser solo de admin, también en la API (`POST /solicitudes`): el solicitante pide una reserva y un admin la aprueba.

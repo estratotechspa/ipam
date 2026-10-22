@@ -157,6 +157,9 @@ const schemas = {
       usuario: { type: 'string' },
       nombre: { type: 'string' },
       rol: { enum: ['lector', 'agente', 'solicitante', 'admin'] },
+      local: { type: 'boolean', description: 'Cuenta local con contraseña (AUTH_LOCAL).' },
+      debe_cambiar_clave: { type: 'boolean', description: 'La contraseña es temporal: hay que cambiarla antes de seguir.' },
+      cuentas_locales: { type: 'boolean', description: 'El servicio admite cuentas locales.' },
     },
     example: { modo: 'token', usuario: 'svc:agente-redes', nombre: 'svc:agente-redes', rol: 'agente' },
   },
@@ -479,9 +482,30 @@ const schemas = {
       email: { type: 'string' },
       nombre: { type: 'string' },
       rol: { enum: ['lector', 'solicitante', 'admin', null] },
+      activo: { type: 'boolean', description: 'false = dado de baja: no puede entrar.' },
+      local: { type: 'boolean', description: 'true = cuenta local con contraseña; false = cuenta SSO.' },
+      debe_cambiar_clave: { type: 'boolean' },
       ultimo_acceso: { type: ['string', 'null'], format: 'date-time' },
+      creado_en: { type: 'string', format: 'date-time' },
+      creado_por: { type: ['string', 'null'] },
     },
-    example: { email: 'ana@empresa.example', nombre: 'Ana', rol: 'solicitante', ultimo_acceso: AHORA },
+    example: { email: 'ana@empresa.example', nombre: 'Ana', rol: 'solicitante', activo: true, local: false, debe_cambiar_clave: false, ultimo_acceso: AHORA },
+  },
+  UsuarioCrear: {
+    type: 'object',
+    required: ['email', 'rol'],
+    properties: {
+      email: { type: 'string', description: 'Correo (SSO) o nombre de usuario (cuenta local), en minúsculas.' },
+      nombre: { type: 'string' },
+      rol: { enum: ['lector', 'solicitante', 'admin'] },
+      local: { type: 'boolean', description: 'true = cuenta local con clave temporal (requiere AUTH_LOCAL); false o ausente = pre-registro SSO.' },
+    },
+    example: { email: 'ana@empresa.example', nombre: 'Ana', rol: 'solicitante', local: false },
+  },
+  CambioClave: {
+    type: 'object',
+    required: ['actual', 'nueva'],
+    properties: { actual: { type: 'string' }, nueva: { type: 'string', minLength: 12, description: 'Al menos 12 caracteres y distinta de la actual.' } },
   },
   UsuarioRol: {
     type: 'object',
@@ -1026,8 +1050,61 @@ function rutasDeAdministracion(p) {
       extra: e403,
     }),
   };
+  p['/api/v1/usuarios'].post = op({
+    tag: 'Administración',
+    summary: 'Crea un usuario (solo admin)',
+    description:
+      '**Camino A (SSO):** pre-registra por correo con su rol; la identidad la guarda el proveedor OIDC. **Camino B (`local: true`, requiere `AUTH_LOCAL`):** crea una cuenta local con una **clave temporal que se devuelve una sola vez** (`clave_temporal`) y obliga a cambiarla. Nunca se guarda ni se audita la clave.',
+    body: cuerpo('UsuarioCrear', schemas.UsuarioCrear.example),
+    ok: { 201: respuesta('Usuario creado.', { type: 'object' }, { email: 'ana@empresa.example', nombre: 'Ana', rol: 'solicitante', local: false }) },
+    extra: { ...e400, ...e403, 409: respuesta('Ya existe un usuario con ese correo o nombre.', 'Error') },
+  });
+  const accion = (resumen, descripcion) =>
+    op({
+      tag: 'Administración',
+      summary: resumen,
+      description: descripcion,
+      params: [param('email', 'path', 'Correo o nombre de usuario.')],
+      ok: { 200: respuesta('Hecho.', { type: 'object' }, { email: 'ana@empresa.example' }) },
+      extra: { ...e400, ...e403, ...e404, 409: respuesta('No puedes hacerlo sobre tu propia cuenta.', 'Error') },
+    });
+  p['/api/v1/usuarios/{email}/desactivar'] = {
+    'x-alias-legado': '/api/usuarios/{email}/desactivar',
+    post: accion(
+      'Da de baja a un usuario (solo admin)',
+      'No puede entrar mientras esté desactivado; se conserva su historial de auditoría. No puedes desactivarte a ti mismo.',
+    ),
+  };
+  p['/api/v1/usuarios/{email}/activar'] = {
+    'x-alias-legado': '/api/usuarios/{email}/activar',
+    post: accion('Reactiva a un usuario (solo admin)', 'Revierte la baja.'),
+  };
+  p['/api/v1/usuarios/{email}/restablecer-clave'] = {
+    'x-alias-legado': '/api/usuarios/{email}/restablecer-clave',
+    post: accion(
+      'Restablece la clave de una cuenta local (solo admin)',
+      'Devuelve una clave temporal **una sola vez** (`clave_temporal`) y obliga a cambiarla. Solo para cuentas locales.',
+    ),
+  };
+  p['/api/v1/yo/clave'] = {
+    'x-alias-legado': '/api/yo/clave',
+    post: op({
+      tag: 'Sesión',
+      summary: 'Cambia la contraseña de la cuenta local propia',
+      body: cuerpo('CambioClave', { actual: '(clave actual)', nueva: '(clave nueva de al menos 12 caracteres)' }),
+      ok: {
+        200: respuesta(
+          'Contraseña cambiada.',
+          { type: 'object', properties: { email: { type: 'string' }, cambiada: { type: 'boolean' } } },
+          { email: 'ana', cambiada: true },
+        ),
+      },
+      extra: { ...e400, ...e401, ...e403 },
+    }),
+  };
   p['/api/v1/usuarios/{email}'] = {
     'x-alias-legado': '/api/usuarios/{email}',
+    delete: accion('Elimina un usuario (solo admin)', 'Borra la cuenta. Para conservar el historial, prefiere desactivar. No puedes eliminarte a ti mismo.'),
     put: op({
       tag: 'Administración',
       summary: 'Asigna el rol de un usuario (solo admin)',

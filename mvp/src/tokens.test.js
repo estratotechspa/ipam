@@ -78,7 +78,15 @@ test('crear: formato ipam_+43, se muestra una vez, la base solo guarda el hash y
 test('uso: actor svc:<nombre>, /api/me con modo token, sin X-Requested-With (no hay cookie, CSRF no aplica) y auditado como svc:', opts, async () => {
   const t = await crearToken('uso-basico', 'agente');
   const me = await json(await llamar('GET', '/api/me', undefined, bearer(t.token)));
-  assert.deepEqual(me.cuerpo, { modo: 'token', usuario: 'svc:uso-basico', nombre: 'svc:uso-basico', rol: 'agente' });
+  assert.deepEqual(me.cuerpo, {
+    modo: 'token',
+    usuario: 'svc:uso-basico',
+    nombre: 'svc:uso-basico',
+    rol: 'agente',
+    local: false,
+    debe_cambiar_clave: false,
+    cuentas_locales: false,
+  });
   assert.equal((await llamar('GET', '/api/pools', undefined, bearer(t.token))).status, 200);
   const r = await json(await reservar(t.token, {}, 'uso-1'));
   assert.equal(r.estado, 201);

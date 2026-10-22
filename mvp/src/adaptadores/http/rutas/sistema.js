@@ -4,6 +4,7 @@
 //  /readyz   → «puedo atender»: base alcanzable y esquema al día: para readinessProbe, Cloud Run y healthCheckPath.
 const { ruta, api } = require('../registro');
 const { VERSION_MINIMA, versionActual } = require('../../persistencia/postgres/esquema');
+const { config } = require('../../../config');
 
 const con = (promesa, ms) => Promise.race([promesa, new Promise((_, rechazo) => setTimeout(() => rechazo(new Error('timeout')), ms))]);
 
@@ -39,7 +40,15 @@ const MODO = { oidc: 'oidc', basic: 'basic', token: 'token', anonimo: 'none' };
 /** Datos de la sesión actual. Va DESPUÉS del middleware de acceso. */
 function montarSesion(app) {
   api(app, 'get', '/me', (req, res) =>
-    res.json({ modo: MODO[req.actor && req.actor.tipo] || 'none', usuario: req.usuario, nombre: req.nombre || req.usuario, rol: req.rol }),
+    res.json({
+      modo: MODO[req.actor && req.actor.tipo] || 'none',
+      usuario: req.usuario,
+      nombre: req.nombre || req.usuario,
+      rol: req.rol,
+      local: Boolean(req.actor && req.actor.local),
+      debe_cambiar_clave: Boolean(req.actor && req.actor.debeCambiar),
+      cuentas_locales: config.auth.cuentasLocales,
+    }),
   );
 }
 

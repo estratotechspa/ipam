@@ -81,8 +81,19 @@ Aquí se crean las llaves que usan los pipelines y agentes:
 3. **Revocar** deja el token inservible al instante.
 Buenas prácticas: un token por agente, con vencimiento corto y la cuota más baja que sirva.
 
-### Usuarios — «quién entra y con qué rol» (solo admin, con SSO)
-Lista a quienes ya iniciaron sesión. Puedes fijar su rol (`lector`, `solicitante`, `admin`) o dejarlo en **Heredar** (lo decide el grupo del proveedor de identidad). El cambio rige desde su próximo inicio de sesión. No aparece en modo usuario y contraseña.
+### Usuarios — «quién entra y con qué rol» (solo admin)
+Hay dos formas de manejar cuentas; el IPAM usa la que corresponda a cómo está configurado el acceso:
+- **Con SSO (camino A, uso real):** las personas entran con tu proveedor de identidad y las cuentas viven allá. Aquí el admin puede:
+  - **Pre-registrar** a alguien por correo con su rol, antes de que entre.
+  - Cambiar su **rol** (o dejarlo en «Heredar», que usa los grupos del proveedor).
+  - **Desactivar** (da de baja: no puede iniciar sesión, pero se conserva su historial), **Activar** de nuevo o **Eliminar**.
+- **Con cuentas locales (camino B, pruebas y POC; requiere `AUTH_LOCAL=true` en modo usuario y contraseña):** el IPAM guarda la contraseña (solo su huella).
+  1. **Nueva cuenta local:** usuario, nombre y rol. El IPAM muestra una **clave temporal una sola vez**: cópiala y entrégala por un canal seguro.
+  2. La persona entra con esa clave; el sistema **le exige cambiarla** (mínimo 12 caracteres) antes de dejarla hacer otra cosa. Después, en «Mi contraseña» puede cambiarla cuando quiera.
+  3. El admin puede **Restablecer clave** (genera otra temporal), **Desactivar** (rige al instante) o **Eliminar**.
+  4. El **administrador de emergencia** (las variables `APP_USER` y `APP_PASS`) siempre puede entrar, así nadie queda fuera.
+
+Nadie puede desactivarse ni eliminarse a sí mismo. Todo queda en la **Auditoría** (nunca las claves).
 
 ### Auditoría — «quién hizo qué» (solo admin)
 Bitácora de **solo lectura**: fecha, usuario, rol, acción y detalle de cada cambio (asignar, liberar, confirmar, crear o revocar tokens…). Nadie puede modificarla ni borrarla, ni siquiera la aplicación. Para investigar un incidente, busca por fecha y usuario; el identificador de petición (`request_id`) enlaza con los logs.

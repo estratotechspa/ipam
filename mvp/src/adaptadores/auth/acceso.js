@@ -14,28 +14,48 @@ const esPublica = (p) => PUBLICAS.has(p) || p.startsWith('/auth/');
 // Caché local (solo rendimiento) de contraseñas ya verificadas: evita repetir scrypt en cada petición Basic.
 const verificadas = new Map();
 const TTL_CACHE_MS = 60_000;
-async function basicValido(cabecera) {
+const recordar = (clave) => {
+  if (verificadas.size > 100) verificadas.clear();
+  verificadas.set(clave, Date.now() + TTL_CACHE_MS);
+};
+// Hash de relleno: cuando el usuario no existe se verifica igual, para que el tiempo no delate si la cuenta existe.
+const HASH_RELLENO = 'scrypt$16384$8$1$AAAAAAAAAAAAAAAAAAAAAA==$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
+
+/**
+ * Basic: primero el administrador de emergencia (APP_USER/APP_PASS); si AUTH_LOCAL está activo, después las cuentas locales de la base.
+ * Devuelve {nombre, rol, local, debeCambiar} o null. El estado «activo» de una cuenta local se consulta en cada petición (la baja rige al instante).
+ */
+async function basicValido(cabecera, usuariosLocales) {
   const h = String(cabecera || '');
   if (!h.startsWith('Basic ')) return null;
   const [u, ...resto] = Buffer.from(h.slice(6), 'base64').toString().split(':');
   const pass = resto.join(':');
   const a = config.auth;
-  const clave = `${a.appUser}|${a.appPass.slice(0, 20)}|${h}`;
-  const hit = verificadas.get(clave);
-  if (hit && hit > Date.now()) return u;
+  const claveRoot = `${a.appUser}|${a.appPass.slice(0, 20)}|${h}`;
+  const hit = verificadas.get(claveRoot);
+  if (hit && hit > Date.now()) return { nombre: u, rol: 'admin', local: false, debeCambiar: false };
   const userOk = igualConstante(u || '', a.appUser);
   const passOk = await verificar(pass, a.appPass); // se evalúan ambas siempre (sin atajos por tiempo)
-  if (!(userOk && passOk)) return null;
-  if (verificadas.size > 100) verificadas.clear();
-  verificadas.set(clave, Date.now() + TTL_CACHE_MS);
-  return u;
+  if (userOk && passOk) {
+    recordar(claveRoot);
+    return { nombre: u, rol: 'admin', local: false, debeCambiar: false };
+  }
+  if (!a.cuentasLocales || !usuariosLocales || userOk) return null;
+  const fila = await usuariosLocales.buscar(String(u || '').toLowerCase());
+  const hashOk = await verificar(pass, fila && fila.clave_hash ? fila.clave_hash : HASH_RELLENO);
+  if (!fila || !fila.clave_hash || !hashOk || fila.activo === false || !fila.rol) return null;
+  await usuariosLocales.marcarAcceso(fila.email).catch(() => {});
+  return { nombre: fila.email, rol: fila.rol, local: true, debeCambiar: Boolean(fila.debe_cambiar_clave) };
 }
+
+// Mientras la clave sea temporal, la cuenta solo puede ver quién es y cambiarla.
+const SIN_CAMBIO_DE_CLAVE = new Set(['/api/me', '/api/v1/me', '/api/yo/clave', '/api/v1/yo/clave', '/api/config']);
 
 /**
  * @param {{rechazo?: (motivo: string, req: any) => unknown, autenticarToken?: (token: string) => Promise<any>, auditar?: Function}} [deps]
  * @returns {import('express').RequestHandler}
  */
-function crearAcceso({ rechazo = () => {}, autenticarToken, auditar = async () => {}, frenoFuerzaBruta } = {}) {
+function crearAcceso({ rechazo = () => {}, autenticarToken, auditar = async () => {}, frenoFuerzaBruta, usuariosLocales } = {}) {
   return async (req, res, next) => {
     if (esPublica(req.path)) return next();
     const modo = config.auth.modo;
@@ -82,13 +102,20 @@ function crearAcceso({ rechazo = () => {}, autenticarToken, auditar = async () =
     }
     if (modo === 'none') fijar('anonimo', 'admin', 'anonimo');
     else if (modo === 'basic') {
-      const u = await basicValido(req.headers.authorization);
+      const u = await basicValido(req.headers.authorization, usuariosLocales);
       if (u === null) {
         rechazo('credenciales_basic', req);
         if (frenoFuerzaBruta && trae) await frenoFuerzaBruta.fallo(req.ip);
         return res.set('WWW-Authenticate', 'Basic realm="IPAM"').status(401).send('Autenticación requerida');
       }
-      fijar(u, 'admin', 'basic');
+      fijar(u.nombre, u.rol, 'basic', u.nombre, { local: u.local, debeCambiar: u.debeCambiar });
+      if (u.debeCambiar && req.path.startsWith('/api/') && !SIN_CAMBIO_DE_CLAVE.has(req.path)) {
+        return res.status(403).json({
+          error: 'cambio_de_clave_requerido',
+          mensaje: 'Tu contraseña es temporal: cámbiala antes de seguir (POST /api/v1/yo/clave).',
+          request_id: contexto.actual().request_id,
+        });
+      }
     } else {
       const s = S.abrir(S.cookies(req)[S.SESION]);
       if (!s) {

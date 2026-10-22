@@ -22,6 +22,7 @@ Tipos: *texto*, *entero*, *booleano* (`true`/`false`) y *lista* (valores separad
 | `SOLICITUD_TIMEOUT_MS` | entero | 30000 | Tiempo máximo que el servidor espera para recibir una petición completa.  |
 | `MIGRAR_AL_ARRANCAR` | booleano | false | EXCEPCIÓN: aplica el esquema al arrancar (para entornos sin job previo, p. ej. el POC). Por defecto la app NO toca el esquema.  |
 | `ALLOW_ANONYMOUS` | booleano | false | Permite arrancar en producción sin OIDC ni Basic (acceso abierto como admin). Solo para demos.  |
+| `AUTH_LOCAL` | booleano | false | Habilita cuentas locales con contraseña (solo en modo Basic): el admin las crea, desactiva, elimina y restablece desde la pestaña Usuarios. APP_USER/APP_PASS sigue siendo el administrador de emergencia. Para uso real, prefiere OIDC.  |
 | `CONFIRMACION_EXIGE_APROBADOR` | booleano | true | Un token de servicio debe indicar quién aprobó (aprobado_por) y la referencia (MR) al confirmar. Regla human-in-the-loop.  |
 | `BARREDOR_INTERVALO_SEGUNDOS` | entero | 60 | Cada cuánto corre el barredor (limpia reservas vencidas y contadores).  |
 | `CUOTA_RESERVAS_POR_TOKEN` | entero | 20 | Reservas «reservada» vigentes simultáneas por token (se puede fijar otra al crearlo).  |

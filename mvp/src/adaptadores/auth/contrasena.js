@@ -39,4 +39,7 @@ async function verificar(contrasena, guardado) {
   }
 }
 
-module.exports = { igualConstante, hashear, verificar };
+/** Clave temporal aleatoria (16 caracteres, 96 bits): se muestra una sola vez y obliga a cambiarla. */
+const generarTemporal = () => crypto.randomBytes(12).toString('base64url');
+
+module.exports = { igualConstante, hashear, verificar, generarTemporal };
