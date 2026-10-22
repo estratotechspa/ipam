@@ -31,6 +31,12 @@ La respuesta trae el token **una sola vez** (`ipam_` + 43 caracteres). Guárdalo
 curl -s -H "Authorization: Bearer $IPAM_TOKEN" "$IPAM_URL/api/v1/pools"
 curl -s -H "Authorization: Bearer $IPAM_TOKEN" "$IPAM_URL/api/v1/pools/dev-nodos/libres?mascara=24"
 ```
+**Cuánto queda por máscara**
+```bash
+curl -s -H "Authorization: Bearer $IPAM_TOKEN" "$IPAM_URL/api/v1/pools/dev-nodos/disponibilidad"
+```
+Devuelve `total`, `ocupadas`, `libres` y, por cada máscara, `direcciones`, `utilizables`, `bloques_libres` y `direcciones_libres` (cuenta asignaciones y reservas vigentes).
+
 **Reservar** (idempotente con `Idempotency-Key`: si el pipeline reintenta, no duplica)
 ```bash
 curl -s -H "Authorization: Bearer $IPAM_TOKEN" -H 'Content-Type: application/json' \

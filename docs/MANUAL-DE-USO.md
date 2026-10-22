@@ -38,7 +38,7 @@ Los **agentes** (tokens de servicio) tienen rol `lector` o `agente` y no usan la
 Es la pantalla de inicio. Arriba hay cuatro números:
 - **Pools:** cuántos rangos grandes existen.
 - **Asignaciones activas:** cuántos segmentos están entregados.
-- **Uso promedio:** qué parte de los pools está ocupada, en promedio.
+- **Uso promedio:** el **promedio simple** del porcentaje de uso de cada pool (direcciones asignadas ÷ direcciones del pool). Cada pool pesa igual sin importar su tamaño, y **no cuenta las reservas** (esas se ven aparte en la columna de reservas). Con el filtro activo, el promedio es solo de los pools mostrados.
 - **Solapamientos:** siempre debe ser **0**; la base de datos los impide, así que el número está para tu tranquilidad.
 
 Debajo, una fila por pool: su **tipo** (Nodos, Pods, Servicios), **ambiente**, **proveedor** (p. ej. GCP), **CIDR base** (el rango grande), cuántas asignaciones tiene y una **barra de uso**. Úsala para detectar pools que se llenan; con alertas configuradas ([OBSERVABILIDAD](ops/OBSERVABILIDAD.md)) avisan al pasar de 80 % y 90 %.
@@ -59,6 +59,8 @@ Formulario para entregar un segmento **de inmediato y de forma definitiva**, **s
 2. Escribe el **proyecto / VPC** (obligatorio).
 3. Deja **CIDR manual** vacío para que el IPAM entregue el primer segmento libre del tamaño que elijas en **Máscara**, de `/8` a `/32` (`/22` = 1.024 direcciones, `/24` = 256, `/26` = 64, `/28` = 16…). Si necesitas un rango específico, escríbelo; debe caer dentro del pool.
 4. Pulsa **Asignar**.
+
+Al elegir el pool, a la derecha aparece la **disponibilidad por máscara**: cuántas direcciones tiene cada bloque (totales y utilizables), **cuántos bloques libres quedan** y cuántas direcciones libres suman; el selector de máscara también muestra «/24 · 15 libres». Un clic en una fila elige esa máscara. La misma tabla aparece en **Nueva reserva**. Cuenta asignaciones y reservas vigentes; en IPv4 un bloque `/30` o menor pierde dos direcciones (red y difusión).
 
 Si el rango choca con otro, el IPAM **no asigna nada**: te muestra con quién choca y ofrece **segmentos libres** con un botón «Usar».
 Para el flujo normal (pedir, aprobar, asignar) usa **Reservas → Nueva reserva**.

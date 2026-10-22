@@ -221,7 +221,7 @@ test('Jira → reserva → aprobación manual de un admin → asignación (nada 
 test('Nueva reserva desde la interfaz: se crea, queda pendiente y un admin la aprueba', async ({ page }) => {
   const vpc = `nueva-res-${Date.now()}`;
   await irA(page, 'Reservas');
-  await page.getByText('Nueva reserva').first().click();
+  await page.locator('#reservas summary').click();
   await page.selectOption('#nr-pool', 'gke-nodos-qa');
   await page.fill('#nr-vpc', vpc);
   await page.selectOption('#nr-mascara', '26');

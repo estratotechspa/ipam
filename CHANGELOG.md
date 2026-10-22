@@ -4,6 +4,7 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y 
 
 ## [0.3.0] - 2026-10-21
 ### Agregado
+- **Disponibilidad por máscara:** `GET /pools/{id}/disponibilidad` y un panel en Asignar directo y Nueva reserva (direcciones por bloque, utilizables y bloques libres; el selector muestra «/24 · 15 libres»). README en la raíz y análisis de un IPAM comercial (`docs/ANALISIS-IPAM-COMERCIAL.md`).
 - **Reservas tentativas** para agentes: `POST/GET /api/reservas`, `GET /api/reservas/:id`, confirmar y liberar; TTL de 24 h (máximo 72), idempotencia con `Idempotency-Key`, expiración perezosa más barredor coordinado, y la regla *human-in-the-loop* (un agente confirma con `aprobado_por` y `referencia`).
 - **Tokens de servicio** con rol `agente` o `lector` (`ipam_` + 43 caracteres, solo se guarda el hash, vencen y se revocan); `Authorization: Bearer` se evalúa primero en cualquier modo.
 - **Contrato OpenAPI 3.1** (`/api/openapi.json`), rutas versionadas `/api/v1/…` con alias compatibles `/api/…`, validación de entrada generada desde el contrato y pruebas de contrato.

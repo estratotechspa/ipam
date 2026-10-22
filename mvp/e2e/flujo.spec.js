@@ -73,3 +73,22 @@ test('cada asignación muestra su ID (ASG-000123) y se puede buscar por él', as
   await page.fill('#f-buscar', '');
   await expect(filas).toHaveCount(total);
 });
+
+test('al elegir un pool se ve cuántas direcciones y bloques libres quedan por cada máscara', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Asignar directo', exact: true }).click();
+  await page.selectOption('#s-pool', 'gke-nodos-qa'); // 10.20.0.0/16 con un /20 asignado en la semilla
+  const tabla = page.getByRole('table', { name: 'Disponibilidad por máscara' });
+  await expect(tabla).toBeVisible();
+  const fila24 = tabla.locator('tr', { has: page.locator('code', { hasText: /^\/24$/ }) });
+  await expect(fila24).toContainText('256'); // direcciones por bloque
+  await expect(fila24).toContainText('254'); // utilizables
+  await expect(page.locator('#s-len option[value="24"]')).toContainText('libres');
+  // Un clic en una fila elige esa máscara.
+  await tabla.locator('tr', { has: page.locator('code', { hasText: /^\/26$/ }) }).click();
+  await expect(page.locator('#s-len')).toHaveValue('26');
+  // La misma información está en «Nueva reserva».
+  await page.getByRole('button', { name: 'Reservas', exact: true }).click();
+  await page.locator('#reservas summary').click();
+  await expect(page.locator('#nr-disp').getByRole('table', { name: 'Disponibilidad por máscara' })).toBeVisible();
+});

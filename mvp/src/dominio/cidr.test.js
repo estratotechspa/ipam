@@ -2,7 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fc = require('fast-check');
-const { parse, overlap, libres, n2ip, ip2n, contenido, aTexto, tamano } = require('./cidr');
+const { parse, overlap, libres, disponibilidad, n2ip, ip2n, contenido, aTexto, tamano } = require('./cidr');
 
 // Generadores: un bloque alineado cualquiera (/8 a /32) y un pool pequeño donde la fuerza bruta es viable.
 const bloqueAlineado = fc
@@ -85,4 +85,31 @@ test('libres: casos límite (pool lleno, máscara fuera de rango, ocupados mal f
   assert.deepEqual(libres('no-es-cidr', [], 24), []);
   assert.deepEqual(libres('10.0.0.0/24', ['basura', '10.0.0.0/25'], 25), ['10.0.0.128/25']);
   assert.deepEqual(libres('10.64.0.0/12', ['10.64.0.0/21', '10.64.8.0/21', '10.64.32.0/19'], 22, 3), ['10.64.16.0/22', '10.64.20.0/22', '10.64.24.0/22']);
+});
+
+test('disponibilidad: bloques libres por máscara, con direcciones totales y utilizables', () => {
+  // Pool /24 (256 direcciones) con un /26 ocupado al comienzo: quedan 192 direcciones.
+  const d = disponibilidad('10.210.0.0/24', ['10.210.0.0/26']);
+  assert.deepEqual([d.total, d.ocupadas, d.libres], [256, 64, 192]);
+  const por = Object.fromEntries(d.por_mascara.map((x) => [x.mascara, x]));
+  assert.deepEqual(por[24], { mascara: 24, direcciones: 256, utilizables: 254, bloques_libres: 0, direcciones_libres: 0 });
+  assert.equal(por[25].bloques_libres, 1); // 10.210.0.128/25
+  assert.equal(por[26].bloques_libres, 3);
+  assert.equal(por[28].bloques_libres, 12);
+  assert.deepEqual([por[30].utilizables, por[31].utilizables, por[32].utilizables], [2, 2, 1]);
+  assert.equal(disponibilidad('10.210.0.0/24', []).por_mascara[0].bloques_libres, 1);
+  assert.equal(disponibilidad('hola', []).total, 0);
+});
+
+test('propiedad: disponibilidad concuerda con libres() y con la fuerza bruta, y lo libre nunca excede el pool', () => {
+  fc.assert(
+    fc.property(bloquesDelPool, fc.integer({ min: 24, max: 32 }), (ocupadosGen, len) => {
+      const ocupados = Array.isArray(ocupadosGen) ? ocupadosGen : [ocupadosGen];
+      const d = disponibilidad(POOL, ocupados);
+      const fila = d.por_mascara.find((x) => x.mascara === len);
+      assert.equal(fila.bloques_libres, libres(POOL, ocupados, len, Infinity).length);
+      assert.equal(d.ocupadas + d.libres, d.total);
+      for (const x of d.por_mascara) assert.ok(x.direcciones_libres <= d.libres);
+    }),
+  );
 });

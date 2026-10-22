@@ -850,6 +850,55 @@ function rutasDePoolsYAsignaciones(p) {
       ok: { 200: respuesta('Pools.', { type: 'array', items: { $ref: '#/components/schemas/Pool' } }) },
     }),
   };
+  p['/api/v1/pools/{id}/disponibilidad'] = {
+    'x-alias-legado': '/api/pools/{id}/disponibilidad',
+    get: op({
+      tag: 'Pools',
+      summary: 'Cuánto queda disponible en un pool, por máscara',
+      description:
+        'Para cada máscara desde la del pool hasta /32: cuántos bloques **alineados** caben enteros en lo libre (`bloques_libres`), cuántas direcciones tiene cada bloque (`direcciones`) y cuántas son utilizables (`utilizables`: un bloque ≤ /30 pierde la dirección de red y la de difusión). Cuenta asignaciones y reservas vigentes.',
+      params: [param('id', 'path', 'Id del pool.')],
+      ok: {
+        200: respuesta(
+          'Disponibilidad.',
+          {
+            type: 'object',
+            required: ['pool', 'total', 'ocupadas', 'libres', 'por_mascara'],
+            properties: {
+              pool: { type: 'string' },
+              cidr: { $ref: '#/components/schemas/Cidr' },
+              total: { type: 'integer', description: 'Direcciones del pool.' },
+              ocupadas: { type: 'integer' },
+              libres: { type: 'integer' },
+              por_mascara: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  required: ['mascara', 'direcciones', 'utilizables', 'bloques_libres', 'direcciones_libres'],
+                  properties: {
+                    mascara: { type: 'integer' },
+                    direcciones: { type: 'integer' },
+                    utilizables: { type: 'integer' },
+                    bloques_libres: { type: 'integer' },
+                    direcciones_libres: { type: 'integer' },
+                  },
+                },
+              },
+            },
+          },
+          {
+            pool: 'dev-nodos',
+            cidr: '10.210.0.0/20',
+            total: 4096,
+            ocupadas: 256,
+            libres: 3840,
+            por_mascara: [{ mascara: 24, direcciones: 256, utilizables: 254, bloques_libres: 15, direcciones_libres: 3840 }],
+          },
+        ),
+      },
+      extra: e404,
+    }),
+  };
   p['/api/v1/pools/{id}/libres'] = {
     'x-alias-legado': '/api/pools/{id}/libres',
     get: op({

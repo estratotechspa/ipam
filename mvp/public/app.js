@@ -195,8 +195,12 @@ async function renderSol() {
   <label>CIDR manual (opcional; vacío = asignar el primer libre)</label><input id="s-cidr" value="" placeholder="ej. 10.210.48.0/22 (debe caer dentro del pool)">
   <label>Máscara (si no hay CIDR manual)</label><select id="s-len">${MASCARAS.map((n) => `<option ${n === 22 ? 'selected' : ''} value="${n}">/${n}</option>`).join('')}</select>
   <p><button class="btn" id="s-go">Asignar</button></p></div>
+  <div class="card" style="flex:1;min-width:320px"><b>Disponibilidad del pool elegido</b><div id="s-disp"></div></div>
   <div class="card" id="s-res"><p class="muted">Si pides un CIDR que choque con uno existente, la base de datos lo rechaza y se sugieren segmentos libres. Con el CIDR vacío se asigna el primer segmento libre del tamaño elegido.</p></div></div>`;
   $('s-go').onclick = solicitar;
+  const actualizarDisp = () => cargarDisponibilidad($('s-disp'), $('s-pool').value, $('s-len'));
+  $('s-pool').onchange = actualizarDisp;
+  actualizarDisp();
 }
 
 async function solicitar() {
@@ -207,6 +211,7 @@ async function solicitar() {
   $('s-go').disabled = false;
   const d = r.data || {};
   if (r.ok) {
+    cargarDisponibilidad($('s-disp'), $('s-pool').value, $('s-len'));
     res.innerHTML = `<div class="ok">✔ Asignado <code>${esc(d.cidr)}</code> en ${esc(d.pool_id)} para ${esc(d.vpc)}. Jira creó el ticket <b>${esc(d.ticket)}</b>.</div><p class="muted">Míralo en la pestaña Asignaciones.</p>`;
     return;
   }
@@ -569,6 +574,63 @@ function tabla(titulo, cabeceras, filas, vacio) {
 }
 
 /* ===== Reservas (todos los roles; opera según permisos: dueño o admin) ===== */
+// Disponibilidad del pool elegido, por máscara: direcciones por bloque, utilizables y cuántos bloques libres quedan.
+// También rotula el selector de máscara («/24 · 15 libres») y un clic en una fila elige esa máscara.
+async function cargarDisponibilidad(contenedor, poolId, selectMascara) {
+  contenedor.replaceChildren(h('p', { class: 'muted' }, 'Calculando disponibilidad…'));
+  const r = await api('/api/v1/pools/' + encodeURIComponent(poolId) + '/disponibilidad');
+  if (!r.ok) return contenedor.replaceChildren(h('p', { class: 'muted' }, 'No se pudo calcular la disponibilidad.'));
+  const d = r.data;
+  const porMascara = new Map(d.por_mascara.map((x) => [x.mascara, x]));
+  const elegida = selectMascara.value;
+  for (const op of selectMascara.options) {
+    const x = porMascara.get(Number(op.value));
+    op.textContent = x ? `/${op.value} · ${fmt(x.bloques_libres)} libre${x.bloques_libres === 1 ? '' : 's'}` : `/${op.value} · no cabe aquí`;
+  }
+  selectMascara.value = elegida;
+  const pct = d.total ? (d.ocupadas / d.total) * 100 : 0;
+  contenedor.replaceChildren(
+    h(
+      'p',
+      { style: 'margin:0 0 8px' },
+      h('b', null, d.pool),
+      ` (${d.cidr}): ${fmt(d.libres)} de ${fmt(d.total)} direcciones libres · ${pct.toFixed(1).replace('.', ',')} % ocupado.`,
+    ),
+    h(
+      'div',
+      { class: 'tablewrap', style: 'max-height:260px;overflow:auto' },
+      h(
+        'table',
+        { 'aria-label': 'Disponibilidad por máscara' },
+        h(
+          'tr',
+          null,
+          ['Máscara', 'Direcciones por bloque', 'Utilizables', 'Bloques libres', 'Direcciones libres'].map((t) => h('th', null, t)),
+        ),
+        d.por_mascara.map((x) =>
+          h(
+            'tr',
+            {
+              class: x.bloques_libres ? 'elegible' : 'agotado',
+              style: 'cursor:pointer',
+              title: x.bloques_libres ? 'Elegir esta máscara' : 'No queda espacio de este tamaño',
+              onclick: () => {
+                selectMascara.value = String(x.mascara);
+                selectMascara.dispatchEvent(new Event('change'));
+              },
+            },
+            h('td', null, h('code', null, '/' + x.mascara)),
+            h('td', null, fmt(x.direcciones)),
+            h('td', null, fmt(x.utilizables)),
+            h('td', null, h('b', null, fmt(x.bloques_libres))),
+            h('td', null, fmt(x.direcciones_libres)),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 // Formulario «Nueva reserva» (solicitante y admin): aparta un rango por un tiempo; un admin debe aprobarla para que sea asignación.
 function formularioNuevaReserva(pools, estado, recargar) {
   const campo = (etiqueta, control) => h('label', null, etiqueta, control);
@@ -587,6 +649,11 @@ function formularioNuevaReserva(pools, estado, recargar) {
   const cidr = h('input', { id: 'nr-cidr', placeholder: 'opcional: vacío = el primer rango libre' });
   const ttl = h('input', { id: 'nr-ttl', type: 'number', min: 1, max: 72, value: 24 });
   const boton = h('button', { class: 'btn', type: 'submit', id: 'nr-go' }, 'Reservar');
+  const disp = h('div', { id: 'nr-disp', class: 'card', style: 'flex:1 1 100%' });
+  const actualizar = () => cargarDisponibilidad(disp, pool.value, mascara);
+  pool.addEventListener('change', actualizar);
+  mascara.addEventListener('change', () => {});
+  setTimeout(actualizar, 0);
   const enviar = async (e) => {
     e.preventDefault();
     boton.disabled = true;
@@ -616,6 +683,7 @@ function formularioNuevaReserva(pools, estado, recargar) {
       campo('Ticket', ticket),
       campo('Vigencia (horas, máx. 72)', ttl),
       boton,
+      disp,
     ),
   );
 }

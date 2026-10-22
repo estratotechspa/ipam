@@ -22,6 +22,13 @@ function montar(app, { casos, audita, validacion }) {
     return r.ok ? res.json(r.libres) : enviarFallo(res, { ...r, error: r.error }, { legado: false });
   });
 
+  api(app, 'get', '/pools/:id/disponibilidad', async (req, res) => {
+    const r = await asignaciones.disponibilidadDe(req.params.id);
+    if (!r.ok) return enviarFallo(res, r, { legado: false });
+    const { ok: _ok, ...cuerpo } = r;
+    res.json(cuerpo);
+  });
+
   api(app, 'post', '/solicitudes', requiere('admin'), validacion.cuerpo('Solicitud'), async (req, res) => {
     const { pool, vpc, cidr, mascara } = req.body || {};
     const r = await asignaciones.asignar({ pool, vpc, cidr, mascara, solicitante: req.usuario || 'panel', origen: 'panel' });

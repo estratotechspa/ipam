@@ -17,7 +17,7 @@
 | Cambiar de hosting o de nube | [MIGRACION](../docs/ops/MIGRACION.md) |
 | Pasar de GitHub a GitLab / pipelines | [MIGRAR-A-GITLAB](../docs/ops/MIGRAR-A-GITLAB.md) y [ops/gitlab](../docs/ops/gitlab/README.md) |
 | Aplicar buenas prácticas (human-in-the-loop) | [BUENAS-PRACTICAS](../docs/BUENAS-PRACTICAS.md) |
-| Saber qué no hace | [LIMITACIONES](../docs/LIMITACIONES.md) |
+| Saber qué no hace | [LIMITACIONES](../docs/LIMITACIONES.md) y [ANALISIS-IPAM-COMERCIAL](../docs/ANALISIS-IPAM-COMERCIAL.md) |
 | Revisar la seguridad del código | [MODELO-DE-AMENAZAS](../docs/MODELO-DE-AMENAZAS.md) y [CALIDAD-Y-SEGURIDAD-DEL-CODIGO](../docs/CALIDAD-Y-SEGURIDAD-DEL-CODIGO.md) |
 | Contribuir (incluye «cómo agregar un adaptador») | [CONTRIBUIR](../docs/CONTRIBUIR.md) |
 | Ver los cambios por versión | [CHANGELOG](../CHANGELOG.md) |

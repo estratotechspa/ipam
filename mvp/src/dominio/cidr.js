@@ -73,4 +73,49 @@ function libres(poolCidr, ocupadosCidr, len, max = 3) {
   return out;
 }
 
-module.exports = { parse, overlap, libres, n2ip, ip2n, contenido, aTexto, tamano };
+/**
+ * Cuánto queda disponible en un pool, por tamaño de bloque. Para cada máscara desde la del pool hasta /32:
+ * cuántos bloques ALINEADOS caben enteros en lo libre, y cuántas direcciones tiene cada bloque (totales y utilizables:
+ * en IPv4 un bloque ≤ /30 pierde la dirección de red y la de difusión; /31 y /32 no).
+ * @param {string} poolCidr @param {string[]} ocupadosCidr  asignaciones y reservas vigentes del pool
+ * @returns {{total: number, ocupadas: number, libres: number, por_mascara: Array<{mascara: number, direcciones: number, utilizables: number, bloques_libres: number, direcciones_libres: number}>}}
+ */
+function disponibilidad(poolCidr, ocupadosCidr) {
+  const p = parse(poolCidr);
+  if (!p) return { total: 0, ocupadas: 0, libres: 0, por_mascara: [] };
+  // Lo ocupado, unido y recortado al pool.
+  const ocup = /** @type {Cidr[]} */ (ocupadosCidr.map(parse).filter(Boolean)).filter((o) => overlap(o, p)).sort((x, y) => x.start - y.start);
+  /** @type {Array<[number, number]>} */
+  const libresIntervalos = [];
+  let cur = p.start;
+  let ocupadas = 0;
+  for (const o of ocup) {
+    const ini = Math.max(o.start, p.start),
+      fin = Math.min(o.end, p.end);
+    if (fin < cur) continue;
+    if (ini > cur) libresIntervalos.push([cur, ini - 1]);
+    ocupadas += fin - Math.max(ini, cur) + 1;
+    cur = fin + 1;
+  }
+  if (cur <= p.end) libresIntervalos.push([cur, p.end]);
+  const total = p.end - p.start + 1;
+  const por_mascara = [];
+  for (let m = p.len; m <= 32; m++) {
+    const size = 2 ** (32 - m);
+    let bloques = 0;
+    for (const [s, e] of libresIntervalos) {
+      const primero = Math.ceil(s / size) * size;
+      if (primero + size - 1 <= e) bloques += Math.floor((e + 1 - primero) / size);
+    }
+    por_mascara.push({
+      mascara: m,
+      direcciones: size,
+      utilizables: m >= 31 ? size : size - 2,
+      bloques_libres: bloques,
+      direcciones_libres: bloques * size,
+    });
+  }
+  return { total, ocupadas, libres: total - ocupadas, por_mascara };
+}
+
+module.exports = { parse, overlap, libres, disponibilidad, n2ip, ip2n, contenido, aTexto, tamano };

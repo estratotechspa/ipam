@@ -161,3 +161,13 @@ test('marca por API y logo inexistente', opts, async () => {
   assert.match(await (await fetch(base + '/brand.css')).text(), /--top:/);
   assert.equal((await fetch(base + '/brand/logo')).status, 404);
 });
+
+test('disponibilidad por máscara: totales, bloques libres y utilizables de un pool real', opts, async () => {
+  const d = await (await fetch(base + '/api/pools/gke-nodos-qa/disponibilidad')).json();
+  assert.equal(d.pool, 'gke-nodos-qa');
+  assert.equal(d.ocupadas + d.libres, d.total);
+  const m24 = d.por_mascara.find((x) => x.mascara === 24);
+  assert.deepEqual([m24.direcciones, m24.utilizables], [256, 254]);
+  assert.ok(m24.bloques_libres > 0 && m24.direcciones_libres === m24.bloques_libres * 256);
+  assert.equal((await fetch(base + '/api/pools/no-existe/disponibilidad')).status, 404);
+});

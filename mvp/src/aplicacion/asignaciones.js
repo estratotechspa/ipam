@@ -1,6 +1,6 @@
 // @ts-check
 'use strict';
-const { parse, libres } = require('../dominio/cidr');
+const { parse, libres, disponibilidad } = require('../dominio/cidr');
 const { ok, fallo } = require('./resultado');
 
 /**
@@ -91,7 +91,14 @@ function crearAsignaciones({ repo, eventos, tickets }) {
     return ok({ libres: libres(p.cidr, await repo.ocupados(poolId), len, 3) });
   }
 
-  return { asignar, liberar, sugerirLibres, sincronizarTickets };
+  /** Cuánto queda disponible en un pool, por tamaño de bloque (cuenta asignaciones y reservas vigentes). */
+  async function disponibilidadDe(poolId) {
+    const p = await repo.obtenerPool(poolId);
+    if (!p) return fallo('no_encontrado', 'Pool no existe');
+    return ok({ pool: p.id, cidr: p.cidr, ...disponibilidad(p.cidr, await repo.ocupados(poolId)) });
+  }
+
+  return { asignar, liberar, sugerirLibres, disponibilidadDe, sincronizarTickets };
 }
 
 module.exports = { crearAsignaciones };
