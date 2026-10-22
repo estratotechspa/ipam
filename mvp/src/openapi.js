@@ -46,6 +46,10 @@ const schemas = {
     allOf: [{ $ref: '#/components/schemas/Error' }, { type: 'object', properties: { vigentes: { type: 'integer' }, limite: { type: 'integer' } } }],
     example: { error: 'cuota_excedida', mensaje: 'Tienes 20 reservas vigentes de 20 permitidas. Confirma o libera alguna antes de pedir otra.', vigentes: 20, limite: 20, request_id: '8d5a3f0c-2b1e-4f77-9c0a-5b6d7e8f9a01' },
   },
+  ErrorRateLimit: {
+    allOf: [{ $ref: '#/components/schemas/Error' }, { type: 'object', properties: { retry_after: { type: 'integer', description: 'Segundos que conviene esperar.' }, limite_por_minuto: { type: 'integer' } } }],
+    example: { error: 'rate_limit', mensaje: 'Demasiadas peticiones. Reintenta en 12 segundos.', retry_after: 12, limite_por_minuto: 120, request_id: '8d5a3f0c-2b1e-4f77-9c0a-5b6d7e8f9a01' },
+  },
   Cidr: { type: 'string', pattern: '^\\d{1,3}(\\.\\d{1,3}){3}/\\d{1,2}$', description: 'Rango IPv4 en notación CIDR.', example: '10.220.0.0/24' },
   Ambiente: { enum: ['dev', 'qa', 'pre', 'prod'], description: 'Ambiente.' },
   Salud: { type: 'object', required: ['ok'], properties: { ok: { type: 'boolean' } }, example: { ok: true } },
@@ -219,6 +223,11 @@ const responses = {
   NoAutenticado: { description: 'Sin credenciales válidas (o token inválido, vencido o revocado).', content: json('Error') },
   SinPermiso: { description: 'Tu rol no alcanza (o no eres el dueño de la reserva).', content: json('Error') },
   NoEncontrado: { description: 'No existe.', content: json('Error') },
+  LimiteExcedido: {
+    description: 'Demasiadas peticiones (por actor, por IP, o demasiados intentos de autenticación fallidos desde la IP). Espera lo que dice `Retry-After`.',
+    headers: { 'Retry-After': { description: 'Segundos que conviene esperar antes de reintentar.', schema: { type: 'integer' } } },
+    content: json('ErrorRateLimit'),
+  },
   Validacion: { description: 'La petición no cumple el contrato o una regla (código en `error`).', content: json('ErrorValidacion') },
 };
 const e401 = { 401: ref('NoAutenticado') };
@@ -229,7 +238,7 @@ const e400 = { 400: ref('Validacion') };
 /** @param {{tag: string, summary: string, description?: string, params?: any[], body?: any, ok: any, seguridad?: any[], extra?: any, id?: string}} o */
 const op = ({ tag, summary, description, params, body, ok, seguridad = CON_SESION, extra = {}, id }) => ({
   tags: [tag], summary, ...(description ? { description } : {}), ...(id ? { operationId: id } : {}), ...(params ? { parameters: params } : {}), ...(body ? { requestBody: body } : {}),
-  security: seguridad, responses: { ...ok, ...(seguridad.length ? e401 : {}), ...extra },
+  security: seguridad, responses: { ...ok, ...(seguridad.length ? e401 : {}), 429: ref('LimiteExcedido'), ...extra },
 });
 
 const ID_RESERVA = param('id', 'path', 'Identificador de la reserva (UUID).', { type: 'string', format: 'uuid' });
@@ -271,7 +280,7 @@ function rutas() {
       tag: 'Reservas', id: 'reservar', summary: 'Reserva un rango (tentativo, expira solo)', description: 'Rol `agente` o superior. La reserva **no es definitiva**: expira sola (24 h por defecto, máximo 72) salvo que se confirme. Idempotente con `Idempotency-Key`: misma clave y reserva viva → 200 con `repetida: true`; misma clave con reserva liberada o expirada → 409.',
       params: [CLAVE_IDEM], body: cuerpo('ReservaCrear', schemas.ReservaCrear.example),
       ok: { 201: respuesta('Reservada.', 'ReservaRespuesta'), 200: respuesta('Petición idempotente repetida: devuelve la reserva existente.', 'ReservaRespuesta') },
-      extra: { ...e400, ...e403, 404: respuesta('El pool no existe.', 'Error'), 409: respuesta('Solapamiento, clave de idempotencia ya usada (reserva liberada o expirada) o usada con otros parámetros.', 'ErrorSolapamiento'), 422: respuesta('Ambiente y tipo ambiguos (o sin pools): trae `opciones`.', 'ErrorAmbiguo'), 429: respuesta('Cuota de reservas vigentes excedida.', 'ErrorCuota') },
+      extra: { ...e400, ...e403, 404: respuesta('El pool no existe.', 'Error'), 409: respuesta('Solapamiento, clave de idempotencia ya usada (reserva liberada o expirada) o usada con otros parámetros.', 'ErrorSolapamiento'), 422: respuesta('Ambiente y tipo ambiguos (o sin pools): trae `opciones`.', 'ErrorAmbiguo'), 429: respuesta('Cuota de reservas vigentes excedida (`cuota_excedida`) o demasiadas peticiones (`rate_limit`).', { anyOf: [{ $ref: '#/components/schemas/ErrorCuota' }, { $ref: '#/components/schemas/ErrorRateLimit' }] }) },
     }),
     get: op({ tag: 'Reservas', summary: 'Lista reservas', description: 'Cualquier rol puede ver. El estado es el real: una reservada vencida figura como expirada.', params: [param('estado', 'query', 'Filtra por estado.', { enum: ['reservada', 'confirmada', 'liberada', 'expirada'] }, false), param('pool', 'query', 'Filtra por pool.', { type: 'string' }, false), param('solicitante', 'query', 'Filtra por solicitante.', { type: 'string' }, false), param('limite', 'query', 'Máximo de filas (1 a 500, 200 por defecto).', { type: 'integer' }, false)], ok: { 200: respuesta('Reservas, las más nuevas primero.', { type: 'array', items: { $ref: '#/components/schemas/Reserva' } }) }, extra: e400 }),
   };
@@ -302,7 +311,7 @@ function rutas() {
   // Jira --------------------------------------------------------------------
   p['/api/v1/jira/estado'] = { 'x-alias-legado': '/api/jira/estado', get: op({ tag: 'Jira', summary: 'Estado de la integración saliente con Jira', ok: { 200: respuesta('Estado.', 'JiraEstado') } }) };
   p['/api/v1/jira/simular'] = { 'x-alias-legado': '/api/jira/simular', post: op({ tag: 'Jira', summary: 'Simula un ticket entrante (demo)', body: cuerpo('JiraSimular', schemas.JiraSimular.example), ok: { 200: respuesta('Procesado.', 'JiraResultado') }, extra: { ...e403, 404: respuesta('Sin pool.', 'Error'), 409: respuesta('Sin espacio o solapamiento.', 'Error'), 422: respuesta('No hay pool para ese ambiente y tipo.', 'Error') } }) };
-  p['/webhook/jira'] = { post: op({ tag: 'Jira', summary: 'Webhook de Jira (firmado)', description: 'Firma HMAC-SHA256 en `x-hub-signature-256`, comparada en tiempo constante. En producción sin `JIRA_WEBHOOK_SECRET` queda deshabilitado (503).', params: [param('x-hub-signature-256', 'header', 'sha256=HMAC(cuerpo, JIRA_WEBHOOK_SECRET)', { type: 'string' }, true)], body: cuerpo('JiraTicket', schemas.JiraTicket.example), ok: { 200: respuesta('Asignado.', 'JiraResultado') }, seguridad: publico, extra: { 400: respuesta('Faltan campos.', 'Error'), 401: respuesta('Firma inválida.', 'Error'), 409: respuesta('Sin espacio.', 'Error'), 422: respuesta('Sin pool.', 'Error'), 503: respuesta('Webhook deshabilitado.', 'Error') } }) };
+  p['/webhook/jira'] = { post: op({ tag: 'Jira', summary: 'Webhook de Jira (firmado)', description: 'Firma HMAC-SHA256 en `x-hub-signature-256`, comparada en tiempo constante. En producción sin `JIRA_WEBHOOK_SECRET` queda deshabilitado (503).', params: [param('x-hub-signature-256', 'header', 'sha256=HMAC(cuerpo, JIRA_WEBHOOK_SECRET)', { type: 'string' }, true)], body: cuerpo('JiraTicket', schemas.JiraTicket.example), ok: { 200: respuesta('Asignado.', 'JiraResultado') }, seguridad: publico, extra: { 429: ref('LimiteExcedido'), 400: respuesta('Faltan campos.', 'Error'), 401: respuesta('Firma inválida.', 'Error'), 409: respuesta('Sin espacio.', 'Error'), 422: respuesta('Sin pool.', 'Error'), 503: respuesta('Webhook deshabilitado.', 'Error') } }) };
   return p;
 }
 
@@ -324,6 +333,8 @@ function construirOpenApi({ servidor = '/' } = {}) {
         '**Flujo recomendado:** reservar (con `Idempotency-Key`) → una persona aprueba el cambio en tu pipeline → confirmar con `aprobado_por` y `referencia` → o liberar si algo falla. Una reserva sin confirmar **expira sola**.',
         '',
         '**Versionado:** las rutas `/api/v1/…` son las principales; `/api/…` sigue funcionando como alias compatible.',
+        '',
+        '**Límites:** por actor (token o usuario) y por IP, con ventana deslizante de un minuto (por defecto 120 lecturas y 30 escrituras por actor). Al excederlos, 429 con `Retry-After`. Las respuestas traen `RateLimit-Limit`, `RateLimit-Remaining` y `RateLimit-Reset` (segundos). Los intentos de autenticación fallidos tienen un límite más estricto por IP (freno a la fuerza bruta).',
         '',
         'Todos los errores traen `error` (código estable), `mensaje` (español) y `request_id` (también en la cabecera `X-Request-Id`, que puedes enviar tú para correlacionar).',
       ].join('\n'),

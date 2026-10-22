@@ -188,3 +188,17 @@ create index if not exists tokens_servicio_expira_idx on tokens_servicio (expira
 
 insert into esquema_version (version, descripcion) values (4, 'fase 2: tokens de servicio con rol agente')
   on conflict (version) do nothing;
+
+-- ============================================================================
+-- Fase 5 · límite de peticiones (contadores compartidos por todas las réplicas)
+-- ============================================================================
+-- UNLOGGED: no se escribe en el registro de transacciones (más rápido). Son contadores desechables de 1 minuto: si la base se reinicia, se pierden sin daño.
+create unlogged table if not exists limite_contador (
+  clave   text   not null,                -- p. ej. a:svc:agente-redes:w · ip:10.0.0.5 · f:10.0.0.5 (fallos de autenticación)
+  ventana bigint not null,                -- minuto UNIX (segundos / 60), según el reloj de la base
+  cuenta  int    not null default 0,
+  primary key (clave, ventana)
+);
+
+insert into esquema_version (version, descripcion) values (5, 'fase 5: contadores del limite de peticiones')
+  on conflict (version) do nothing;

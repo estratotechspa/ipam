@@ -35,7 +35,7 @@ async function basicValido(cabecera) {
  * @param {{rechazo?: (motivo: string, req: any) => unknown, autenticarToken?: (token: string) => Promise<any>, auditar?: Function}} [deps]
  * @returns {import('express').RequestHandler}
  */
-function crearAcceso({ rechazo = () => {}, autenticarToken, auditar = async () => {} } = {}) {
+function crearAcceso({ rechazo = () => {}, autenticarToken, auditar = async () => {}, frenoFuerzaBruta } = {}) {
   return async (req, res, next) => {
     if (esPublica(req.path)) return next();
     const modo = config.auth.modo;
@@ -44,10 +44,20 @@ function crearAcceso({ rechazo = () => {}, autenticarToken, auditar = async () =
     // 1) Token de servicio: se evalúa PRIMERO, en cualquier modo (oidc, basic o abierto). Un token inválido es 401 aunque el modo sea abierto.
     //    Sin cookie no hay CSRF: no se exige X-Requested-With.
     const cab = String(req.headers.authorization || '');
+    const trae = /^(Bearer|Basic)\s/i.test(cab);
+    // Freno a la fuerza bruta: una IP con demasiados intentos fallidos en el último minuto queda bloqueada un rato (incluso con credenciales buenas).
+    if (frenoFuerzaBruta && trae) {
+      const b = await frenoFuerzaBruta.bloqueada(req.ip);
+      if (b.bloqueada) {
+        rechazo('fuerza_bruta', req);
+        return res.set('Retry-After', String(b.retryAfter)).status(429).json({ error: 'rate_limit', mensaje: `Demasiados intentos fallidos de autenticación desde esta dirección. Reintenta en ${b.retryAfter} segundo${b.retryAfter === 1 ? '' : 's'}.`, retry_after: b.retryAfter, request_id: contexto.actual().request_id });
+      }
+    }
     if (autenticarToken && /^Bearer\s/i.test(cab)) {
       const r = await autenticarToken(cab.replace(/^Bearer\s+/i, '').trim());
       if (!r.ok) {
         rechazo(`token_${r.motivo}`, req);
+        if (frenoFuerzaBruta) await frenoFuerzaBruta.fallo(req.ip);
         await auditar('token_rechazado', r.nombre ? `svc:${r.nombre}` : 'desconocido', null, { motivo: r.motivo }, req.ip); // nunca el token presentado
         return res.set('WWW-Authenticate', 'Bearer realm="IPAM"').status(401).json({ error: 'token_invalido', mensaje: 'Token inválido, vencido o revocado.', request_id: contexto.actual().request_id });
       }
@@ -59,6 +69,7 @@ function crearAcceso({ rechazo = () => {}, autenticarToken, auditar = async () =
       const u = await basicValido(req.headers.authorization);
       if (u === null) {
         rechazo('credenciales_basic', req);
+        if (frenoFuerzaBruta && trae) await frenoFuerzaBruta.fallo(req.ip);
         return res.set('WWW-Authenticate', 'Basic realm="IPAM"').status(401).send('Autenticación requerida');
       }
       fijar(u, 'admin', 'basic');

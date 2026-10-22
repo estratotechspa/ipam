@@ -6,6 +6,8 @@ const crypto = require('node:crypto');
 
 const SECRET = 'secreto-de-pruebas';
 process.env.JIRA_WEBHOOK_SECRET = SECRET;
+// Estas pruebas hacen muchas escrituras seguidas con un solo actor: se sube el límite de peticiones (la lógica del límite se prueba en limite.test.js).
+Object.assign(process.env, { RATE_LIMIT_POR_MINUTO: '100000', RATE_LIMIT_ESCRITURA_POR_MINUTO: '100000', RATE_LIMIT_IP_POR_MINUTO: '100000', RATE_LIMIT_AUTH_FALLOS_POR_MINUTO: '100000' });
 const hay = !!process.env.DATABASE_URL;
 const opts = { skip: hay ? false : 'sin DATABASE_URL' };
 

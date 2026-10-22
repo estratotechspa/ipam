@@ -24,6 +24,11 @@ data:
   DATABASE_SCHEMA: {{ .Values.config.databaseSchema | quote }}
   MIGRAR_AL_ARRANCAR: {{ .Values.config.migrarAlArrancar | quote }}
   ALLOW_ANONYMOUS: {{ .Values.auth.allowAnonymous | quote }}
+  RATE_LIMIT_POR_MINUTO: {{ .Values.limites.porMinuto | quote }}
+  RATE_LIMIT_ESCRITURA_POR_MINUTO: {{ .Values.limites.escrituraPorMinuto | quote }}
+  RATE_LIMIT_IP_POR_MINUTO: {{ .Values.limites.ipPorMinuto | quote }}
+  RATE_LIMIT_AUTH_FALLOS_POR_MINUTO: {{ .Values.limites.authFallosPorMinuto | quote }}
+  CUOTA_RESERVAS_POR_TOKEN: {{ .Values.limites.cuotaReservasPorToken | quote }}
   RESERVA_TTL_HORAS: {{ .Values.config.reservaTtlHoras | quote }}
   RESERVA_TTL_MAX_HORAS: {{ .Values.config.reservaTtlMaxHoras | quote }}
   CONFIRMACION_EXIGE_APROBADOR: {{ .Values.config.confirmacionExigeAprobador | quote }}

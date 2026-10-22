@@ -49,8 +49,8 @@ const dormir = (ms) => new Promise((ok) => setTimeout(ok, ms));
  */
 async function lanzarServicio(env, { esperar = true } = {}) {
   const puerto = await puertoLibre();
-  const limpio = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(DATABASE|APP_|OIDC_|SESSION_|ALLOW_|ROL$|NODE_ENV|PORT|JIRA|METRICS|RATE_|CUOTA|RESERVA|MIGRAR|EVENTOS|OTEL|TRUST|LOG_|LIMITE|BARREDOR|COOKIE|DB_|TOKEN_|CONFIRMACION)/.test(k)));
-  const proceso = spawn(process.execPath, [path.join(RAIZ, 'src', 'server.js')], { env: { ...limpio, PORT: String(puerto), LOG_LEVEL: 'info', NODE_OPTIONS: '--throw-deprecation', ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
+  const limpio = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(DATABASE|APP_|OIDC_|SESSION_|ALLOW_|ROL$|NODE_ENV|PORT|JIRA|METRICS|RATE_|CUOTA|RESERVA|MIGRAR|EVENTOS|OTEL|TRUST|LOG_|LIMITE|BARREDOR|COOKIE|DB_|TOKEN_|CONFIRMACION|HSTS|APAGADO|SOLICITUD|JSON_)/.test(k)));
+  const proceso = spawn(process.execPath, [path.join(RAIZ, 'src', 'server.js')], { env: { ...limpio, PORT: String(puerto), LOG_LEVEL: 'info', NODE_OPTIONS: '--throw-deprecation', RATE_LIMIT_POR_MINUTO: '100000', RATE_LIMIT_ESCRITURA_POR_MINUTO: '100000', RATE_LIMIT_IP_POR_MINUTO: '100000', RATE_LIMIT_AUTH_FALLOS_POR_MINUTO: '100000', ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
   let texto = '';
   proceso.stdout.on('data', (d) => { texto += d; });
   proceso.stderr.on('data', (d) => { texto += d; });
@@ -62,7 +62,7 @@ async function lanzarServicio(env, { esperar = true } = {}) {
     parar: async (senal = 'SIGTERM') => { if (proceso.exitCode === null) proceso.kill(senal); return salida; },
   };
   if (esperar) {
-    const limite = Date.now() + 15000;
+    const limite = Date.now() + 40000;
     while (Date.now() < limite) {
       if (proceso.exitCode !== null) throw new Error(`El servicio terminó al arrancar (código ${proceso.exitCode}):\n${texto}`);
       if (/IPAM escuchando/.test(texto)) break;

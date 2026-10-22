@@ -162,7 +162,10 @@ function crearRepositorio(db) {
       async insertarUsuarioSiNoExiste(u) {
         return (await q('insert into usuarios (email,nombre,rol) values ($1,$2,$3) on conflict (email) do nothing', [String(u.email).toLowerCase(), u.nombre || '', u.rol])).rowCount;
       },
-      async purgarLimite() { return 0; },
+      /** Borra contadores de minutos ya pasados (el límite solo mira el minuto actual y el anterior). */
+      async purgarLimite() {
+        return (await q('delete from limite_contador where ventana < (extract(epoch from now())::bigint / 60) - 3')).rowCount;
+      },
       async ajustarSecuenciaTicket() {
         await q("select setval('ticket_seq', greatest((select last_value from ticket_seq), coalesce((select max(substring(ticket from 5)::int) from asignaciones where ticket ~ '^NET-[0-9]+$'),0)))");
       },

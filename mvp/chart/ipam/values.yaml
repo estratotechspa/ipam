@@ -32,6 +32,15 @@ config:
   confirmacionExigeAprobador: true   # un token debe declarar quién aprobó (aprobado_por) y la referencia al confirmar (human-in-the-loop)
   barredorIntervaloSegundos: 60
 
+# Límites de peticiones (por actor y por IP, ventana deslizante de 1 minuto; contadores compartidos por todas las réplicas en PostgreSQL).
+# Al excederlos: 429 con Retry-After. Con varios usuarios detrás de una misma IP (NAT) sube ipPorMinuto.
+limites:
+  porMinuto: 120                # lecturas por minuto por actor (token o usuario)
+  escrituraPorMinuto: 30        # escrituras por minuto por actor
+  ipPorMinuto: 600              # peticiones por minuto por dirección IP (suma de todos sus actores)
+  authFallosPorMinuto: 10       # intentos de autenticación fallidos por minuto por IP (freno a la fuerza bruta)
+  cuotaReservasPorToken: 20     # reservas «reservada» vigentes simultáneas por token (cada token puede tener la suya al crearlo)
+
 # Marca: todo opcional y sin reconstruir la imagen.
 branding:
   name: ""                      # vacío = «IPAM»

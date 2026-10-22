@@ -104,3 +104,13 @@ test('Helm: renderiza con allowAnonymous, con appUser, con existingSecret o con 
   assert.match(ttl.stdout, /RESERVA_TTL_HORAS: "12"/);
   assert.match(ttl.stdout, /RESERVA_TTL_MAX_HORAS: "48"/);
 });
+
+test('Helm: los límites de peticiones y la cuota por token son configurables con valores seguros por defecto', conHelm, () => {
+  const defecto = helm('--set', 'auth.allowAnonymous=true').stdout;
+  for (const [k, v] of [['RATE_LIMIT_POR_MINUTO', 120], ['RATE_LIMIT_ESCRITURA_POR_MINUTO', 30], ['RATE_LIMIT_IP_POR_MINUTO', 600], ['RATE_LIMIT_AUTH_FALLOS_POR_MINUTO', 10], ['CUOTA_RESERVAS_POR_TOKEN', 20]]) {
+    assert.match(defecto, new RegExp(`${k}: "${v}"`));
+  }
+  const otro = helm('--set', 'auth.allowAnonymous=true', '--set', 'limites.porMinuto=60', '--set', 'limites.cuotaReservasPorToken=5').stdout;
+  assert.match(otro, /RATE_LIMIT_POR_MINUTO: "60"/);
+  assert.match(otro, /CUOTA_RESERVAS_POR_TOKEN: "5"/);
+});

@@ -19,6 +19,7 @@ const tokensRutas = require('./rutas/tokens');
 const contratoRutas = require('./rutas/contrato');
 const { construirOpenApi } = require('../../openapi');
 const { crearValidador } = require('./validacion');
+const { crearMiddlewareLimite } = require('./middleware/limite');
 
 const RUTAS_IMPORTAR = new Set(['/api/importar', '/api/v1/importar']);
 
@@ -27,7 +28,7 @@ const RUTAS_IMPORTAR = new Set(['/api/importar', '/api/v1/importar']);
  *          estado: {apagando: boolean}, metricas: any, trazas: any}} deps
  */
 function crearApp(deps) {
-  const { config, log, db, repo, casos, auditar, publicador, tickets, estado, metricas, trazas } = deps;
+  const { config, log, db, repo, casos, auditar, publicador, tickets, estado, metricas, trazas, limite } = deps;
   const app = express();
   app.disable('x-powered-by');
   // Detrás de un balanceador: TRUST_PROXY = número de saltos. Así req.ip, req.secure y el rate limit usan los datos reales del cliente.
@@ -59,8 +60,10 @@ function crearApp(deps) {
   marca.montar(app);
   montarOidc(app, { repo, auditar, ruta });
 
-  app.use(crearAcceso({ rechazo: (motivo) => metricas.authRechazo(motivo), autenticarToken: (t) => casos.tokens.autenticar(t), auditar }));
+  app.use(crearAcceso({ rechazo: (motivo) => metricas.authRechazo(motivo), autenticarToken: (t) => casos.tokens.autenticar(t), auditar,
+    frenoFuerzaBruta: { bloqueada: (ip) => limite.bloqueadaPorFallos(ip), fallo: (ip) => limite.registrarFallo(ip) } }));
   app.use((req, _res, next) => { if (req.actor) require('./contexto').actual().actor = req.actor.nombre; next(); });
+  app.use(crearMiddlewareLimite({ limite }));
 
   const audita = (req, accion, detalle) => auditar(accion, req.usuario || 'sistema', req.rol || null, detalle, req.ip);
   sistema.montarSesion(app);
