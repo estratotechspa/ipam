@@ -1,6 +1,6 @@
 image:
   repository: ipam-mvp          # p. ej. ghcr.io/estratotechspa/ipam
-  tag: "0.1.0"
+  tag: "0.3.0"
   pullPolicy: IfNotPresent
 imagePullSecrets: []            # [{name: ghcr-pull}] si el registro es privado
 

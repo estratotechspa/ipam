@@ -1,0 +1,28 @@
+# Registro de cambios
+
+Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y versionado semántico.
+
+## [0.3.0] - 2026-10-21
+### Agregado
+- **Reservas tentativas** para agentes: `POST/GET /api/reservas`, `GET /api/reservas/:id`, confirmar y liberar; TTL de 24 h (máximo 72), idempotencia con `Idempotency-Key`, expiración perezosa más barredor coordinado, y la regla *human-in-the-loop* (un agente confirma con `aprobado_por` y `referencia`).
+- **Tokens de servicio** con rol `agente` o `lector` (`ipam_` + 43 caracteres, solo se guarda el hash, vencen y se revocan); `Authorization: Bearer` se evalúa primero en cualquier modo.
+- **Contrato OpenAPI 3.1** (`/api/openapi.json`), rutas versionadas `/api/v1/…` con alias compatibles `/api/…`, validación de entrada generada desde el contrato y pruebas de contrato.
+- **Límite de peticiones** por actor e IP con ventana deslizante (contadores en PostgreSQL), freno a la fuerza bruta y **cuota de reservas por token**.
+- **Interfaz:** pestañas Reservas (con cuenta regresiva) y Tokens (alta con copia única).
+- **Observabilidad:** `/metrics` (Prometheus), trazas OpenTelemetry opcionales, logs JSON con `request_id`, alertas y dashboard listos para copiar.
+- **Portabilidad:** arquitectura hexagonal, `config` única con `NOMBRE_FILE`, `/healthz` y `/readyz`, `npm run migrar`, `DATABASE_SCHEMA`, roles `ipam_migrador` e `ipam_app`, imagen multi-arquitectura, manifiestos por plataforma en `despliegue/` y guardia de portabilidad.
+- **Calidad y seguridad verificables:** ESLint, Prettier, `tsc --checkJs`, cobertura ≥ 80 %, pruebas de propiedades, regla de lint contra SQL concatenado, escaneos (gitleaks, Semgrep, Trivy, Checkov), SBOM CycloneDX, modelo de amenazas.
+- **CI portable** para GitHub y GitLab con la lógica en `Makefile` y `scripts/ci/`; Renovate.
+- Contrato YAML de redes (propuesta pendiente de validar), ejemplos y pipeline de GitLab para el repo de infraestructura del cliente.
+
+### Cambiado
+- En producción el servicio **no arranca** sin autenticación (salvo `ALLOW_ANONYMOUS=true`); el chart de Helm falla sin autenticación.
+- Los errores no devuelven detalles internos (solo `request_id`); el webhook de Jira sin secreto queda deshabilitado en producción.
+- Las pruebas se ejecutan en serie y cada archivo usa su propia base de datos temporal.
+- Node ≥ 22. Dependabot se reemplaza por Renovate.
+
+### Seguridad
+- Auditoría de solo inserción (disparador y permisos), cabeceras y cookies endurecidas, protección SSRF en el webhook saliente.
+
+## [0.1.0] - 2026-10-20
+- Versión inicial del MVP: pools, asignaciones sin solapamiento, Jira, exportación, OIDC y roles, respaldos, imagen endurecida y CI.

@@ -17,15 +17,17 @@ const fs=require('fs'),p=require('path');const g=JSON.parse(fs.readFileSync(proc
 for(const [r,c] of Object.entries(g)){const f=p.join(process.argv[2],r);if(!fs.existsSync(f)||fs.readFileSync(f,'utf8')!==c){console.log('  ✗ desviado: '+r);mal++}}
 process.exit(mal?1:0)" "$TMP/gen.json" "$RAIZ" && ok "sin deriva" || fallos=$((fallos + 1))
 
-echo "JSON (jq)"
-for f in "$A"/cloud-monitoring/*.json "$RAIZ"/docs/ops/gcp/*.json; do
-  jq -e . "$f" >/dev/null 2>&1 && ok "$(basename "$f")" || mal "$(basename "$f") no es JSON válido"
-done
-
-echo "Equivalencia PrometheusRule ↔ archivo de reglas"
-ruby -ryaml -rjson -e '
-  a = YAML.load_file(ARGV[0]); b = YAML.load_file(ARGV[1])
-  exit(a["spec"]["groups"] == b["groups"] ? 0 : 1)' "$A/prometheusrule.yaml" "$A/reglas-prometheus.yml" && ok "mismas reglas" || mal "las reglas difieren"
+echo "JSON y equivalencia PrometheusRule ↔ archivo de reglas (Node: no depende de jq ni de ruby)"
+node -e "
+const fs=require('fs'),p=require('path');
+const yaml=require(p.join(process.argv[1],'mvp','node_modules','yaml'));
+let mal=0;const ok=(m)=>console.log('  ✓ '+m),no=(m)=>{console.log('  ✗ '+m);mal++};
+const dirs=[p.join(process.argv[1],'docs/ops/alertas/cloud-monitoring'),p.join(process.argv[1],'docs/ops/gcp')];
+for(const d of dirs)for(const f of fs.readdirSync(d).filter(x=>x.endsWith('.json'))){try{JSON.parse(fs.readFileSync(p.join(d,f),'utf8'));ok(f)}catch(e){no(f+' no es JSON válido')}}
+const a=yaml.parse(fs.readFileSync(p.join(process.argv[1],'docs/ops/alertas/prometheusrule.yaml'),'utf8')).spec.groups;
+const b=yaml.parse(fs.readFileSync(p.join(process.argv[1],'docs/ops/alertas/reglas-prometheus.yml'),'utf8')).groups;
+JSON.stringify(a)===JSON.stringify(b)?ok('mismas reglas'):no('las reglas difieren');
+process.exit(mal?1:0)" "$RAIZ" || fallos=$((fallos + 1))
 
 if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
   echo "promtool (Prometheus)"

@@ -53,7 +53,7 @@ module.exports = [
   },
   // La configuración es el único lugar que lee process.env; las pruebas y sus ayudantes preparan el entorno.
   {
-    files: ['src/config.js', 'src/**/*.test.js', 'src/pruebas/**', 'e2e/**', 'playwright.config.js', 'eslint.config.js', '**/*.test.js'],
+    files: ['src/config.js', 'scripts/**', 'src/**/*.test.js', 'src/pruebas/**', 'e2e/**', 'playwright.config.js', 'eslint.config.js', '**/*.test.js'],
     rules: { 'no-restricted-properties': 'off' },
   },
   {

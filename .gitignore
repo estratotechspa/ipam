@@ -15,3 +15,4 @@ playwright-report/
 terraform.tfvars
 plan.bin
 .DS_Store
+.gitlab-ci-local/
