@@ -1,0 +1,37 @@
+# Ajustes para Google Kubernetes Engine (GKE). NO PROBADO en un clúster real: revisa cada valor antes de usarlo.
+# Uso:  helm upgrade --install ipam ../../mvp/chart/ipam -n ipam -f values-gke.yaml --set image.repository=REGION-docker.pkg.dev/PROYECTO/REPO/ipam
+image:
+  repository: REGION-docker.pkg.dev/PROYECTO/REPO/ipam     # Artifact Registry (o el registry que uses)
+
+# Identidad de carga de trabajo (Workload Identity): el pod usa una cuenta de servicio de Google sin llaves descargadas.
+serviceAccount:
+  annotations:
+    iam.gke.io/gcp-service-account: ipam@PROYECTO.iam.gserviceaccount.com
+
+# Base gestionada (Cloud SQL, con IP privada o con el Cloud SQL Auth Proxy). Pooler: modo SESIÓN (puerto directo), no transacción.
+postgres:
+  enabled: false
+config:
+  databaseSchema: public
+  # Saltos de proxy delante de la app. Con el balanceador de aplicaciones de Google suele haber 2 (verifícalo con tu configuración:
+  # compara req.ip en /api/me de un usuario real con su IP verdadera).
+  trustProxy: "2"
+  publicUrl: https://ipam.ejemplo.interno
+secrets:
+  existingSecret: ipam-secrets     # sincronizado desde Secret Manager (External Secrets o el driver CSI)
+  asFiles: true                    # el Secret se monta como archivos y la app lee NOMBRE_FILE
+
+ingress:
+  enabled: true
+  className: gce                   # «gce-internal» para un balanceador interno
+  host: ipam.ejemplo.interno
+  annotations:
+    kubernetes.io/ingress.allow-http: "false"
+    networking.gke.io/managed-certificates: ipam-cert     # recurso ManagedCertificate creado aparte
+    # kubernetes.io/ingress.global-static-ip-name: ipam-ip
+networkPolicy:
+  enabled: true
+  # Permitir la salida hacia la IP privada de Cloud SQL (5432):
+  egressExtra:
+    - to: [{ipBlock: {cidr: 10.250.0.0/24}}]     # FICTICIO: reemplázalo por el rango de tu instancia
+      ports: [{port: 5432, protocol: TCP}]

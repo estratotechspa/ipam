@@ -1,0 +1,35 @@
+# Ajustes para Amazon EKS. NO PROBADO en un clúster real: revisa cada valor antes de usarlo.
+# Uso:  helm upgrade --install ipam ../../mvp/chart/ipam -n ipam -f values-eks.yaml --set image.repository=CUENTA.dkr.ecr.REGION.amazonaws.com/ipam
+image:
+  repository: CUENTA.dkr.ecr.REGION.amazonaws.com/ipam    # ECR (o el registry que uses)
+
+# IRSA: el pod asume un rol de IAM sin llaves de larga duración.
+serviceAccount:
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/ipam     # FICTICIO
+
+# Base gestionada (Amazon RDS / Aurora PostgreSQL). Conexión directa; con RDS Proxy usa un modo compatible con sesiones.
+postgres:
+  enabled: false
+config:
+  trustProxy: "1"                  # un salto: el ALB agrega la IP del cliente a X-Forwarded-For (verifícalo en tu entorno)
+  publicUrl: https://ipam.ejemplo.interno
+secrets:
+  existingSecret: ipam-secrets     # sincronizado desde AWS Secrets Manager (External Secrets o el proveedor CSI)
+  asFiles: true
+
+ingress:
+  enabled: true
+  className: alb                   # AWS Load Balancer Controller
+  host: ipam.ejemplo.interno
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internal
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-path: /readyz
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:REGION:123456789012:certificate/ID   # FICTICIO
+networkPolicy:
+  enabled: true
+  egressExtra:
+    - to: [{ipBlock: {cidr: 10.250.0.0/24}}]     # FICTICIO: rango de la subred de RDS
+      ports: [{port: 5432, protocol: TCP}]

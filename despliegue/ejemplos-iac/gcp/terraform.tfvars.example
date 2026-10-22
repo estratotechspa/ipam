@@ -1,0 +1,6 @@
+# Copia a terraform.tfvars (que NO se versiona). Todo es relleno.
+proyecto    = "mi-proyecto-ejemplo"
+region      = "us-central1"
+ambiente    = "dev"
+imagen      = "us-central1-docker.pkg.dev/mi-proyecto-ejemplo/ipam/ipam:0.3.0"
+url_publica = "https://ipam.ejemplo.interno"
