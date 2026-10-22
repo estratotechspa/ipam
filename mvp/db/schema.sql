@@ -239,6 +239,17 @@ insert into esquema_version (version, descripcion) values (8, 'origen importado 
   on conflict (version) do nothing;
 
 -- ============================================================================
+-- VLAN opcional por segmento: número (1–4094) y nombre de la VLAN o subred. En asignaciones y reservas (la confirmación la copia).
+-- ============================================================================
+alter table asignaciones add column if not exists vlan int check (vlan between 1 and 4094);
+alter table asignaciones add column if not exists vlan_nombre text check (char_length(vlan_nombre) <= 80);
+alter table reservas add column if not exists vlan int check (vlan between 1 and 4094);
+alter table reservas add column if not exists vlan_nombre text check (char_length(vlan_nombre) <= 80);
+
+insert into esquema_version (version, descripcion) values (9, 'vlan opcional por segmento (numero y nombre)')
+  on conflict (version) do nothing;
+
+-- ============================================================================
 -- Permisos del rol de la aplicación (solo si existe `ipam_app`; ver db/roles.sql)
 -- ============================================================================
 -- Se ejecuta con el rol migrador (dueño de las tablas) y se repite en cada migración. Sin el rol, no hace nada (desarrollo local).

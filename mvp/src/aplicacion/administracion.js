@@ -87,7 +87,7 @@ function crearAdministracion({ repo, rolesUsuario, contrasenas, cuentasLocales =
     asignaciones: () => repo.listarAsignaciones(),
     asignacionesParaExcel: () => repo.asignacionesParaExcel(),
     usuarios: () => repo.listarUsuarios(),
-    auditoria: () => repo.listarAuditoria(),
+    auditoria: (filtros = {}) => repo.listarAuditoria(filtros),
     eventos: () => repo.listarEventos(),
     async cambiarRol(email, rol) {
       if (rol !== null && !rolesUsuario.includes(rol)) return fallo('validacion', 'rol inválido');

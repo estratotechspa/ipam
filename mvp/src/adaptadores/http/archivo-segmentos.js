@@ -12,6 +12,8 @@ const ALIAS = {
   ambiente: ['ambiente', 'environment', 'entorno', 'env'],
   tipo: ['tipo', 'type', 'rol', 'role', 'funcion'],
   ticket: ['ticket', 'referencia', 'id', 'ref'],
+  vlan: ['vlan', 'vlan id', 'vlan_id', 'id vlan', 'vid'],
+  vlan_nombre: ['nombre vlan / subred', 'nombre vlan', 'nombre de vlan', 'vlan nombre', 'vlan name', 'nombre subred', 'nombre de subred', 'subnet name'],
   descripcion: ['descripcion', 'description', 'comentario', 'comentarios', 'observacion', 'notas'],
 };
 const sinTildes = (t) =>

@@ -171,3 +171,38 @@ test('disponibilidad por máscara: totales, bloques libres y utilizables de un p
   assert.ok(m24.bloques_libres > 0 && m24.direcciones_libres === m24.bloques_libres * 256);
   assert.equal((await fetch(base + '/api/pools/no-existe/disponibilidad')).status, 404);
 });
+
+test('VLAN opcional: se guarda al asignar, pasa de la reserva a la asignación y se valida', opts, async () => {
+  const r = await post('/api/v1/solicitudes', { pool: 'gke-nodos-qa', vpc: 'vpc-vlan-directa', mascara: 28, vlan: 210, vlan_nombre: 'qa-nodos' });
+  assert.equal(r.status, 201);
+  const a = await r.json();
+  assert.deepEqual({ vlan: a.vlan, nombre: a.vlan_nombre }, { vlan: 210, nombre: 'qa-nodos' });
+
+  const sin = await (await post('/api/v1/solicitudes', { pool: 'gke-nodos-qa', vpc: 'vpc-sin-vlan', mascara: 28 })).json();
+  assert.deepEqual({ vlan: sin.vlan, nombre: sin.vlan_nombre }, { vlan: null, nombre: null });
+
+  for (const vlan of [0, 4095, 'abc'])
+    assert.equal((await post('/api/v1/solicitudes', { pool: 'gke-nodos-qa', vpc: 'v', mascara: 28, vlan })).status, 400, String(vlan));
+
+  const res = await post(
+    '/api/v1/reservas',
+    { pool: 'gke-nodos-qa', vpc: 'vpc-vlan-reserva', mascara: 28, vlan: '300', vlan_nombre: 'Branch_Data' },
+    { 'Idempotency-Key': crypto.randomUUID() },
+  );
+  assert.equal(res.status, 201);
+  const reserva = await res.json();
+  assert.equal(reserva.vlan, 300);
+  const c = await (await post(`/api/v1/reservas/${reserva.id}/confirmar`, {})).json();
+  assert.deepEqual({ vlan: c.asignacion.vlan, nombre: c.asignacion.vlan_nombre }, { vlan: 300, nombre: 'Branch_Data' });
+});
+
+test('historial: la auditoría se puede filtrar por pool y por segmento', opts, async () => {
+  const a = await (await post('/api/v1/solicitudes', { pool: 'gke-nodos-qa', vpc: 'vpc-historial', mascara: 28 })).json();
+  const delSegmento = await (await fetch(`${base}/api/v1/auditoria?pool=gke-nodos-qa&cidr=${encodeURIComponent(a.cidr)}`)).json();
+  assert.ok(delSegmento.length >= 1);
+  assert.ok(delSegmento.every((f) => f.detalle.cidr === a.cidr));
+  assert.equal(delSegmento[0].accion, 'asignar');
+  const delPool = await (await fetch(`${base}/api/v1/auditoria?pool=gke-nodos-qa`)).json();
+  assert.ok(delPool.every((f) => (f.detalle.pool || f.detalle.pool_id) === 'gke-nodos-qa'));
+  assert.equal((await (await fetch(`${base}/api/v1/auditoria?pool=no-existe`)).json()).length, 0);
+});

@@ -2,6 +2,7 @@
 'use strict';
 const { parse, libres } = require('../dominio/cidr');
 const R = require('../dominio/reserva');
+const { validarVlan } = require('../dominio/vlan');
 const { ok, fallo, ConflictoDeDatos } = require('./resultado');
 
 const AMBIENTES = ['dev', 'qa', 'pre', 'prod'];
@@ -14,6 +15,8 @@ const presentar = (r) => ({
   pool_id: r.pool_id,
   cidr: r.cidr,
   vpc: r.vpc,
+  vlan: r.vlan ?? null,
+  vlan_nombre: r.vlan_nombre ?? null,
   solicitante: r.solicitante,
   ticket: r.ticket,
   estado: r.estado,
@@ -67,9 +70,25 @@ function normalizarReserva(e, claveHeader, config) {
   if (!t.ok) return malo(t.error, t.mensaje);
   const k = R.validarClaveIdem(claveHeader);
   if (!k.ok) return malo(k.error, k.mensaje);
+  const v = validarVlan(e);
+  if (!v.ok) return malo(v.error, v.mensaje);
   const { pool, ambiente, tipo } = destino;
   const { cidr, mascara } = tamano;
-  return ok({ datos: { pool, ambiente, tipo, cidr, mascara, vpc: e.vpc.trim(), ticket: t.ticket, ttlHoras: ttl.horas, clave: k.clave } });
+  return ok({
+    datos: {
+      pool,
+      ambiente,
+      tipo,
+      cidr,
+      mascara,
+      vpc: e.vpc.trim(),
+      ticket: t.ticket,
+      ttlHoras: ttl.horas,
+      clave: k.clave,
+      vlan: v.vlan,
+      vlan_nombre: v.vlan_nombre,
+    },
+  });
 }
 
 /** Elige el pool (directo, o único por ambiente y tipo) y comprueba el tamaño pedido contra él. */
@@ -160,7 +179,17 @@ async function reservarEnTransaccion(tx, { actor, d, p, config }) {
     };
   }
   const ticket = d.ticket || (await tx.siguienteTicket());
-  const reserva = await tx.insertarReserva({ pool: p.id, cidr: objetivo, vpc: d.vpc, solicitante: actor.nombre, ticket, ttlHoras: d.ttlHoras, clave: d.clave });
+  const reserva = await tx.insertarReserva({
+    pool: p.id,
+    cidr: objetivo,
+    vpc: d.vpc,
+    solicitante: actor.nombre,
+    ticket,
+    ttlHoras: d.ttlHoras,
+    clave: d.clave,
+    vlan: d.vlan,
+    vlan_nombre: d.vlan_nombre,
+  });
   return ok({ reserva, repetida: false, expiradas });
 }
 

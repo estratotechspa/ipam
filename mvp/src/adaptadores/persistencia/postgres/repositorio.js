@@ -5,13 +5,13 @@ const { ConflictoDeDatos } = require('../../../aplicacion/resultado');
 const { reintentar } = require('./resiliencia');
 const { SOLICITANTE_JIRA } = require('../../../dominio/reserva');
 
-const COLUMNAS_ASIGNACION = 'id, codigo, pool_id, cidr::text, vpc, solicitante, ticket, origen, creado_en';
+const COLUMNAS_ASIGNACION = 'id, codigo, pool_id, cidr::text, vpc, vlan, vlan_nombre, solicitante, ticket, origen, creado_en';
 // Fracción del pool que ocupan los segmentos asignados (para la barra de uso de la interfaz).
 const USO_POOL = `coalesce(sum(2^(32-masklen(a.cidr))),0)::float8 / (2^(32-masklen(p.cidr)))::float8`;
 
 // Reservas: el estado «real» considera el plazo con el reloj de la BASE (no el de cada réplica): una reserva «reservada» vencida cuenta como expirada.
 const ESTADO_EFECTIVO = `case when estado = 'reservada' and expira_en <= now() then 'expirada' else estado end`;
-const COLUMNAS_RESERVA = `id, pool_id, cidr::text, vpc, solicitante, ticket, creado_en, expira_en, resuelto_en, asignacion_id,
+const COLUMNAS_RESERVA = `id, pool_id, cidr::text, vpc, vlan, vlan_nombre, solicitante, ticket, creado_en, expira_en, resuelto_en, asignacion_id,
   ${ESTADO_EFECTIVO} as estado, estado as estado_registrado,
   case when estado = 'reservada' and expira_en > now() then floor(extract(epoch from (expira_en - now())))::int else 0 end as segundos_restantes`;
 const RESERVA_VIGENTE = `estado = 'reservada' and expira_en > now()`;
@@ -83,16 +83,12 @@ function consultas(x) {
     async siguienteTicket() {
       return (await q("select 'NET-' || nextval('ticket_seq') as t")).rows[0].t;
     },
-    async insertarAsignacion({ pool, cidr, vpc, solicitante, ticket, origen }) {
+    async insertarAsignacion({ pool, cidr, vpc, solicitante, ticket, origen, vlan = null, vlan_nombre = null }) {
       return (
-        await q(`insert into asignaciones (pool_id, cidr, vpc, solicitante, ticket, origen) values ($1,$2,$3,$4,$5,$6) returning ${COLUMNAS_ASIGNACION}`, [
-          pool,
-          cidr,
-          vpc,
-          solicitante,
-          ticket,
-          origen,
-        ])
+        await q(
+          `insert into asignaciones (pool_id, cidr, vpc, solicitante, ticket, origen, vlan, vlan_nombre) values ($1,$2,$3,$4,$5,$6,$7,$8) returning ${COLUMNAS_ASIGNACION}`,
+          [pool, cidr, vpc, solicitante, ticket, origen, vlan, vlan_nombre],
+        )
       ).rows[0];
     },
     async asignacionPorId(id) {
@@ -119,14 +115,14 @@ function consultas(x) {
     async contarVigentesDe(solicitante) {
       return (await q(`select count(*)::int as n from reservas where solicitante=$1 and ${RESERVA_VIGENTE}`, [solicitante])).rows[0].n;
     },
-    async insertarReserva({ pool, cidr, vpc, solicitante, ticket, ttlHoras, clave }) {
+    async insertarReserva({ pool, cidr, vpc, solicitante, ticket, ttlHoras, clave, vlan = null, vlan_nombre = null }) {
       return (
         await q(
           `with nueva as (
-           insert into reservas (pool_id, cidr, vpc, solicitante, ticket, clave_idem, expira_en)
-           values ($1,$2,$3,$4,$5,$6, now() + make_interval(hours => $7::int)) returning *)
+           insert into reservas (pool_id, cidr, vpc, solicitante, ticket, clave_idem, expira_en, vlan, vlan_nombre)
+           values ($1,$2,$3,$4,$5,$6, now() + make_interval(hours => $7::int), $8, $9) returning *)
          select ${COLUMNAS_RESERVA} from nueva`,
-          [pool, cidr, vpc, solicitante, ticket, clave, ttlHoras],
+          [pool, cidr, vpc, solicitante, ticket, clave, ttlHoras, vlan, vlan_nombre],
         )
       ).rows[0];
     },
@@ -169,14 +165,10 @@ function consultas(x) {
     async insertarAsignacionDeReserva(r) {
       await q("select set_config('ipam.reserva_confirmando', $1, true)", [r.id]);
       return (
-        await q(`insert into asignaciones (pool_id, cidr, vpc, solicitante, ticket, origen) values ($1,$2,$3,$4,$5,$6) returning ${COLUMNAS_ASIGNACION}`, [
-          r.pool_id,
-          r.cidr,
-          r.vpc,
-          r.solicitante,
-          r.ticket,
-          r.solicitante === SOLICITANTE_JIRA ? 'jira' : 'agente',
-        ])
+        await q(
+          `insert into asignaciones (pool_id, cidr, vpc, solicitante, ticket, origen, vlan, vlan_nombre) values ($1,$2,$3,$4,$5,$6,$7,$8) returning ${COLUMNAS_ASIGNACION}`,
+          [r.pool_id, r.cidr, r.vpc, r.solicitante, r.ticket, r.solicitante === SOLICITANTE_JIRA ? 'jira' : 'agente', r.vlan ?? null, r.vlan_nombre ?? null],
+        )
       ).rows[0];
     },
   };
@@ -239,8 +231,17 @@ function consultasDeAdministracion(db) {
         )
       ).rows[0];
     },
-    async listarAuditoria() {
-      return (await db.query('select id, ts, usuario, rol, accion, detalle, ip, request_id from auditoria order by id desc limit 200')).rows;
+    /** Últimas 200 filas; con `pool` y/o `cidr`, solo las de ese pool o segmento (para el historial de la ficha). */
+    async listarAuditoria({ pool, cidr } = {}) {
+      return (
+        await db.query(
+          `select id, ts, usuario, rol, accion, detalle, ip, request_id from auditoria
+            where ($1::text is null or coalesce(detalle->>'pool', detalle->>'pool_id') = $1)
+              and ($2::text is null or detalle->>'cidr' = $2)
+            order by id desc limit 200`,
+          [pool || null, cidr || null],
+        )
+      ).rows;
     },
     async registrarAuditoria({ usuario, rol, accion, detalle, ip, requestId }) {
       await db.query('insert into auditoria (usuario, rol, accion, detalle, ip, request_id) values ($1,$2,$3,$4,$5,$6)', [
@@ -376,10 +377,10 @@ function crearRepositorio(db) {
       },
       async insertarAsignacionImportada(a) {
         const x = await q(
-          `insert into asignaciones (pool_id,cidr,vpc,solicitante,ticket,origen,creado_en)
-           select $1,$2::cidr,$3,$4,$5,$6,coalesce($7::timestamptz,now())
+          `insert into asignaciones (pool_id,cidr,vpc,solicitante,ticket,origen,creado_en,vlan,vlan_nombre)
+           select $1,$2::cidr,$3,$4,$5,$6,coalesce($7::timestamptz,now()),$8,$9
             where not exists (select 1 from asignaciones where pool_id=$1 and cidr=$2::cidr)`,
-          [a.pool_id, a.cidr, a.vpc, a.solicitante || 'importado', a.ticket, a.origen, a.creado_en || null],
+          [a.pool_id, a.cidr, a.vpc, a.solicitante || 'importado', a.ticket, a.origen, a.creado_en || null, a.vlan ?? null, a.vlan_nombre ?? null],
         );
         return x.rowCount;
       },
@@ -469,7 +470,7 @@ function crearRepositorio(db) {
       const filas = (
         await db.query(
           `select a.id, a.codigo, a.pool_id, p.tipo, p.ambiente, p.proveedor, p.cidr::text as pool_cidr, a.cidr::text, a.vpc,
-                a.solicitante, a.ticket, a.origen, a.creado_en
+                a.vlan, a.vlan_nombre, a.solicitante, a.ticket, a.origen, a.creado_en
            from asignaciones a join pools p on p.id = a.pool_id order by p.ambiente desc, a.pool_id, a.cidr`,
         )
       ).rows;
@@ -483,8 +484,9 @@ function crearRepositorio(db) {
     },
     async exportarDatos() {
       const pools = (await db.query('select id, tipo, ambiente, proveedor, cidr::text from pools order by id')).rows;
-      const asignaciones = (await db.query('select pool_id, cidr::text, vpc, solicitante, ticket, origen, creado_en from asignaciones order by pool_id, cidr'))
-        .rows;
+      const asignaciones = (
+        await db.query('select pool_id, cidr::text, vpc, vlan, vlan_nombre, solicitante, ticket, origen, creado_en from asignaciones order by pool_id, cidr')
+      ).rows;
       const usuarios = (await db.query('select email, nombre, rol from usuarios where rol is not null order by email')).rows;
       return { pools, asignaciones, usuarios };
     },

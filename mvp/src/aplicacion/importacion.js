@@ -40,6 +40,8 @@ function crearImportacion({ repo, eventos }) {
               pool_id: f.pool,
               cidr: f.cidr,
               vpc: f.vpc,
+              vlan: f.vlan,
+              vlan_nombre: f.vlan_nombre,
               solicitante: actor && actor.nombre ? actor.nombre : 'importado',
               ticket: f.ticket,
               origen: 'importado',

@@ -2,6 +2,7 @@
 'use strict';
 const { parse } = require('../dominio/cidr');
 const { ok, fallo, ConflictoDeDatos } = require('./resultado');
+const { validarVlan } = require('../dominio/vlan');
 
 const AMBIENTES = ['dev', 'qa', 'pre', 'prod'];
 const ORIGENES_IMPORTABLES = ['panel', 'jira', 'semilla', 'agente', 'importado'];
@@ -32,6 +33,8 @@ function crearRespaldo({ repo, reloj, rolesUsuario }) {
     for (const a of d.asignaciones) {
       const c = parse(String(a.cidr));
       if (!a.pool_id || !a.vpc || !a.ticket || !c || !c.aligned) return fallo('validacion', `Asignación inválida: ${JSON.stringify(a).slice(0, 120)}`);
+      const v = validarVlan(a);
+      if (!v.ok) return fallo('validacion', `${v.mensaje} (${String(a.cidr).slice(0, 40)})`);
     }
     const r = { pools: 0, asignaciones: 0, omitidas: 0, usuarios: 0 };
     try {

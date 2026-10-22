@@ -31,10 +31,10 @@ function montar(app, { casos, audita, validacion }) {
   });
 
   api(app, 'post', '/solicitudes', requiere('admin'), validacion.cuerpo('Solicitud'), async (req, res) => {
-    const { pool, vpc, cidr, mascara } = req.body || {};
-    const r = await asignaciones.asignar({ pool, vpc, cidr, mascara, solicitante: req.usuario || 'panel', origen: 'panel' });
+    const { pool, vpc, cidr, mascara, vlan, vlan_nombre } = req.body || {};
+    const r = await asignaciones.asignar({ pool, vpc, cidr, mascara, vlan, vlan_nombre, solicitante: req.usuario || 'panel', origen: 'panel' });
     if (!r.ok) return enviarFallo(res, r, { legado: true });
-    await audita(req, 'asignar', { cidr: r.asignacion.cidr, pool, vpc, ticket: r.asignacion.ticket });
+    await audita(req, 'asignar', { cidr: r.asignacion.cidr, pool, vpc, ticket: r.asignacion.ticket, vlan: r.asignacion.vlan });
     res.status(201).json(r.asignacion);
   });
 

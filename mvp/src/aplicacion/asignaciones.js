@@ -2,6 +2,7 @@
 'use strict';
 const { parse, libres, disponibilidad } = require('../dominio/cidr');
 const { ok, fallo } = require('./resultado');
+const { validarVlan } = require('../dominio/vlan');
 
 /**
  * Casos de uso de asignaciones (segmentos definitivos).
@@ -28,12 +29,14 @@ function crearAsignaciones({ repo, eventos, tickets }) {
    * Asigna un segmento. Las asignaciones de un mismo pool se serializan con un bloqueo de transacción; la restricción de
    * exclusión de la base queda como respaldo (también cubre inserciones hechas fuera de la API).
    */
-  async function asignar({ pool, vpc, cidr, mascara, solicitante, origen, ticket }) {
+  async function asignar({ pool, vpc, cidr, mascara, solicitante, origen, ticket, vlan, vlan_nombre }) {
     const p = await repo.obtenerPool(pool);
     if (!p) return fallo('no_encontrado', `Pool «${pool}» no existe.`);
     const base = /** @type {NonNullable<ReturnType<typeof parse>>} */ (parse(p.cidr));
     const invalido = validar({ vpc, cidr, mascara }, base, p);
     if (invalido) return invalido;
+    const v = validarVlan({ vlan, vlan_nombre });
+    if (!v.ok) return fallo('validacion', v.mensaje);
 
     const r = await repo.transaccion(async (tx) => {
       await tx.bloquear(`pool:${pool}`);
@@ -47,7 +50,16 @@ function crearAsignaciones({ repo, eventos, tickets }) {
       const x = await tx.conflicto(pool, objetivo);
       if (x) return fallo('conflicto', 'solapamiento', { conflicto: x, sugeridos: libres(p.cidr, ocup, c.len, 3) });
       const t = ticket || (await tx.siguienteTicket());
-      const asignacion = await tx.insertarAsignacion({ pool, cidr: objetivo, vpc: String(vpc).trim(), solicitante, ticket: t, origen });
+      const asignacion = await tx.insertarAsignacion({
+        pool,
+        cidr: objetivo,
+        vpc: String(vpc).trim(),
+        solicitante,
+        ticket: t,
+        origen,
+        vlan: v.vlan,
+        vlan_nombre: v.vlan_nombre,
+      });
       return ok({ asignacion });
     });
     if (!r.ok) return r;

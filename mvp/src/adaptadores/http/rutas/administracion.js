@@ -43,7 +43,10 @@ function montar(app, { casos, audita, validacion }) {
     await audita(req, 'cambiar_clave', { usuario: r.email });
     res.json({ email: r.email, cambiada: true });
   });
-  api(app, 'get', '/auditoria', requiere('admin'), async (_q, res) => res.json(await admin.auditoria()));
+  api(app, 'get', '/auditoria', requiere('admin'), async (req, res) => {
+    const texto = (v) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 100) : undefined);
+    res.json(await admin.auditoria({ pool: texto(req.query.pool), cidr: texto(req.query.cidr) }));
+  });
   api(app, 'get', '/eventos', async (_q, res) => res.json(await admin.eventos()));
 }
 

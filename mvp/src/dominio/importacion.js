@@ -8,6 +8,7 @@
 //   choca_mismo_pool   se solapa con otro del MISMO pool: no se puede importar (la base lo impide siempre)
 //   invalida           dato inválido (CIDR mal escrito, desalineado, proveedor o ambiente inválido…)
 const { parse, overlap, contenido, n2ip } = require('./cidr');
+const { validarVlan } = require('./vlan');
 
 const AMBIENTES = ['dev', 'qa', 'pre', 'prod'];
 const ESTADOS = ['ok', 'ya_existe', 'solapa_otro_pool', 'choca_mismo_pool', 'invalida'];
@@ -32,7 +33,7 @@ const slug = (/** @type {string} */ t) =>
     .slice(0, 24);
 
 /**
- * @typedef {{n: number, cidr: string, vpc?: string, proveedor?: string, ambiente?: string, tipo?: string, ticket?: string, descripcion?: string}} FilaEntrada
+ * @typedef {{n: number, cidr: string, vpc?: string, proveedor?: string, ambiente?: string, tipo?: string, ticket?: string, descripcion?: string, vlan?: string, vlan_nombre?: string}} FilaEntrada
  * @typedef {{id: string, tipo: string, ambiente: string, proveedor: string, cidr: string}} Pool
  * @typedef {{pool_id: string, cidr: string, vpc?: string}} Ocupado
  * @typedef {NonNullable<ReturnType<typeof parse>>} Cidr
@@ -64,7 +65,9 @@ function validarFila(/** @type {FilaEntrada} */ f, /** @type {{proveedor?: strin
       .trim()
       .slice(0, 120) ||
     'sin-nombre';
-  return { datos: { c, cidr, proveedor, ambiente, tipo, vpc, ticket: String(f.ticket || '').trim() || 'IMPORTADO' } };
+  const v = validarVlan(f);
+  if (!v.ok) return { error: v.mensaje };
+  return { datos: { c, cidr, proveedor, ambiente, tipo, vpc, vlan: v.vlan, vlan_nombre: v.vlan_nombre, ticket: String(f.ticket || '').trim() || 'IMPORTADO' } };
 }
 
 /** Pool destino: el existente más pequeño del mismo proveedor y ambiente que contiene al segmento; si no, uno automático por familia. */
@@ -156,6 +159,8 @@ function analizar({ filas, pools, ocupados, defectos = {} }) {
     const fila = {
       ...base,
       vpc: d.vpc,
+      vlan: d.vlan,
+      vlan_nombre: d.vlan_nombre,
       ticket: d.ticket,
       proveedor: d.proveedor,
       ambiente: d.ambiente,
