@@ -13,6 +13,7 @@ if (hayBase) {
   almacenes.postgres = async () => {
     const b = await crearBaseAislada({ semilla: false });
     const pool = new Pool({ connectionString: b.url, max: 10 });
+    pool.on('error', () => {}); // ver la nota más abajo: el borrado de la base corta conexiones inactivas
     return {
       almacen: crearAlmacenPostgres(pool),
       pool,
@@ -57,6 +58,9 @@ test(
     const b = await crearBaseAislada({ semilla: false });
     const p1 = new Pool({ connectionString: b.url, max: 10 }),
       p2 = new Pool({ connectionString: b.url, max: 10 });
+    // Al borrar la base aislada, PostgreSQL corta las conexiones inactivas: sin este manejador, ese aviso llegaba como
+    // excepción no capturada y la prueba fallaba al azar (no es un error del límite).
+    for (const p of [p1, p2]) p.on('error', () => {});
     try {
       const a1 = crearAlmacenPostgres(p1),
         a2 = crearAlmacenPostgres(p2);
@@ -80,6 +84,7 @@ test(
   async () => {
     const b = await crearBaseAislada({ semilla: false });
     const pool = new Pool({ connectionString: b.url, max: 5 });
+    pool.on('error', () => {}); // ver la nota más abajo: el borrado de la base corta conexiones inactivas
     try {
       const almacen = crearAlmacenPostgres(pool);
       const actual = Number((await pool.query('select (extract(epoch from now())::bigint / 60) as v')).rows[0].v);

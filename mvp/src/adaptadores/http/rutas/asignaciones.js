@@ -9,11 +9,36 @@ const { leerSegmentos } = require('../archivo-segmentos');
 
 /** @param {import('express').Express} app @param {{casos: any, audita: Function}} deps */
 function montar(app, { casos, audita, validacion }) {
-  const { admin, asignaciones, respaldo, importacion } = casos;
+  const { admin, asignaciones, respaldo, importacion, pools } = casos;
 
   api(app, 'get', '/pools', async (req, res) => {
     const { ambiente, tipo } = req.query;
     res.json(await admin.pools({ ambiente: typeof ambiente === 'string' ? ambiente : undefined, tipo: typeof tipo === 'string' ? tipo : undefined }));
+  });
+  // Alta, edición (tipo y proveedor) y baja de bloques base. Solo admin; queda en el historial del pool.
+  api(app, 'post', '/pools', requiere('admin'), validacion.cuerpo('PoolCrear'), async (req, res) => {
+    const r = await pools.crear(req.body);
+    if (!r.ok) return enviarFallo(res, r, { legado: false });
+    const p = r.pool;
+    await audita(req, 'crear_pool', { pool: p.id, cidr: p.cidr, ambiente: p.ambiente, proveedor: p.proveedor, tipo: p.tipo });
+    res.status(201).json(p);
+  });
+  api(app, 'patch', '/pools/:id', requiere('admin'), validacion.cuerpo('PoolEditar'), async (req, res) => {
+    const r = await pools.editar(req.params.id, req.body);
+    if (!r.ok) return enviarFallo(res, r, { legado: false });
+    await audita(req, 'editar_pool', {
+      pool: r.pool.id,
+      antes: { tipo: r.antes.tipo, proveedor: r.antes.proveedor },
+      tipo: r.pool.tipo,
+      proveedor: r.pool.proveedor,
+    });
+    res.json(r.pool);
+  });
+  api(app, 'delete', '/pools/:id', requiere('admin'), async (req, res) => {
+    const r = await pools.eliminar(req.params.id);
+    if (!r.ok) return enviarFallo(res, r, { legado: false });
+    await audita(req, 'eliminar_pool', { pool: r.pool.id, cidr: r.pool.cidr });
+    res.json({ eliminado: r.pool });
   });
   api(app, 'get', '/resumen', async (_q, res) => res.json(await admin.resumen()));
   api(app, 'get', '/asignaciones', async (_q, res) => res.json(await admin.asignaciones()));

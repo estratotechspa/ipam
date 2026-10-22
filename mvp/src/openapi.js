@@ -194,6 +194,28 @@ const schemas = {
       uso_reservado: 0.0039,
     },
   },
+  PoolCrear: {
+    type: 'object',
+    required: ['id', 'tipo', 'ambiente', 'proveedor', 'cidr'],
+    additionalProperties: false,
+    description: 'Bloque base nuevo. No puede solaparse con otro pool del MISMO proveedor y ambiente (entre ambientes o proveedores distintos sí).',
+    properties: {
+      id: { type: 'string', maxLength: 63, description: 'Nombre: minúsculas, números y guiones (p. ej. lan-sucursal-prod).' },
+      tipo: { type: 'string', maxLength: 40, description: 'Nodos, Pods, Servicios, LAN, Gestión…' },
+      ambiente: { $ref: '#/components/schemas/Ambiente' },
+      proveedor: { type: 'string', maxLength: 40, description: 'GCP, On-prem, AWS…' },
+      cidr: { $ref: '#/components/schemas/Cidr' },
+    },
+    example: { id: 'lan-sucursal-prod', tipo: 'LAN', ambiente: 'prod', proveedor: 'On-prem', cidr: '10.40.0.0/16' },
+  },
+  PoolEditar: {
+    type: 'object',
+    required: ['tipo', 'proveedor'],
+    additionalProperties: false,
+    description: 'Solo se editan tipo y proveedor: cambiar el CIDR o el ambiente dejaría segmentos fuera de su pool.',
+    properties: { tipo: { type: 'string', maxLength: 40 }, proveedor: { type: 'string', maxLength: 40 } },
+    example: { tipo: 'LAN', proveedor: 'On-prem' },
+  },
   Resumen: {
     type: 'object',
     required: ['pools', 'asignaciones', 'uso_promedio', 'solapamientos'],
@@ -1122,6 +1144,37 @@ function rutasDeTokens(p) {
   };
 }
 
+/** Alta, edición y baja de pools (solo admin). */
+function rutasDeEdicionDePools(p) {
+  p['/api/v1/pools'].post = op({
+    tag: 'Pools',
+    summary: 'Crea un bloque base (solo admin)',
+    description: 'CIDR alineado de /8 a /30. 409 `pool_existe` si el nombre ya está y `pool_solapado` si choca con otro pool del mismo proveedor y ambiente.',
+    body: cuerpo('PoolCrear', schemas.PoolCrear.example),
+    ok: { 201: respuesta('Creado.', { type: 'object' }, schemas.PoolCrear.example) },
+    extra: { ...e400, ...e403, 409: respuesta('Ya existe o se solapa con otro pool.', 'Error') },
+  });
+  p['/api/v1/pools/{id}'] = {
+    'x-alias-legado': '/api/pools/{id}',
+    patch: op({
+      tag: 'Pools',
+      summary: 'Edita el tipo y el proveedor de un pool (solo admin)',
+      params: [param('id', 'path', 'Id del pool.')],
+      body: cuerpo('PoolEditar', schemas.PoolEditar.example),
+      ok: { 200: respuesta('Editado.', { type: 'object' }) },
+      extra: { ...e400, ...e403, ...e404, 409: respuesta('El proveedor nuevo lo haría solaparse con otro pool.', 'Error') },
+    }),
+    delete: op({
+      tag: 'Pools',
+      summary: 'Elimina un pool vacío (solo admin)',
+      description: 'Solo si no tiene asignaciones, reservas vigentes ni direcciones IP (409 `pool_en_uso` con el detalle).',
+      params: [param('id', 'path', 'Id del pool.')],
+      ok: { 200: respuesta('Eliminado.', { type: 'object' }) },
+      extra: { ...e403, ...e404, 409: respuesta('El pool tiene segmentos, reservas o direcciones.', 'Error') },
+    }),
+  };
+}
+
 function rutasDeAdministracion(p) {
   p['/api/v1/usuarios'] = {
     'x-alias-legado': '/api/usuarios',
@@ -1298,6 +1351,7 @@ function rutas() {
   const p = {};
   rutasDeSistema(p);
   rutasDePoolsYAsignaciones(p);
+  rutasDeEdicionDePools(p);
   rutasDeReservas(p);
   rutasDeTokens(p);
   rutasDeAdministracion(p);

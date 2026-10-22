@@ -174,6 +174,31 @@ function consultas(x) {
   };
 }
 
+/** Edición y baja de pools (dentro de una transacción). */
+function consultasDePools(q) {
+  return {
+    async actualizarPool(id, { tipo, proveedor }) {
+      return (await q('update pools set tipo=$2, proveedor=$3 where id=$1 returning id, tipo, ambiente, proveedor, cidr::text', [id, tipo, proveedor])).rows[0];
+    },
+    /** Qué impide borrar un pool. */
+    async usoDePool(id) {
+      return (
+        await q(
+          `select (select count(*) from asignaciones where pool_id=$1)::int as asignaciones,
+                  (select count(*) from reservas where pool_id=$1 and ${RESERVA_VIGENTE})::int as reservas_vigentes,
+                  0 as direcciones`,
+          [id],
+        )
+      ).rows[0];
+    },
+    /** Borra un pool vacío y su historial de reservas ya resueltas (expiradas o liberadas; las confirmadas no existen sin asignación). */
+    async eliminarPool(id) {
+      await q('delete from reservas where pool_id=$1', [id]);
+      return (await q('delete from pools where id=$1', [id])).rowCount;
+    },
+  };
+}
+
 /** Usuarios, auditoría, eventos, tokens y estadísticas (lo que usa la administración y las métricas). */
 function consultasDeAdministracion(db) {
   return {
@@ -364,6 +389,7 @@ function crearRepositorio(db) {
       async bloquear(clave) {
         await q('select pg_advisory_xact_lock(hashtext($1))', [clave]);
       },
+      ...consultasDePools(q),
       async insertarPoolSiNoExiste(p) {
         return (
           await q('insert into pools (id,tipo,ambiente,proveedor,cidr) values ($1,$2,$3,$4,$5) on conflict (id) do nothing', [

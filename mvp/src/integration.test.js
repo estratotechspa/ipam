@@ -206,3 +206,32 @@ test('historial: la auditoría se puede filtrar por pool y por segmento', opts, 
   assert.ok(delPool.every((f) => (f.detalle.pool || f.detalle.pool_id) === 'gke-nodos-qa'));
   assert.equal((await (await fetch(`${base}/api/v1/auditoria?pool=no-existe`)).json()).length, 0);
 });
+
+test('pools: crear, no duplicar ni solapar (mismo proveedor y ambiente), editar y eliminar solo si está vacío', opts, async () => {
+  const H = { 'Content-Type': 'application/json', 'X-Requested-With': 'ipam' };
+  const llamar = (metodo, ruta, cuerpo) => fetch(base + ruta, { method: metodo, headers: H, body: cuerpo ? JSON.stringify(cuerpo) : undefined });
+  const nuevo = { id: 'lan-prueba-prod', tipo: 'LAN', ambiente: 'prod', proveedor: 'On-prem', cidr: '10.250.0.0/16' };
+  assert.equal((await post('/api/v1/pools', nuevo)).status, 201);
+  assert.equal((await (await post('/api/v1/pools', nuevo)).json()).error, 'pool_existe');
+  const solapa = await post('/api/v1/pools', { ...nuevo, id: 'lan-prueba-2', proveedor: 'on-prem', cidr: '10.250.128.0/17' });
+  assert.deepEqual([solapa.status, (await solapa.json()).error], [409, 'pool_solapado']);
+  // Otro ambiente: el mismo rango sí se permite.
+  assert.equal((await post('/api/v1/pools', { ...nuevo, id: 'lan-prueba-dev', ambiente: 'dev' })).status, 201);
+  assert.equal((await post('/api/v1/pools', { ...nuevo, id: 'mal', cidr: '10.250.0.0/31' })).status, 400);
+
+  const e = await llamar('PATCH', '/api/v1/pools/lan-prueba-prod', { tipo: 'LAN sucursal', proveedor: 'On-prem' });
+  assert.equal((await e.json()).tipo, 'LAN sucursal');
+  assert.equal((await llamar('PATCH', '/api/v1/pools/no-existe', { tipo: 'x', proveedor: 'y' })).status, 404);
+
+  const a = await (await post('/api/v1/solicitudes', { pool: 'lan-prueba-prod', vpc: 'sucursal-1', mascara: 24 })).json();
+  const enUso = await llamar('DELETE', '/api/v1/pools/lan-prueba-prod');
+  assert.deepEqual([enUso.status, (await enUso.json()).error], [409, 'pool_en_uso']);
+  await llamar('DELETE', `/api/v1/asignaciones/${a.id}`, { motivo: 'prueba' });
+  assert.equal((await llamar('DELETE', '/api/v1/pools/lan-prueba-prod')).status, 200);
+  assert.equal((await llamar('DELETE', '/api/v1/pools/lan-prueba-dev')).status, 200);
+  const hist = await (await fetch(`${base}/api/v1/auditoria?pool=lan-prueba-prod`)).json();
+  assert.deepEqual(
+    hist.map((f) => f.accion).filter((x) => x.endsWith('_pool')),
+    ['eliminar_pool', 'editar_pool', 'crear_pool'],
+  );
+});
