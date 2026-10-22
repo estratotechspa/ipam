@@ -40,6 +40,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with: {name: playwright-report, path: mvp/test-results, if-no-files-found: ignore}
 
+  portabilidad:
+    name: Guardia de portabilidad (sin SDK de proveedor, capas limpias, process.env solo en config)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/verificar-portabilidad.sh
+
   chart:
     name: Chart de Helm
     runs-on: ubuntu-latest
@@ -105,8 +112,9 @@ jobs:
             -v "$PWD/mvp/db/schema.sql:/docker-entrypoint-initdb.d/01.sql:ro" -v "$PWD/mvp/db/seed.sql:/docker-entrypoint-initdb.d/02.sql:ro" postgres:16-alpine
           until docker exec db pg_isready -U ipam -d ipam >/dev/null 2>&1; do sleep 2; done; sleep 3
           docker run -d --name app --network ipam-ci --read-only --cap-drop ALL --security-opt no-new-privileges -p 8080:8080 \
-            -e DATABASE_URL=postgres://ipam:ci@db:5432/ipam ipam:ci
-          for i in $(seq 1 20); do curl -fs localhost:8080/api/health && break; sleep 1; done
+            -e DATABASE_URL=postgres://ipam:ci@db:5432/ipam -e ALLOW_ANONYMOUS=true ipam:ci
+          for i in $(seq 1 20); do curl -fs localhost:8080/readyz && break; sleep 1; done
+          curl -fs localhost:8080/healthz
           curl -fs localhost:8080/api/resumen
           curl -fs -o /dev/null -w "xlsx %{http_code}\n" localhost:8080/api/exportar.xlsx
           docker logs app

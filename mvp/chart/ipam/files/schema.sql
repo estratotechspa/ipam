@@ -64,3 +64,40 @@ create table if not exists auditoria (
   ip      text
 );
 create index if not exists auditoria_ts_idx on auditoria (ts desc);
+
+-- ============================================================================
+-- Fase 0 · versión del esquema, trazabilidad y auditoría de solo inserción
+-- ============================================================================
+-- Versión del esquema: la app la verifica en /readyz (no modifica el esquema al arrancar).
+create table if not exists esquema_version (
+  version     int primary key,
+  descripcion text not null,
+  aplicado_en timestamptz not null default now()
+);
+
+-- Correlación: cada fila de auditoría guarda el X-Request-Id de la petición que la originó.
+alter table auditoria add column if not exists request_id text;
+
+-- La auditoría es de solo inserción: ni siquiera el dueño de la tabla puede modificar ni borrar sus filas.
+create or replace function auditoria_solo_insercion() returns trigger language plpgsql as $$
+begin
+  raise exception 'La tabla auditoria es de solo inserción' using errcode = '42501';
+end $$;
+drop trigger if exists trg_auditoria_solo_insercion on auditoria;
+create trigger trg_auditoria_solo_insercion before update or delete on auditoria
+  for each row execute function auditoria_solo_insercion();
+drop trigger if exists trg_auditoria_sin_truncate on auditoria;
+create trigger trg_auditoria_sin_truncate before truncate on auditoria
+  for each statement execute function auditoria_solo_insercion();
+
+-- Estado del barredor: lo comparten todas las réplicas (solo una lo ejecuta a la vez, con un advisory lock).
+create table if not exists barredor_estado (
+  id               int primary key default 1 check (id = 1),
+  ultima_ejecucion timestamptz,
+  duracion_ms      int,
+  instancia        text
+);
+insert into barredor_estado (id) values (1) on conflict (id) do nothing;
+
+insert into esquema_version (version, descripcion) values (2, 'fase 0: version del esquema, auditoria de solo insercion, estado del barredor')
+  on conflict (version) do nothing;

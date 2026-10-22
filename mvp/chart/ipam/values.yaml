@@ -5,6 +5,14 @@ image:
 imagePullSecrets: []            # [{name: ghcr-pull}] si el registro es privado
 
 replicaCount: 1
+terminationGracePeriodSeconds: 30   # debe ser mayor que APAGADO_TIMEOUT_MS (15 s por defecto): el apagado ordenado termina las peticiones en curso
+
+# ServiceAccount de Kubernetes. Para identidad de carga de trabajo (sin llaves de larga duración):
+#   GKE:  {iam.gke.io/gcp-service-account: ipam@PROYECTO.iam.gserviceaccount.com}
+#   EKS:  {eks.amazonaws.com/role-arn: arn:aws:iam::CUENTA:role/ipam}
+#   AKS:  {azure.workload.identity/client-id: <id-del-cliente>}
+serviceAccount:
+  annotations: {}
 
 # Configuración NO secreta (ConfigMap)
 config:
@@ -14,6 +22,10 @@ config:
   publicUrl: ""
   trustProxy: "1"               # saltos de proxy delante de la app (ingress); "" para desactivar
   hsts: false                   # true si el acceso es siempre por HTTPS
+  logLevel: info                # debug | info | warn | error (logs JSON a stdout)
+  role: todos                   # api | worker | todos: qué hace cada réplica (api = solo HTTP, worker = solo barredor)
+  databaseSchema: public        # esquema de PostgreSQL donde viven las tablas (el POC usa «ipam»)
+  migrarAlArrancar: false       # EXCEPCIÓN: aplicar el esquema al arrancar la app. Lo normal es el Job de esquema de este chart.
 
 # Marca: todo opcional y sin reconstruir la imagen.
 branding:
@@ -52,6 +64,9 @@ auth:
 #     APP_USER, APP_PASS, JIRA_WEBHOOK_SECRET y, con OIDC, OIDC_CLIENT_SECRET y SESSION_SECRET (≥ 32 caracteres).
 secrets:
   existingSecret: ""
+  # true = el Secret se monta como archivos (/etc/ipam-secrets/NOMBRE) y la app lee NOMBRE_FILE, en vez de variables de entorno.
+  # Es la forma que usan Secret Manager (CSI driver), Key Vault y Docker secrets; la app funciona igual con las dos.
+  asFiles: false
   appUser: ""                   # vacío = sin clave de acceso en el panel
   appPass: ""
   jiraWebhookSecret: ""         # vacío = se genera

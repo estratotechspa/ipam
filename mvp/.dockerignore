@@ -1,8 +1,14 @@
 node_modules
 .env
+.env.*
+!.env.example
 *.md
 test-results
 playwright-report
 e2e
 playwright.config.js
-src/*.test.js
+**/*.test.js
+src/pruebas
+db/fixtures
+coverage
+.git
