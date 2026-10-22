@@ -139,6 +139,7 @@ async function renderPools() {
   <div class="card"><div class="kpi">${pools.reduce((n, p) => n + p.asignaciones, 0)}</div><div class="sub">Asignaciones activas</div></div>
   <div class="card"><div class="kpi">${pct(total ? ocupadas / total : 0)}</div><div class="sub">Uso total (asignado + reservado, sobre todas las direcciones)</div></div>
   <div class="card"><div class="kpi">${r.solapamientos}</div><div class="sub">Solapamientos (la base de datos los impide)</div></div></div>
+  <div id="pool-nuevo"></div><div id="pools-msg" aria-live="polite"></div>
   <p class="muted leyenda"><span class="muestra asig"></span> asignado <span class="muestra res"></span> reservado · Haz clic en un pool para ver su ficha.</p>
   <div class="card tablewrap"><table><tr><th>Pool</th><th>Tipo</th><th>Ambiente</th><th>Proveedor</th><th>CIDR base</th><th>Asig.</th><th>Reservas</th><th>Uso</th></tr>
   ${pools
@@ -155,6 +156,11 @@ async function renderPools() {
       .forEach((b) => (b.onclick = () => fichaPool(b.dataset.fichaPool)));
     const imp = $('btn-importar');
     if (imp) imp.onclick = () => show('importar');
+    if (puede('admin')) $('pool-nuevo').replaceWith(formularioNuevoPool(renderPools));
+    if (POOLS_AVISO) {
+      msg($('pools-msg'), POOLS_AVISO, 'ok');
+      POOLS_AVISO = null;
+    }
   } catch (e) {
     fail('pools', e);
   }
@@ -1014,6 +1020,349 @@ function formularioNuevaReserva(pools, estado, recargar) {
   );
 }
 
+/* ===== Pools: alta (admin) ===== */
+const PROVEEDORES = ['GCP', 'On-prem', 'AWS', 'Azure'];
+function formularioNuevoPool(recargar) {
+  const campo = (etiqueta, control) => h('label', null, etiqueta, control);
+  const id = h('input', { id: 'np-id', required: true, maxlength: 63, placeholder: 'lan-sucursal-prod', pattern: '[a-z0-9][a-z0-9-]{1,62}' });
+  const tipo = h('input', { id: 'np-tipo', required: true, maxlength: 40, placeholder: 'Nodos, Pods, LAN, Gestión…' });
+  const ambiente = h(
+    'select',
+    { id: 'np-ambiente', required: true },
+    h('option', { value: '' }, 'Elige…'),
+    ['dev', 'qa', 'pre', 'prod'].map((v) => h('option', { value: v }, v)),
+  );
+  const proveedor = h('input', { id: 'np-proveedor', required: true, maxlength: 40, list: 'np-provs', placeholder: 'GCP, On-prem…' });
+  const provs = h(
+    'datalist',
+    { id: 'np-provs' },
+    PROVEEDORES.map((v) => h('option', { value: v })),
+  );
+  const cidr = h('input', { id: 'np-cidr', required: true, placeholder: '10.40.0.0/16' });
+  const estado = h('div', { id: 'np-msg', 'aria-live': 'polite', style: 'flex:1 1 100%' });
+  const boton = h('button', { class: 'btn', type: 'submit', id: 'np-go' }, 'Crear pool');
+  const enviar = async (e) => {
+    e.preventDefault();
+    boton.disabled = true;
+    const r = await api('/api/v1/pools', {
+      body: { id: id.value.trim(), tipo: tipo.value.trim(), ambiente: ambiente.value, proveedor: proveedor.value.trim(), cidr: cidr.value.trim() },
+    });
+    boton.disabled = false;
+    if (!r.ok) return msg(estado, errorApi(r), 'error');
+    POOLS_AVISO = `✔ Pool ${r.data.id} (${r.data.cidr}) creado.`;
+    recargar();
+  };
+  return h(
+    'details',
+    { class: 'card', style: 'margin:0 0 14px' },
+    h('summary', { style: 'cursor:pointer;font-weight:600' }, '＋ Nuevo pool (bloque base)'),
+    h(
+      'p',
+      { class: 'muted', style: 'max-width:760px' },
+      'CIDR alineado de /8 a /30. No puede solaparse con otro pool del mismo proveedor y ambiente; en otro ambiente o proveedor el mismo rango sí se permite.',
+    ),
+    h(
+      'form',
+      { class: 'filtros', 'aria-label': 'Nuevo pool', onsubmit: enviar },
+      campo('Nombre del pool', id),
+      campo('Tipo', tipo),
+      campo('Ambiente', ambiente),
+      campo('Proveedor', proveedor),
+      provs,
+      campo('CIDR', cidr),
+      boton,
+      estado,
+    ),
+  );
+}
+let POOLS_AVISO = null;
+
+/** Acciones de admin en la ficha del pool: editar tipo y proveedor, o eliminarlo si está vacío. */
+function accionesPool(p, cerrar) {
+  const estado = h('div', { 'aria-live': 'polite' });
+  const tipo = h('input', { id: 'ep-tipo', maxlength: 40, value: p.tipo });
+  const proveedor = h('input', { id: 'ep-proveedor', maxlength: 40, value: p.proveedor, list: 'np-provs-ficha' });
+  const guardar = async (e) => {
+    e.preventDefault();
+    const r = await api('/api/v1/pools/' + encodeURIComponent(p.id), { method: 'PATCH', body: { tipo: tipo.value.trim(), proveedor: proveedor.value.trim() } });
+    if (!r.ok) return msg(estado, errorApi(r), 'error');
+    cerrar();
+    show(VISTA);
+    fichaPool(p.id);
+  };
+  const eliminar = async () => {
+    if (!confirm(`¿Eliminar el pool ${p.id} (${p.cidr})? Solo se puede si no tiene segmentos, reservas vigentes ni IPs.`)) return;
+    const r = await api('/api/v1/pools/' + encodeURIComponent(p.id), { method: 'DELETE' });
+    if (!r.ok) return msg(estado, errorApi(r), 'error');
+    POOLS_AVISO = `Pool ${p.id} eliminado.`;
+    cerrar();
+    show('pools');
+  };
+  return h(
+    'details',
+    { class: 'acciones-ficha' },
+    h('summary', null, 'Editar o eliminar este pool'),
+    h(
+      'form',
+      { class: 'filtros', style: 'margin-top:10px', 'aria-label': 'Editar pool', onsubmit: guardar },
+      h('label', null, 'Tipo', tipo),
+      h('label', null, 'Proveedor', proveedor),
+      h(
+        'datalist',
+        { id: 'np-provs-ficha' },
+        PROVEEDORES.map((v) => h('option', { value: v })),
+      ),
+      h('button', { class: 'btn', type: 'submit' }, 'Guardar'),
+      h('button', { class: 'btn peligro', type: 'button', onclick: eliminar }, 'Eliminar pool'),
+    ),
+    h('p', { class: 'muted' }, 'El CIDR y el ambiente no se editan: dejarían segmentos fuera de su pool.'),
+    estado,
+  );
+}
+
+/* ===== Direcciones IP fijas (interfaces de router, switch, firewall…) ===== */
+const ROLES_IP = [
+  ['interfaz', 'Interfaz'],
+  ['gateway', 'Gateway'],
+  ['gestion', 'Gestión'],
+  ['loopback', 'Loopback'],
+  ['vip', 'VIP / HSRP'],
+  ['servidor', 'Servidor'],
+  ['otro', 'Otro'],
+];
+const nombreRol = (r) => (ROLES_IP.find(([v]) => v === r) || [r, r])[1];
+const selectorRol = (id, valor) =>
+  h(
+    'select',
+    { id },
+    ROLES_IP.map(([v, t]) => h('option', { value: v, selected: v === (valor || 'interfaz') }, t)),
+  );
+const camposIp = (pre, d = {}) => ({
+  dispositivo: h('input', { id: pre + '-dispositivo', maxlength: 80, placeholder: 'rtr-core-01', value: d.dispositivo || '' }),
+  interfaz: h('input', { id: pre + '-interfaz', maxlength: 80, placeholder: 'Gi0/1', value: d.interfaz || '' }),
+  rol: selectorRol(pre + '-rol', d.rol),
+  dns: h('input', { id: pre + '-dns', maxlength: 253, placeholder: 'gw.sitio.interno', value: d.dns || '' }),
+  descripcion: h('input', { id: pre + '-descripcion', maxlength: 200, value: d.descripcion || '' }),
+  excepcion: h('input', { id: pre + '-excepcion', maxlength: 200, placeholder: 'solo si está fuera de un segmento', value: d.excepcion || '' }),
+});
+const valoresIp = (c) => Object.fromEntries(Object.entries(c).map(([k, el]) => [k, el.value.trim()]));
+
+/**
+ * Formulario para registrar una IP fija. `pool` fijo (fichas) o elegible (pestaña Direcciones IP).
+ * @param {{prefijo: string, pool?: string, pools?: any[], alGuardar: Function}} o
+ */
+function formularioDireccion({ prefijo, pool, pools, alGuardar }) {
+  const ip = h('input', { id: prefijo + '-ip', required: true, placeholder: '10.20.0.1' });
+  const c = camposIp(prefijo);
+  const selPool = pools
+    ? h(
+        'select',
+        { id: prefijo + '-pool' },
+        h('option', { value: '' }, 'Automático'),
+        pools.map((p) => h('option', { value: p.id }, `${p.id} · ${p.cidr}`)),
+      )
+    : null;
+  const estado = h('div', { id: prefijo + '-msg', 'aria-live': 'polite', style: 'flex:1 1 100%' });
+  const boton = h('button', { class: 'btn', type: 'submit', id: prefijo + '-go' }, 'Registrar IP');
+  const enviar = async (e) => {
+    e.preventDefault();
+    const v = valoresIp(c);
+    const cuerpo = Object.fromEntries(Object.entries({ ip: ip.value.trim(), ...v }).filter(([, x]) => x));
+    const elegido = pool || (selPool && selPool.value);
+    if (elegido) cuerpo.pool = elegido;
+    boton.disabled = true;
+    const r = await api('/api/v1/direcciones', { body: cuerpo });
+    boton.disabled = false;
+    if (!r.ok) {
+      const ops = r.data && r.data.opciones ? ' Opciones: ' + r.data.opciones.map((o) => o.pool + (o.segmento ? ` (${o.segmento})` : '')).join(', ') : '';
+      return msg(estado, errorApi(r) + ops, 'error');
+    }
+    const d = r.data;
+    alGuardar(`✔ ${d.ip} registrada${d.segmento ? ` en ${d.segmento_codigo || d.segmento}` : ' como excepción'}.${d.aviso ? ' ⚠ ' + d.aviso : ''}`);
+  };
+  const campo = (t, el) => h('label', null, t, el);
+  return h(
+    'details',
+    { class: 'card', style: 'margin:0 0 12px' },
+    h('summary', { style: 'cursor:pointer;font-weight:600' }, '＋ Registrar IP fija'),
+    h(
+      'form',
+      { class: 'filtros', style: 'margin-top:10px', 'aria-label': 'Registrar IP fija', onsubmit: enviar },
+      campo('IP', ip),
+      selPool ? campo('Pool (solo si la IP existe en varios)', selPool) : null,
+      campo('Dispositivo', c.dispositivo),
+      campo('Interfaz', c.interfaz),
+      campo('Rol', c.rol),
+      campo('DNS', c.dns),
+      campo('Descripción', c.descripcion),
+      campo('Excepción (motivo)', c.excepcion),
+      boton,
+      estado,
+    ),
+    h('p', { class: 'muted' }, 'La IP se ubica sola en su segmento asignado. Si está fuera de todo segmento, indica el motivo de la excepción.'),
+  );
+}
+
+/** Edita los datos de una IP (no la IP misma). */
+function editarDireccion(d, recargar) {
+  abrirDialogo((dlg, cerrar) => {
+    const c = camposIp('ed', d);
+    const estado = h('div', { 'aria-live': 'polite' });
+    const guardar = async (e) => {
+      e.preventDefault();
+      const v = valoresIp(c);
+      const cuerpo = Object.fromEntries(Object.entries(v).map(([k, x]) => [k, x || null]));
+      cuerpo.rol = v.rol;
+      const r = await api('/api/v1/direcciones/' + d.id, { method: 'PATCH', body: cuerpo });
+      if (!r.ok) return msg(estado, errorApi(r), 'error');
+      cerrar();
+      recargar();
+    };
+    const campo = (t, el) => h('label', null, t, el);
+    dlg.append(
+      h('h3', null, `Editar ${d.ip}`),
+      h(
+        'form',
+        { onsubmit: guardar, 'aria-label': 'Editar IP' },
+        campo('Dispositivo', c.dispositivo),
+        campo('Interfaz', c.interfaz),
+        campo('Rol', c.rol),
+        campo('DNS', c.dns),
+        campo('Descripción', c.descripcion),
+        d.asignacion_id ? null : campo('Excepción (motivo, obligatorio)', c.excepcion),
+        estado,
+        h(
+          'div',
+          { class: 'fila-botones' },
+          h('button', { type: 'button', class: 'btn sec', onclick: cerrar }, 'Cancelar'),
+          h('button', { type: 'submit', class: 'btn' }, 'Guardar'),
+        ),
+      ),
+    );
+  });
+}
+
+/** Tabla de IPs fijas. `conSegmento` agrega la columna del segmento o la excepción. */
+function tablaDirecciones(lista, recargar, { conSegmento = true } = {}) {
+  const eliminar = async (d) => {
+    if (!confirm(`¿Eliminar ${d.ip}${d.dispositivo ? ` (${d.dispositivo} ${d.interfaz || ''})` : ''}?`)) return;
+    const r = await api('/api/v1/direcciones/' + d.id, { method: 'DELETE' });
+    if (!r.ok) alert(errorApi(r));
+    recargar();
+  };
+  return tabla(
+    'Direcciones IP fijas',
+    ['IP', 'Dispositivo', 'Interfaz', 'Rol', 'DNS', 'Descripción', ...(conSegmento ? ['Segmento / excepción'] : []), 'Acciones'],
+    lista.map((d) =>
+      h(
+        'tr',
+        null,
+        h('td', null, h('code', null, d.ip)),
+        h('td', null, d.dispositivo || '—'),
+        h('td', null, d.interfaz || '—'),
+        h('td', null, nombreRol(d.rol)),
+        h('td', null, d.dns || '—'),
+        h('td', null, d.descripcion || '—'),
+        conSegmento
+          ? h(
+              'td',
+              null,
+              d.asignacion_id
+                ? h('button', { type: 'button', class: 'enlace', onclick: () => fichaAsignacion(d.asignacion_id) }, d.segmento_codigo || d.segmento)
+                : h('span', { class: 'tag imp-aviso', title: d.excepcion || '' }, 'Excepción: ' + (d.excepcion || '')),
+            )
+          : null,
+        h(
+          'td',
+          null,
+          h(
+            'div',
+            { class: 'acciones' },
+            puede('agente') && h('button', { type: 'button', class: 'btn sec', onclick: () => editarDireccion(d, recargar) }, 'Editar'),
+            puede('admin') && h('button', { type: 'button', class: 'btn peligro', onclick: () => eliminar(d) }, 'Eliminar'),
+          ),
+        ),
+      ),
+    ),
+    'Todavía no hay IPs fijas registradas aquí.',
+  );
+}
+
+/** Contenido de la pestaña «Direcciones IP» de una ficha (pool o segmento). */
+async function panelDirecciones({ filtro, pool, resumen }) {
+  const cont = h('div');
+  const estado = h('div', { 'aria-live': 'polite' });
+  const cargar = async (aviso) => {
+    const lista = await get('/api/v1/direcciones?' + new URLSearchParams(filtro));
+    cont.replaceChildren(
+      resumen ? h('p', { class: 'muted' }, resumen(lista)) : '',
+      estado,
+      puede('agente') ? formularioDireccion({ prefijo: 'fi', pool, alGuardar: cargar }) : '',
+      tablaDirecciones(lista, () => cargar(), { conSegmento: !filtro.asignacion }),
+    );
+    msg(estado, aviso || '', 'ok');
+  };
+  await cargar();
+  return cont;
+}
+
+/* ===== Pestaña «Direcciones IP»: todas, con buscador ===== */
+const IPS = { q: '', aviso: null };
+async function renderIps() {
+  const raiz = $('ips');
+  try {
+    const [lista, pools] = await Promise.all([get('/api/v1/direcciones?' + new URLSearchParams(IPS.q ? { q: IPS.q } : {})), get('/api/v1/pools')]);
+    const estado = h('div', { id: 'ips-msg', 'aria-live': 'polite' });
+    const buscador = h('input', {
+      id: 'ips-buscar',
+      type: 'search',
+      value: IPS.q,
+      placeholder: 'IP, equipo, interfaz, DNS…',
+      oninput: (e) => {
+        IPS.q = e.target.value;
+        clearTimeout(IPS.deb);
+        IPS.deb = setTimeout(async () => {
+          await renderIps();
+          const el = $('ips-buscar');
+          el.focus();
+          el.setSelectionRange(IPS.q.length, IPS.q.length);
+        }, 250);
+      },
+    });
+    raiz.replaceChildren(
+      h('h2', null, 'Direcciones IP fijas'),
+      h(
+        'p',
+        { class: 'muted', style: 'max-width:760px' },
+        'IPs de interfaces de routers, switches y firewalls, gateways, VIP, gestión… Normalmente dentro de un segmento asignado; si no, como excepción con su motivo. Busca por IP, equipo o interfaz para saber qué IP tiene cada interfaz.',
+      ),
+      estado,
+      puede('agente')
+        ? formularioDireccion({
+            prefijo: 'ni',
+            pools,
+            alGuardar: (aviso) => {
+              IPS.aviso = aviso;
+              renderIps();
+            },
+          })
+        : '',
+      h(
+        'form',
+        { class: 'filtros', role: 'search', 'aria-label': 'Buscar direcciones IP', onsubmit: (e) => e.preventDefault() },
+        h('label', null, 'Buscar', buscador),
+      ),
+      tablaDirecciones(lista, renderIps),
+    );
+    if (IPS.aviso) {
+      msg(estado, IPS.aviso, 'ok');
+      IPS.aviso = null;
+    }
+  } catch (e) {
+    fail('ips', e);
+  }
+}
+
 /* ===== Ficha de detalle (panel lateral, al estilo de NetBox): un pool o un segmento, con su historial ===== */
 const ip2n = (ip) => ip.split('.').reduce((n, o) => n * 256 + Number(o), 0);
 const n2ip = (n) => [24, 16, 8, 0].map((s) => Math.floor(n / 2 ** s) % 256).join('.');
@@ -1038,9 +1387,25 @@ const ACCIONES = {
   liberar_reserva: 'liberó la reserva de',
   jira_reserva_creada: 'Jira reservó',
   jira_reserva_aprobada: 'Jira registró la aprobación de',
+  registrar_ip: 'registró la IP',
+  editar_ip: 'editó la IP',
+  eliminar_ip: 'eliminó la IP',
+  crear_pool: 'creó el pool',
+  editar_pool: 'editó el pool',
+  eliminar_pool: 'eliminó el pool',
 };
 const describir = (d = {}) =>
-  [d.cidr, d.vpc && `para ${d.vpc}`, d.vlan && `VLAN ${d.vlan}`, d.ticket && `ticket ${d.ticket}`, d.motivo && `motivo: «${d.motivo}»`]
+  [
+    d.ip || d.cidr,
+    d.ip && d.cidr && `en ${d.cidr}`,
+    (d.dispositivo || d.interfaz) && [d.dispositivo, d.interfaz].filter(Boolean).join(' '),
+    d.excepcion && `excepción: «${d.excepcion}»`,
+    d.tipo && d.proveedor && `${d.tipo} · ${d.proveedor}`,
+    d.vpc && `para ${d.vpc}`,
+    d.vlan && `VLAN ${d.vlan}`,
+    d.ticket && `ticket ${d.ticket}`,
+    d.motivo && `motivo: «${d.motivo}»`,
+  ]
     .filter(Boolean)
     .join(' · ');
 
@@ -1111,7 +1476,7 @@ async function fichaPool(id) {
     [
       {
         nombre: 'Detalle',
-        construir: async () => {
+        construir: async (cerrar) => {
           const d = await get('/api/v1/pools/' + encodeURIComponent(id) + '/disponibilidad');
           const mayor = d.por_mascara.find((x) => x.bloques_libres > 0);
           return h(
@@ -1133,6 +1498,7 @@ async function fichaPool(id) {
               ['Asignaciones', fmt(p.asignaciones)],
               ['Reservas vigentes', fmt(p.reservas_vigentes || 0)],
             ]),
+            puede('admin') ? accionesPool(p, cerrar) : null,
           );
         },
       },
@@ -1182,6 +1548,15 @@ async function fichaPool(id) {
             '',
           );
         },
+      },
+      {
+        nombre: 'Direcciones IP',
+        construir: () =>
+          panelDirecciones({
+            filtro: { pool: id },
+            pool: id,
+            resumen: (l) => `${fmt(l.length)} IPs fijas registradas en el pool (incluidas las excepciones).`,
+          }),
       },
       puede('admin') && { nombre: 'Historial', construir: () => historial({ pool: id }) },
     ].filter(Boolean),
@@ -1258,6 +1633,15 @@ async function fichaAsignacion(id) {
                 )
               : null,
           ),
+      },
+      {
+        nombre: 'Direcciones IP',
+        construir: () =>
+          panelDirecciones({
+            filtro: { asignacion: a.id },
+            pool: a.pool_id,
+            resumen: (l) => `${fmt(l.length)} de ${fmt(r.utilizables)} direcciones utilizables registradas como IP fija (${r.primera} – ${r.ultima}).`,
+          }),
       },
       puede('admin') && { nombre: 'Historial', construir: () => historial({ pool: a.pool_id, cidr: a.cidr }) },
     ].filter(Boolean),
@@ -1632,6 +2016,7 @@ function render(t) {
     tokens: renderTokens,
     usuarios: renderUsuarios,
     importar: renderImportar,
+    ips: renderIps,
   })[t]();
 }
 

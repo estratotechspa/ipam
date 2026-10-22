@@ -115,6 +115,8 @@ function crearApp(deps) {
   contratoRutas.montar(app, dep);
 
   app.use(express.static(path.join(__dirname, '..', '..', '..', 'public')));
+  // Swagger UI para la página /api.html (archivos estáticos del paquete; detrás del mismo acceso que la interfaz).
+  app.use('/vendor/swagger-ui', express.static(path.dirname(require.resolve('swagger-ui-dist/package.json'))));
   app.use(noEncontrada);
   app.use(manejadorDeErrores(log));
   return app;

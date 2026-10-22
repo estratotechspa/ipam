@@ -74,10 +74,10 @@ test('el diálogo de token se maneja con teclado: Escape cierra y devuelve el fo
   await abrir.focus();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('dialog')).toBeVisible();
-  await page.getByLabel('Nombre').fill('Nombre Inválido');
+  await page.getByRole('dialog').getByLabel('Nombre').fill('Nombre Inválido');
   await page.getByRole('button', { name: 'Crear token' }).last().click();
   await expect(page.getByRole('dialog')).toBeVisible(); // el formulario no se envía con un nombre inválido
-  expect(await page.getByLabel('Nombre').evaluate((e) => e.validity.patternMismatch)).toBe(true);
+  expect(await page.getByRole('dialog').getByLabel('Nombre').evaluate((e) => e.validity.patternMismatch)).toBe(true);
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(abrir).toBeFocused();

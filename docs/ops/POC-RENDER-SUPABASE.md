@@ -16,6 +16,7 @@ Ver el informe final. Este documento describe cómo hacerlo; los comandos los ej
    ```
 4. Migra con el rol migrador: `DATABASE_URL_MIGRACION='postgres://ipam_migrador.<ref>:…@<pooler>:5432/postgres?sslmode=require' DATABASE_SCHEMA=ipam npm run migrar` (o el workflow manual «Migrar POC» / el trabajo `poc:migrar`).
 5. Como administrador: `mvp/db/supabase/01-rls.sql` (RLS) y, si quieres datos de ejemplo, `mvp/db/seed-poc.sql` (**rangos ficticios**).
+6. **Cada vez que una migración agregue tablas** (p. ej. la versión 10 agrega `direcciones_ip`), vuelve a ejecutar `01-rls.sql` como administrador: es idempotente y deja la tabla nueva con RLS activo como las demás.
 
 ## 2 · Cadena de conexión
 Usa el **pooler en modo sesión, puerto 5432**, con `sslmode=require`; usuario `ipam_app.<ref-del-proyecto>`. **No uses el puerto 6543** (modo transacción): el IPAM usa advisory locks y `set_config` de sesión, que no sobreviven entre transacciones. Es una limitación conocida de `sslmode=require` en libpq: cifra pero no verifica el certificado; para verificarlo, descarga la CA del proyecto y úsala en `DATABASE_SSL_CA`.

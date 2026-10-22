@@ -45,6 +45,7 @@ Debajo, una fila por pool: su **tipo** (Nodos, Pods, Servicios), **ambiente**, *
 
 **Cómo se calcula el uso de un pool:** se suman las direcciones de cada segmento asignado o reservado (un `/24` son 256, incluidas la de red y la de difusión) y se dividen por las direcciones del pool. Ejemplo: un `/20` (4.096) con un `/24` asignado y un `/25` reservado → 256 + 128 = 384 → **9,4 %** (6,3 % asignado + 3,1 % reservado).
 
+- **＋ Nuevo pool (bloque base)** (solo admin): nombre (minúsculas, números y guiones), tipo, ambiente, proveedor y CIDR (alineado, de `/8` a `/30`). No puede solaparse con otro pool del **mismo proveedor y ambiente**; en otro ambiente o proveedor el mismo rango sí se permite (p. ej. el mismo `10.40.0.0/16` en dev on-prem y en qa on-prem). Para **editar** el tipo o el proveedor, o **eliminar** un pool vacío (sin segmentos, reservas vigentes ni IPs), abre su ficha → «Editar o eliminar este pool». El CIDR y el ambiente no se editan: dejarían segmentos fuera de su pool.
 - **Haz clic en el nombre de un pool** para abrir su **ficha** (ver más abajo).
 - **Importar segmentos** (solo admin) abre la importación masiva (ver más abajo); **← Volver a Pools** regresa.
 - **Exportar a Excel** baja una planilla con todo.
@@ -53,9 +54,19 @@ Debajo, una fila por pool: su **tipo** (Nodos, Pods, Servicios), **ambiente**, *
 
 ### Ficha de detalle — «todo sobre un pool o un segmento»
 Al hacer clic en un **pool** (pestaña Pools) o en el **ID** de una asignación (`ASG-000123`, pestaña Asignaciones) se abre un panel a la derecha, como en NetBox. Se cierra con **Cerrar** o la tecla Esc.
-- **Ficha de un pool:** *Detalle* (CIDR, primera y última dirección, direcciones y utilizables, libres, **bloque libre más grande**, uso asignado y reservado), *Segmentos* (todo lo asignado y reservado dentro del pool, ordenado; un clic en un segmento abre su ficha) e *Historial*.
-- **Ficha de un segmento:** ID, CIDR, primera y última dirección, máscara, direcciones y utilizables, pool (con enlace a su ficha), ambiente, proveedor, proyecto/VPC, **VLAN**, ticket, origen, quién lo pidió y cuándo; *Historial*; y **Liberar segmento** (solo admin).
+- **Ficha de un pool:** *Detalle* (CIDR, primera y última dirección, direcciones y utilizables, libres, **bloque libre más grande**, uso asignado y reservado; el admin puede editarlo o eliminarlo), *Segmentos* (todo lo asignado y reservado dentro del pool, ordenado; un clic en un segmento abre su ficha), *Direcciones IP* (todas las IPs fijas del pool, incluidas las excepciones) e *Historial*.
+- **Ficha de un segmento:** ID, CIDR, primera y última dirección, máscara, direcciones y utilizables, pool (con enlace a su ficha), ambiente, proveedor, proyecto/VPC, **VLAN**, ticket, origen, quién lo pidió y cuándo; *Direcciones IP* (las IPs fijas del segmento, cuántas de las utilizables están registradas y el formulario para agregar otra); *Historial*; y **Liberar segmento** (solo admin; no se puede si tiene IPs registradas).
 - **Historial** (solo admin): quién asignó, reservó, aprobó o liberó ese pool o segmento, cuándo y con qué motivo. Sale de la bitácora de auditoría, que se sigue registrando aunque ya no tenga pestaña propia. Los segmentos importados o de la semilla muestran su origen y fecha en *Detalle*.
+
+### Direcciones IP — «qué IP tiene cada interfaz»
+IPs fijas de **interfaces de routers, switches y firewalls**, gateways, VIP/HSRP, gestión, loopbacks o servidores. Cada una lleva: **IP**, **dispositivo** (texto libre, p. ej. `rtr-core-01`), **interfaz** (`Gi0/1`, `xe-0/0/1.100`, `ethernet1/1`…), **rol**, **DNS** y **descripción**.
+- **Registrar IP fija** (solicitante y admin; también los agentes por API): escribe la IP y el IPAM la **ubica sola en su segmento asignado**. Avisa si es la dirección de red o de difusión del segmento.
+- **Excepciones:** si la IP está **fuera de todo segmento** (dentro de un pool o fuera de todo pool, como la IP pública de un firewall), hay que escribir el **motivo de la excepción**; se ve marcada como «Excepción» en las tablas.
+- Si el mismo rango privado existe en varios pools (p. ej. dev y qa), elige el **pool** en el formulario.
+- **Buscar** por IP, equipo, interfaz, DNS o descripción: escribe `rtr-core-01` y ves todas sus interfaces con su IP.
+- **Editar** cambia los datos (no la IP: para eso se elimina y se registra otra). **Eliminar** es solo de admin.
+- Una IP no se repite dentro de un pool. Un segmento con IPs registradas no se puede liberar, ni un pool con IPs eliminar.
+- También están en la ficha de cada segmento y pool, en la hoja «Direcciones IP» del Excel y en el respaldo JSON. Por ahora el dispositivo es texto libre; más adelante puede haber un catálogo de equipos.
 
 ### Asignaciones — «lo ya entregado»
 La lista oficial de segmentos definitivos: **ID** (`ASG-000123`, único por asignación: el mismo rango, si se libera y se vuelve a asignar, tendrá otro ID), **segmento**, **pool**, **proyecto/VPC**, **VLAN** (número y nombre, si se indicó), cuántas **direcciones** son, quién lo **solicitó**, el **origen** (`panel`, `jira`, `agente`, `semilla`, `importado`), el **ticket** y la **fecha**.
@@ -133,6 +144,9 @@ Detalle técnico en [API-Y-AGENTES](API-Y-AGENTES.md) y [ARQUITECTURA](ARQUITECT
 - **Saber cuánto queda en un pool:** pestaña Pools, barra de uso; o clic en el pool → ficha (bloque libre más grande).
 - **Ver quién tocó un segmento (admin):** clic en su ID → ficha → Historial.
 - **Cargar el inventario existente (admin):** Pools → Importar segmentos.
+- **Crear un bloque base nuevo (admin):** Pools → Nuevo pool.
+- **Registrar la IP de una interfaz:** ficha del segmento → Direcciones IP, o la pestaña Direcciones IP.
+- **Probar la API:** enlace «API» arriba a la derecha (`/api.html`).
 - **Devolver un rango:** Asignaciones → Liberar (admin).
 - **Entregar un informe:** Exportar a Excel.
 - **Crear una llave para un pipeline:** pestaña Tokens.

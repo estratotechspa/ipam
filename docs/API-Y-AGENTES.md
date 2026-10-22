@@ -1,6 +1,6 @@
 # API y agentes
 
-La referencia exacta es el contrato **OpenAPI 3.1** que sirve el propio IPAM: `GET /api/v1/openapi.json`. Esta guía es el recorrido práctico. Todos los ejemplos usan rangos **ficticios** y variables de entorno; **nunca pegues un token real en un chat, un commit ni un log**.
+La referencia exacta es el contrato **OpenAPI 3.1** que sirve el propio IPAM: `GET /api/v1/openapi.json`. Para **verlo y probarlo en el navegador**, abre **`/api.html`** (enlace «API» arriba a la derecha de la interfaz): cada llamada tiene «Try it out»; con **Authorize** pegas un token para probar como un agente. También puedes importar el JSON en Postman o Insomnia. Esta guía es el recorrido práctico. Todos los ejemplos usan rangos **ficticios** y variables de entorno; **nunca pegues un token real en un chat, un commit ni un log**.
 
 ```bash
 export IPAM_URL=https://ipam-poc.onrender.com     # tu instancia
@@ -62,6 +62,18 @@ curl -s -X POST -H "Authorization: Bearer $IPAM_TOKEN" -H 'Content-Type: applica
 curl -s -X DELETE -H "Authorization: Bearer $IPAM_TOKEN" "$IPAM_URL/api/v1/reservas/<id>"
 ```
 Si nadie confirma ni libera, la reserva **expira sola** (24 h por defecto, 72 h máximo).
+
+**Direcciones IP fijas** (interfaces de router, switch, firewall…): el agente registra la IP y el IPAM la ubica sola en su segmento.
+```bash
+curl -s -H "Authorization: Bearer $IPAM_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"ip":"10.220.16.1","dispositivo":"rtr-core-01","interfaz":"Gi0/1","rol":"gateway"}' \
+  "$IPAM_URL/api/v1/direcciones"
+# ¿Qué IP tiene cada interfaz de un equipo?
+curl -s -H "Authorization: Bearer $IPAM_TOKEN" "$IPAM_URL/api/v1/direcciones?q=rtr-core-01"
+```
+Si la IP está fuera de todo segmento asignado, es una **excepción**: agrega `"excepcion":"motivo"`. Si cae en varios pools (rangos privados repetidos en distintos ambientes), la respuesta es `422 ip_ambigua` con `opciones`: repite con `"pool":"…"`. Roles: `rol` ∈ `interfaz`, `gateway`, `gestion`, `loopback`, `vip`, `servidor`, `otro`. Editar: `PATCH /api/v1/direcciones/{id}`; eliminar: solo admin.
+
+**Pools (bloques base, solo admin)**: `POST /api/v1/pools` (`id`, `tipo`, `ambiente`, `proveedor`, `cidr` de /8 a /30), `PATCH /api/v1/pools/{id}` (tipo y proveedor) y `DELETE /api/v1/pools/{id}` (solo vacío). Un pool no puede solaparse con otro del mismo proveedor y ambiente.
 
 ## 4 · Errores y límites
 Los errores son JSON con `error`, `mensaje` y `request_id` (el mismo que viaja en los logs y la auditoría; pásalo al soporte). Códigos habituales: `400` validación, `401` sin credenciales, `403` rol insuficiente, `404`, `409` solapamiento o estado inválido, `429` límite o cuota (con `Retry-After`). El límite por minuto es configurable ([CONFIGURACION](CONFIGURACION.md)).
