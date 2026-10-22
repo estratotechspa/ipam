@@ -4,7 +4,11 @@
 const { crearWebhook } = require('./webhook');
 
 /** Adaptador «log»: cada evento queda como una línea JSON en stdout. */
-const adaptadorLog = (log) => ({ publicar: async (tipo, detalle = {}) => { log.info('evento', { evento: tipo, detalle }); } });
+const adaptadorLog = (log) => ({
+  publicar: async (tipo, detalle = {}) => {
+    log.info('evento', { evento: tipo, detalle });
+  },
+});
 
 /** Guarda el evento en la tabla `eventos` (lo muestra la pestaña Jira). */
 const adaptadorTabla = (repo) => ({ publicar: (tipo, detalle = {}) => repo.registrarEvento(tipo, detalle) });

@@ -12,7 +12,14 @@ function crearPlanificador({ ejecutar, intervaloMs, log }) {
   async function tick() {
     if (enCurso || detenido) return;
     enCurso = true;
-    try { await ejecutar(); } catch (e) { log.error('El barredor falló (se reintentará)', e); } finally { enCurso = false; programar(); }
+    try {
+      await ejecutar();
+    } catch (e) {
+      log.error('El barredor falló (se reintentará)', e);
+    } finally {
+      enCurso = false;
+      programar();
+    }
   }
   function programar() {
     if (detenido) return;
@@ -20,10 +27,20 @@ function crearPlanificador({ ejecutar, intervaloMs, log }) {
     timer.unref();
   }
   return {
-    iniciar() { if (!detenido) return; detenido = false; programar(); },
-    async detener() { detenido = true; clearTimeout(timer); while (enCurso) await dormir(20); },
+    iniciar() {
+      if (!detenido) return;
+      detenido = false;
+      programar();
+    },
+    async detener() {
+      detenido = true;
+      clearTimeout(timer);
+      while (enCurso) await dormir(20);
+    },
     tick,
-    get activo() { return !detenido; },
+    get activo() {
+      return !detenido;
+    },
   };
 }
 

@@ -6,25 +6,51 @@ const Ajv2020 = require('ajv/dist/2020');
 const addFormats = require('ajv-formats');
 const contexto = require('./contexto');
 
-const TIPOS = { string: 'texto', integer: 'un número entero', number: 'un número', boolean: 'verdadero o falso', object: 'un objeto', array: 'una lista', null: 'nulo' };
+const TIPOS = {
+  string: 'texto',
+  integer: 'un número entero',
+  number: 'un número',
+  boolean: 'verdadero o falso',
+  object: 'un objeto',
+  array: 'una lista',
+  null: 'nulo',
+};
 
 /** Traduce un error de Ajv a una frase en español. */
 function traducir(e) {
   const campo = e.instancePath || '/';
   const p = e.params || {};
   switch (e.keyword) {
-    case 'type': return { campo, mensaje: `debe ser ${[].concat(p.type).map((t) => TIPOS[t] || t).join(' o ')}` };
-    case 'required': return { campo: `${campo === '/' ? '' : campo}/${p.missingProperty}`, mensaje: 'es obligatorio' };
-    case 'additionalProperties': return { campo: `${campo === '/' ? '' : campo}/${p.additionalProperty}`, mensaje: 'campo no permitido' };
-    case 'enum': return { campo, mensaje: `debe ser uno de: ${p.allowedValues.join(', ')}` };
-    case 'const': return { campo, mensaje: `debe ser ${JSON.stringify(p.allowedValue)}` };
-    case 'pattern': return { campo, mensaje: 'no tiene el formato esperado' };
-    case 'format': return { campo, mensaje: `no es un valor válido (${p.format})` };
-    case 'maxLength': return { campo, mensaje: `no puede superar ${p.limit} caracteres` };
-    case 'minLength': return { campo, mensaje: `debe tener al menos ${p.limit} caracteres` };
-    case 'minimum': return { campo, mensaje: `debe ser al menos ${p.limit}` };
-    case 'maximum': return { campo, mensaje: `no puede superar ${p.limit}` };
-    default: return { campo, mensaje: e.message || 'no es válido' };
+    case 'type':
+      return {
+        campo,
+        mensaje: `debe ser ${[]
+          .concat(p.type)
+          .map((t) => TIPOS[t] || t)
+          .join(' o ')}`,
+      };
+    case 'required':
+      return { campo: `${campo === '/' ? '' : campo}/${p.missingProperty}`, mensaje: 'es obligatorio' };
+    case 'additionalProperties':
+      return { campo: `${campo === '/' ? '' : campo}/${p.additionalProperty}`, mensaje: 'campo no permitido' };
+    case 'enum':
+      return { campo, mensaje: `debe ser uno de: ${p.allowedValues.join(', ')}` };
+    case 'const':
+      return { campo, mensaje: `debe ser ${JSON.stringify(p.allowedValue)}` };
+    case 'pattern':
+      return { campo, mensaje: 'no tiene el formato esperado' };
+    case 'format':
+      return { campo, mensaje: `no es un valor válido (${p.format})` };
+    case 'maxLength':
+      return { campo, mensaje: `no puede superar ${p.limit} caracteres` };
+    case 'minLength':
+      return { campo, mensaje: `debe tener al menos ${p.limit} caracteres` };
+    case 'minimum':
+      return { campo, mensaje: `debe ser al menos ${p.limit}` };
+    case 'maximum':
+      return { campo, mensaje: `no puede superar ${p.limit}` };
+    default:
+      return { campo, mensaje: e.message || 'no es válido' };
   }
 }
 
@@ -54,12 +80,17 @@ function crearValidador(documentoOpenApi) {
       return (req, res, next) => {
         let valor = req.body;
         if (valor === undefined) {
-          if (!opcional) return res.status(400).json({ error: 'validacion', mensaje: 'Falta el cuerpo JSON de la petición.', detalles: [], request_id: contexto.actual().request_id });
+          if (!opcional)
+            return res
+              .status(400)
+              .json({ error: 'validacion', mensaje: 'Falta el cuerpo JSON de la petición.', detalles: [], request_id: contexto.actual().request_id });
           valor = {};
         }
         const r = this.validar(nombre, valor);
         if (r.ok) return next();
-        return res.status(400).json({ error: 'validacion', mensaje: 'El cuerpo no cumple el contrato.', detalles: r.errores, request_id: contexto.actual().request_id });
+        return res
+          .status(400)
+          .json({ error: 'validacion', mensaje: 'El cuerpo no cumple el contrato.', detalles: r.errores, request_id: contexto.actual().request_id });
       };
     },
     ajv,

@@ -13,10 +13,21 @@ let b, s1, s2;
 test.before(async () => {
   if (!hayBase) return;
   b = await crearBaseAislada();
-  const env = { DATABASE_URL: b.url, RATE_LIMIT_POR_MINUTO: '10', RATE_LIMIT_ESCRITURA_POR_MINUTO: '4', RATE_LIMIT_IP_POR_MINUTO: '1000', RATE_LIMIT_AUTH_FALLOS_POR_MINUTO: '4', TRUST_PROXY: '1' };
+  const env = {
+    DATABASE_URL: b.url,
+    RATE_LIMIT_POR_MINUTO: '10',
+    RATE_LIMIT_ESCRITURA_POR_MINUTO: '4',
+    RATE_LIMIT_IP_POR_MINUTO: '1000',
+    RATE_LIMIT_AUTH_FALLOS_POR_MINUTO: '4',
+    TRUST_PROXY: '1',
+  };
   [s1, s2] = await Promise.all([lanzarServicio(env), lanzarServicio(env)]);
 });
-test.after(async () => { if (!hayBase) return; await Promise.all([s1.parar(), s2.parar()]); await b.borrar(); });
+test.after(async () => {
+  if (!hayBase) return;
+  await Promise.all([s1.parar(), s2.parar()]);
+  await b.borrar();
+});
 const reiniciar = () => b.sql('delete from limite_contador');
 const get = (s, ruta = '/api/pools', h = {}) => fetch(s.url + ruta, { headers: { ...ADM, ...h } });
 
@@ -55,19 +66,24 @@ test('contadores consistentes entre instancias: 30 peticiones en paralelo repart
 test('escrituras: límite propio (4 por minuto); los excesos repetidos se auditan una sola vez', opts, async () => {
   await reiniciar();
   const antes = (await b.sql("select count(*)::int as n from auditoria where accion = 'rate_limit_excedido'")).rows[0].n;
-  const post = (i) => fetch(s1.url + '/api/solicitudes', { method: 'POST', headers: ADM, body: JSON.stringify({ pool: 'gke-nodos-qa', vpc: `lim-${i}`, mascara: 28 }) });
+  const post = (i) =>
+    fetch(s1.url + '/api/solicitudes', { method: 'POST', headers: ADM, body: JSON.stringify({ pool: 'gke-nodos-qa', vpc: `lim-${i}`, mascara: 28 }) });
   const rs = [];
   for (let i = 0; i < 12; i++) rs.push((await post(i)).status);
   assert.deepEqual(rs, [201, 201, 201, 201, 429, 429, 429, 429, 429, 429, 429, 429]);
   const aud = (await b.sql("select usuario, ip, detalle from auditoria where accion = 'rate_limit_excedido' order by id desc")).rows;
   assert.equal(aud.length - antes, 1, 'una sola auditoría por minuto y actor');
-  assert.deepEqual({ usuario: aud[0].usuario, tipo: aud[0].detalle.tipo, excesos: aud[0].detalle.excesos_en_el_minuto }, { usuario: 'anonimo', tipo: 'escritura', excesos: 5 });
+  assert.deepEqual(
+    { usuario: aud[0].usuario, tipo: aud[0].detalle.tipo, excesos: aud[0].detalle.excesos_en_el_minuto },
+    { usuario: 'anonimo', tipo: 'escritura', excesos: 5 },
+  );
   assert.equal((await get(s2)).status, 200, 'las lecturas tienen su propio cupo');
 });
 
 test('cada token tiene su propio cupo; el límite por IP suma a todos', opts, async () => {
   await reiniciar();
-  const crear = async (nombre) => (await (await fetch(s1.url + '/api/tokens', { method: 'POST', headers: ADM, body: JSON.stringify({ nombre, rol: 'lector' }) })).json()).token;
+  const crear = async (nombre) =>
+    (await (await fetch(s1.url + '/api/tokens', { method: 'POST', headers: ADM, body: JSON.stringify({ nombre, rol: 'lector' }) })).json()).token;
   const [a, c] = [await crear('limite-a'), await crear('limite-c')];
   await reiniciar();
   for (let i = 0; i < 10; i++) assert.equal((await fetch(s1.url + '/api/pools', { headers: bearer(a) })).status, 200);
@@ -77,17 +93,25 @@ test('cada token tiene su propio cupo; el límite por IP suma a todos', opts, as
   const sIp = await lanzarServicio({ DATABASE_URL: b.url, RATE_LIMIT_POR_MINUTO: '1000', RATE_LIMIT_IP_POR_MINUTO: '6', TRUST_PROXY: '1' });
   try {
     const rs = [];
-    for (let i = 0; i < 8; i++) rs.push((await fetch(sIp.url + '/api/pools', { headers: { ...bearer(i % 2 ? a : c), 'X-Forwarded-For': '203.0.113.50' } })).status);
+    for (let i = 0; i < 8; i++)
+      rs.push((await fetch(sIp.url + '/api/pools', { headers: { ...bearer(i % 2 ? a : c), 'X-Forwarded-For': '203.0.113.50' } })).status);
     assert.deepEqual(rs, [200, 200, 200, 200, 200, 200, 429, 429], 'dos tokens detrás de la misma IP comparten el límite por IP');
     const otraIp = await fetch(sIp.url + '/api/pools', { headers: { ...bearer(a), 'X-Forwarded-For': '203.0.113.51' } });
     assert.equal(otraIp.status, 200, 'otra IP no se ve afectada');
-    assert.match((await (await fetch(sIp.url + '/api/pools', { headers: { ...bearer(a), 'X-Forwarded-For': '203.0.113.50' } })).json()).mensaje, /desde esta dirección/);
-  } finally { await sIp.parar(); }
+    assert.match(
+      (await (await fetch(sIp.url + '/api/pools', { headers: { ...bearer(a), 'X-Forwarded-For': '203.0.113.50' } })).json()).mensaje,
+      /desde esta dirección/,
+    );
+  } finally {
+    await sIp.parar();
+  }
 });
 
 test('fuerza bruta: tras 4 intentos fallidos la IP queda bloqueada (incluso con un token bueno) y se registra', opts, async () => {
   await reiniciar();
-  const bueno = (await (await fetch(s1.url + '/api/tokens', { method: 'POST', headers: ADM, body: JSON.stringify({ nombre: 'fb-bueno', rol: 'lector' }) })).json()).token;
+  const bueno = (
+    await (await fetch(s1.url + '/api/tokens', { method: 'POST', headers: ADM, body: JSON.stringify({ nombre: 'fb-bueno', rol: 'lector' }) })).json()
+  ).token;
   await reiniciar();
   const ip = { 'X-Forwarded-For': '192.0.2.99' };
   const malo = `ipam_${'D'.repeat(43)}`;

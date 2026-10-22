@@ -7,16 +7,43 @@ const { crearWebhook, firmar } = require('./webhook');
 const { crearPublicador } = require('./index');
 
 test('SSRF: bloquea direcciones privadas, de loopback, de enlace local y de metadatos de nube', () => {
-  for (const ip of ['10.1.2.3', '127.0.0.1', '169.254.169.254', '172.16.5.5', '172.31.255.255', '192.168.0.10', '100.64.0.1', '0.0.0.0',
-    '::1', '::', 'fd00:ec2::254', 'fe80::1', '::ffff:127.0.0.1', '::ffff:7f00:1', '::ffff:10.0.0.1', '64:ff9b::a00:1', 'no-es-ip']) {
+  for (const ip of [
+    '10.1.2.3',
+    '127.0.0.1',
+    '169.254.169.254',
+    '172.16.5.5',
+    '172.31.255.255',
+    '192.168.0.10',
+    '100.64.0.1',
+    '0.0.0.0',
+    '::1',
+    '::',
+    'fd00:ec2::254',
+    'fe80::1',
+    '::ffff:127.0.0.1',
+    '::ffff:7f00:1',
+    '::ffff:10.0.0.1',
+    '64:ff9b::a00:1',
+    'no-es-ip',
+  ]) {
     assert.equal(esDireccionBloqueada(ip), true, ip);
   }
-  for (const ip of ['8.8.8.8', '1.1.1.1', '93.184.216.34', '2606:4700:4700::1111', '172.32.0.1', '::ffff:8.8.8.8']) assert.equal(esDireccionBloqueada(ip), false, ip);
+  for (const ip of ['8.8.8.8', '1.1.1.1', '93.184.216.34', '2606:4700:4700::1111', '172.32.0.1', '::ffff:8.8.8.8'])
+    assert.equal(esDireccionBloqueada(ip), false, ip);
 });
 
 test('SSRF: validarDestino rechaza esquemas raros, credenciales, localhost y metadatos; la lista permitida los habilita', () => {
-  for (const u of ['ftp://x.example/a', 'file:///etc/passwd', 'https://u:p@x.example/', 'http://localhost/x', 'http://127.0.0.1:8080/', 'http://[::1]/',
-    'http://169.254.169.254/latest/meta-data', 'http://metadata.google.internal/computeMetadata/v1/', 'no es url']) {
+  for (const u of [
+    'ftp://x.example/a',
+    'file:///etc/passwd',
+    'https://u:p@x.example/',
+    'http://localhost/x',
+    'http://127.0.0.1:8080/',
+    'http://[::1]/',
+    'http://169.254.169.254/latest/meta-data',
+    'http://metadata.google.internal/computeMetadata/v1/',
+    'no es url',
+  ]) {
     assert.throws(() => validarDestino(u, []), undefined, u);
   }
   assert.doesNotThrow(() => validarDestino('https://eventos.example/ipam', []));
@@ -29,19 +56,41 @@ function receptor(guion) {
   const recibidas = [];
   const srv = http.createServer((req, res) => {
     let cuerpo = '';
-    req.on('data', (d) => { cuerpo += d; });
+    req.on('data', (d) => {
+      cuerpo += d;
+    });
     req.on('end', () => {
       recibidas.push({ cabeceras: req.headers, cuerpo, url: req.url });
       const paso = guion[Math.min(recibidas.length - 1, guion.length - 1)];
-      if (paso.demora) return setTimeout(() => { res.statusCode = 200; res.end(); }, paso.demora);
+      if (paso.demora)
+        return setTimeout(() => {
+          res.statusCode = 200;
+          res.end();
+        }, paso.demora);
       res.statusCode = paso.estado;
       if (paso.ubicacion) res.setHeader('Location', paso.ubicacion);
       res.end('ok');
     });
   });
-  return new Promise((ok) => srv.listen(0, '127.0.0.1', () => ok({ srv, recibidas, url: `http://127.0.0.1:${srv.address().port}/hook`, cerrar: () => new Promise((r) => { srv.closeAllConnections(); srv.close(r); }) })));
+  return new Promise((ok) =>
+    srv.listen(0, '127.0.0.1', () =>
+      ok({
+        srv,
+        recibidas,
+        url: `http://127.0.0.1:${srv.address().port}/hook`,
+        cerrar: () =>
+          new Promise((r) => {
+            srv.closeAllConnections();
+            srv.close(r);
+          }),
+      }),
+    ),
+  );
 }
-const logFalso = () => { const l = []; return { warn: (m, c) => l.push({ m, c }), info() {}, l }; };
+const logFalso = () => {
+  const l = [];
+  return { warn: (m, c) => l.push({ m, c }), info() {}, l };
+};
 const cfg = (url, extra = {}) => ({ url, secreto: 'clave-de-prueba', permitirHosts: ['127.0.0.1'], timeoutMs: 400, reintentos: 3, ...extra });
 const sinEspera = { espera: async () => {} };
 
@@ -104,22 +153,39 @@ test('SSRF: un nombre que resuelve a una IP privada se bloquea al conectar (anti
   const dns = require('node:dns');
   const { lookupSeguro } = require('./ssrf');
   const original = dns.lookup;
-  const respuestas = { 'rebind.example': [{ address: '10.0.0.5', family: 4 }], 'mixto.example': [{ address: '169.254.169.254', family: 4 }, { address: '93.184.216.34', family: 4 }] };
+  const respuestas = {
+    'rebind.example': [{ address: '10.0.0.5', family: 4 }],
+    'mixto.example': [
+      { address: '169.254.169.254', family: 4 },
+      { address: '93.184.216.34', family: 4 },
+    ],
+  };
   dns.lookup = (host, _o, cb) => cb(null, respuestas[host]);
   try {
-    const resolver = (host, permitidos = [], opciones = { all: false }) => new Promise((ok) => lookupSeguro(permitidos)(host, opciones, (err, dir, fam) => ok({ err, dir, fam })));
+    const resolver = (host, permitidos = [], opciones = { all: false }) =>
+      new Promise((ok) => lookupSeguro(permitidos)(host, opciones, (err, dir, fam) => ok({ err, dir, fam })));
     assert.match((await resolver('rebind.example')).err.message, /bloqueado/i);
     assert.equal((await resolver('rebind.example', ['rebind.example'])).dir, '10.0.0.5', 'la lista permitida lo habilita');
     const m = await resolver('mixto.example');
     assert.equal(m.dir, '93.184.216.34', 'descarta la dirección de metadatos y usa solo la pública');
     const todas = await resolver('mixto.example', [], { all: true });
-    assert.deepEqual(todas.dir.map((d) => d.address), ['93.184.216.34']);
-  } finally { dns.lookup = original; }
+    assert.deepEqual(
+      todas.dir.map((d) => d.address),
+      ['93.184.216.34'],
+    );
+  } finally {
+    dns.lookup = original;
+  }
 });
 
 test('publicador: un adaptador que falla no afecta a los demás ni a la operación', async () => {
   const llamadas = [];
-  const repo = { registrarEvento: async (t) => { llamadas.push(['tabla', t]); throw new Error('bd caída'); } };
+  const repo = {
+    registrarEvento: async (t) => {
+      llamadas.push(['tabla', t]);
+      throw new Error('bd caída');
+    },
+  };
   const log = { info: (m, c) => llamadas.push(['log', c.evento]), warn: (m) => llamadas.push(['warn', m]) };
   const p = crearPublicador({ repo, log, cfg: { publicadores: ['log'], webhook: {} } });
   await assert.doesNotReject(p.publicar('asignacion', { a: 1 }));

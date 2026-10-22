@@ -9,7 +9,7 @@ locals {
 }
 
 resource "google_project_service" "apis" {
-  for_each           = toset(["run.googleapis.com", "sqladmin.googleapis.com", "secretmanager.googleapis.com", "artifactregistry.googleapis.com"])
+  for_each           = toset(["run.googleapis.com", "sqladmin.googleapis.com", "secretmanager.googleapis.com", "artifactregistry.googleapis.com", "servicenetworking.googleapis.com", "compute.googleapis.com"])
   service            = each.value
   disable_on_destroy = false
 }
@@ -33,6 +33,22 @@ resource "google_project_iam_member" "sql_cliente" {
   member   = "serviceAccount:${each.value}"
 }
 
+# ---------- Red privada para la base (Cloud SQL sin IP pública) ----------
+resource "google_compute_global_address" "servicios_privados" {
+  name          = "${local.sufijo}-servicios-privados"
+  purpose       = "VPC_PEERING"
+  address_type  = "INTERNAL"
+  prefix_length = 20
+  network       = var.red
+}
+
+resource "google_service_networking_connection" "servicios_privados" {
+  network                 = var.red
+  service                 = "servicenetworking.googleapis.com"
+  reserved_peering_ranges = [google_compute_global_address.servicios_privados.name]
+  depends_on              = [google_project_service.apis]
+}
+
 # ---------- Cloud SQL ----------
 resource "random_password" "ipam_app" {
   length  = 32
@@ -45,6 +61,9 @@ resource "random_password" "ipam_migrador" {
 }
 
 resource "google_sql_database_instance" "ipam" {
+  # checkov:skip=CKV_GCP_6:El TLS obligatorio se fuerza con ssl_mode = ENCRYPTED_ONLY (atributo vigente; require_ssl está obsoleto).
+  # checkov:skip=CKV_GCP_110:pgAudit es opcional y agrega carga; actívalo (cloudsql.enable_pgaudit) si tu política de auditoría lo exige.
+  # checkov:skip=CKV2_GCP_13:log_duration registra la duración de CADA sentencia (muy ruidoso); se registran DDL, conexiones, bloqueos y puntos de control.
   name                = local.sufijo
   region              = var.region
   database_version    = "POSTGRES_16"
@@ -59,13 +78,41 @@ resource "google_sql_database_instance" "ipam" {
       point_in_time_recovery_enabled = true
     }
     ip_configuration {
-      ipv4_enabled    = var.red_privada == ""
-      private_network = var.red_privada == "" ? null : var.red_privada
+      ipv4_enabled    = false # sin IP pública
+      private_network = var.red
       ssl_mode        = "ENCRYPTED_ONLY"
     }
     database_flags {
       name  = "log_connections"
       value = "on"
+    }
+    database_flags {
+      name  = "log_disconnections"
+      value = "on"
+    }
+    database_flags {
+      name  = "log_checkpoints"
+      value = "on"
+    }
+    database_flags {
+      name  = "log_lock_waits"
+      value = "on"
+    }
+    database_flags {
+      name  = "log_hostname"
+      value = "on"
+    }
+    database_flags {
+      name  = "log_min_messages"
+      value = "error"
+    }
+    database_flags {
+      name  = "log_min_error_statement"
+      value = "error"
+    }
+    database_flags {
+      name  = "log_statement"
+      value = "ddl"
     }
   }
 
@@ -73,7 +120,7 @@ resource "google_sql_database_instance" "ipam" {
     prevent_destroy = true # igual que las redes críticas: no se borra por accidente
   }
 
-  depends_on = [google_project_service.apis]
+  depends_on = [google_project_service.apis, google_service_networking_connection.servicios_privados]
 }
 
 resource "google_sql_database" "ipam" {
@@ -190,6 +237,13 @@ resource "google_cloud_run_v2_service" "ipam" {
       min_instance_count = 1 # el barredor solo corre con una instancia viva; con 0 la expiración sigue siendo correcta (perezosa)
       max_instance_count = 3
     }
+    vpc_access {
+      egress = "PRIVATE_RANGES_ONLY" # solo el tráfico hacia redes privadas (la base) sale por la VPC
+      network_interfaces {
+        network    = var.red
+        subnetwork = var.subred
+      }
+    }
     volumes {
       name = "cloudsql"
       cloud_sql_instance {
@@ -289,6 +343,13 @@ resource "google_cloud_run_v2_job" "migrar" {
     template {
       service_account = google_service_account.migrador.email
       max_retries     = 1
+      vpc_access {
+        egress = "PRIVATE_RANGES_ONLY"
+        network_interfaces {
+          network    = var.red
+          subnetwork = var.subred
+        }
+      }
       volumes {
         name = "cloudsql"
         cloud_sql_instance {

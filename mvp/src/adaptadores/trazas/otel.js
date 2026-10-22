@@ -31,9 +31,13 @@ function crearTrazas({ log, version = 'dev', exportador }) {
       const { resourceFromAttributes } = require('@opentelemetry/resources');
       const { W3CTraceContextPropagator } = require('@opentelemetry/core');
       const c = config.otel;
-      const exp = exportador || new (require('@opentelemetry/exporter-trace-otlp-http').OTLPTraceExporter)({
-        url: `${c.endpoint.replace(/\/+$/, '')}/v1/traces`, headers: parsearCabeceras(c.cabeceras), timeoutMillis: 10000,
-      });
+      const exp =
+        exportador ||
+        new (require('@opentelemetry/exporter-trace-otlp-http').OTLPTraceExporter)({
+          url: `${c.endpoint.replace(/\/+$/, '')}/v1/traces`,
+          headers: parsearCabeceras(c.cabeceras),
+          timeoutMillis: 10000,
+        });
       proveedor = new TracerProvider({
         resource: resourceFromAttributes({ 'service.name': c.servicio, 'service.version': version }),
         sampler: new ParentBasedSampler({ root: new TraceIdRatioBasedSampler(c.muestreo) }),
@@ -61,7 +65,11 @@ function crearTrazas({ log, version = 'dev', exportador }) {
     },
     async apagar() {
       if (!proveedor) return;
-      try { await proveedor.forceFlush({ timeoutMillis: 5000 }); } catch (e) { log.warn('No se pudieron enviar todas las trazas al apagar', { error: Array.isArray(e) ? e.map(String) : e }); }
+      try {
+        await proveedor.forceFlush({ timeoutMillis: 5000 });
+      } catch (e) {
+        log.warn('No se pudieron enviar todas las trazas al apagar', { error: Array.isArray(e) ? e.map(String) : e });
+      }
       await proveedor.shutdown().catch(() => {});
     },
   };

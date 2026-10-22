@@ -38,20 +38,36 @@ function crearApp(deps) {
   app.use(crearSolicitud({ log, metricas, trazas }));
 
   // Cabeceras de seguridad. La interfaz no usa scripts en línea (todo en /app.js); los estilos en atributo sí.
-  app.use(helmet({
-    contentSecurityPolicy: { directives: {
-      defaultSrc: ["'self'"], scriptSrc: ["'self'"], styleSrc: ["'self'", "'unsafe-inline'"], imgSrc: ["'self'", 'data:'],
-      connectSrc: ["'self'"], objectSrc: ["'none'"], frameAncestors: ["'none'"], baseUri: ["'self'"], formAction: ["'self'"],
-      upgradeInsecureRequests: null,   // el TLS lo termina el balanceador; no forzar https desde la app
-    } },
-    hsts: config.http.hsts,
-  }));
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          imgSrc: ["'self'", 'data:'],
+          connectSrc: ["'self'"],
+          objectSrc: ["'none'"],
+          frameAncestors: ["'none'"],
+          baseUri: ["'self'"],
+          formAction: ["'self'"],
+          upgradeInsecureRequests: null, // el TLS lo termina el balanceador; no forzar https desde la app
+        },
+      },
+      hsts: config.http.hsts,
+    }),
+  );
 
   // Las respuestas de la API nunca se guardan en cachés intermedias ni del navegador (pueden traer datos sensibles, p. ej. un token recién creado).
-  app.use((req, res, next) => { if (req.path.startsWith('/api/')) res.set('Cache-Control', 'no-store'); next(); });
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api/')) res.set('Cache-Control', 'no-store');
+    next();
+  });
 
   // Cuerpo JSON: límite pequeño por defecto; solo la importación de respaldos admite uno grande. `raw` sirve para verificar firmas.
-  const guardarRaw = (req, _res, buf) => { req.raw = buf; };
+  const guardarRaw = (req, _res, buf) => {
+    req.raw = buf;
+  };
   const jsonNormal = express.json({ limit: config.http.jsonLimite, verify: guardarRaw });
   const jsonGrande = express.json({ limit: config.http.jsonLimiteImportar, verify: guardarRaw });
   app.use((req, res, next) => (RUTAS_IMPORTAR.has(req.path) ? jsonGrande : jsonNormal)(req, res, next));
@@ -62,9 +78,18 @@ function crearApp(deps) {
   marca.montar(app);
   montarOidc(app, { repo, auditar, ruta });
 
-  app.use(crearAcceso({ rechazo: (motivo) => metricas.authRechazo(motivo), autenticarToken: (t) => casos.tokens.autenticar(t), auditar,
-    frenoFuerzaBruta: { bloqueada: (ip) => limite.bloqueadaPorFallos(ip), fallo: (ip) => limite.registrarFallo(ip) } }));
-  app.use((req, _res, next) => { if (req.actor) require('./contexto').actual().actor = req.actor.nombre; next(); });
+  app.use(
+    crearAcceso({
+      rechazo: (motivo) => metricas.authRechazo(motivo),
+      autenticarToken: (t) => casos.tokens.autenticar(t),
+      auditar,
+      frenoFuerzaBruta: { bloqueada: (ip) => limite.bloqueadaPorFallos(ip), fallo: (ip) => limite.registrarFallo(ip) },
+    }),
+  );
+  app.use((req, _res, next) => {
+    if (req.actor) require('./contexto').actual().actor = req.actor.nombre;
+    next();
+  });
   app.use(crearMiddlewareLimite({ limite }));
 
   const audita = (req, accion, detalle) => auditar(accion, req.usuario || 'sistema', req.rol || null, detalle, req.ip);

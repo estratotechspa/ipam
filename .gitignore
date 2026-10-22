@@ -1,0 +1,17 @@
+# Dependencias y artefactos de construcción (se regeneran)
+node_modules/
+coverage/
+sbom/
+test-results/
+playwright-report/
+# Secretos y entornos locales: en el repositorio solo hay .env.example con valores de relleno
+.env
+.env.*
+!.env.example
+# OpenTofu / Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+plan.bin
+.DS_Store

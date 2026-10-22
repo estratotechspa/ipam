@@ -6,7 +6,14 @@ const { config } = require('../../config');
 const activo = () => config.jira.activa;
 const faltantes = () => {
   const j = config.jira;
-  return [['JIRA_BASE_URL', j.baseUrl], ['JIRA_EMAIL', j.email], ['JIRA_API_TOKEN', j.apiToken], ['JIRA_PROJECT', j.proyecto]].filter(([, v]) => !v).map(([k]) => k);
+  return [
+    ['JIRA_BASE_URL', j.baseUrl],
+    ['JIRA_EMAIL', j.email],
+    ['JIRA_API_TOKEN', j.apiToken],
+    ['JIRA_PROJECT', j.proyecto],
+  ]
+    .filter(([, v]) => !v)
+    .map(([k]) => k);
 };
 
 async function llamar(metodo, ruta, cuerpo) {
@@ -41,7 +48,9 @@ async function crear(a) {
 
 /** Informa el rango en un ticket existente (viene de Jira) y lo pasa a su estado final. */
 async function actualizar(clave, a) {
-  await llamar('POST', `/rest/api/3/issue/${encodeURIComponent(clave)}/comment`, { body: adf(`IPAM asignó el segmento ${a.cidr} (pool ${a.pool_id}, VPC ${a.vpc}).`) });
+  await llamar('POST', `/rest/api/3/issue/${encodeURIComponent(clave)}/comment`, {
+    body: adf(`IPAM asignó el segmento ${a.cidr} (pool ${a.pool_id}, VPC ${a.vpc}).`),
+  });
   const { transitions } = await llamar('GET', `/rest/api/3/issue/${encodeURIComponent(clave)}/transitions`);
   const destino = config.jira.transicionFinal.toLowerCase();
   const t = transitions.find((x) => x.name.toLowerCase() === destino);

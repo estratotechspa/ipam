@@ -11,11 +11,15 @@ async function tokenPorApi(request, rol = 'agente') {
   expect(r.status()).toBe(201);
   return { nombre, ...(await r.json()) };
 }
-const reservarComo = (request, token, extra = {}) => request.post('/api/v1/reservas', {
-  headers: { Authorization: `Bearer ${token}`, 'Idempotency-Key': `e2e-${unico()}` },
-  data: { ambiente: 'qa', tipo: 'Nodos', mascara: 28, vpc: `e2e-${unico()}`, ...extra },
-});
-const irA = async (page, pestana) => { await page.goto('/'); await page.locator('#nav').getByRole('button', { name: pestana, exact: true }).click(); };
+const reservarComo = (request, token, extra = {}) =>
+  request.post('/api/v1/reservas', {
+    headers: { Authorization: `Bearer ${token}`, 'Idempotency-Key': `e2e-${unico()}` },
+    data: { ambiente: 'qa', tipo: 'Nodos', mascara: 28, vpc: `e2e-${unico()}`, ...extra },
+  });
+const irA = async (page, pestana) => {
+  await page.goto('/');
+  await page.locator('#nav').getByRole('button', { name: pestana, exact: true }).click();
+};
 
 test('crear un token: se muestra una sola vez, se copia al portapapeles y aparece en la lista; revocarlo con confirmación', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
@@ -51,7 +55,10 @@ test('crear un token: se muestra una sola vez, se copia al portapapeles y aparec
   expect((await page.request.get('/api/v1/me', { headers: { Authorization: `Bearer ${token}` } })).status()).toBe(200);
 
   // Revocar pide confirmación y deja de servir al instante.
-  page.once('dialog', (d) => { expect(d.message()).toContain(nombre); d.dismiss(); });
+  page.once('dialog', (d) => {
+    expect(d.message()).toContain(nombre);
+    d.dismiss();
+  });
   await fila.getByRole('button', { name: /Revocar/ }).click();
   await expect(fila).toContainText('activo');
   page.once('dialog', (d) => d.accept());
@@ -98,18 +105,30 @@ test('reservas: listar, filtrar, confirmar y liberar con confirmación y cuenta 
   await expect(page.locator('tr', { hasText: r.vpc })).toBeVisible();
 
   // Confirmar pide confirmación; al aceptar pasa a confirmada (definitiva).
-  page.once('dialog', (d) => { expect(d.message()).toContain(r.cidr); d.dismiss(); });
-  await page.locator('tr', { hasText: r.vpc }).getByRole('button', { name: /Confirmar/ }).click();
+  page.once('dialog', (d) => {
+    expect(d.message()).toContain(r.cidr);
+    d.dismiss();
+  });
+  await page
+    .locator('tr', { hasText: r.vpc })
+    .getByRole('button', { name: /Confirmar/ })
+    .click();
   await expect(page.locator('tr', { hasText: r.vpc })).toContainText('reservada');
   page.once('dialog', (d) => d.accept());
-  await page.locator('tr', { hasText: r.vpc }).getByRole('button', { name: /Confirmar/ }).click();
+  await page
+    .locator('tr', { hasText: r.vpc })
+    .getByRole('button', { name: /Confirmar/ })
+    .click();
   await expect(page.getByRole('status')).toContainText('confirmada');
   const confirmada = page.locator('tr', { hasText: r.vpc });
   await expect(confirmada).toContainText('confirmada');
   expect((await (await page.request.get('/api/v1/asignaciones')).json()).some((a) => a.cidr === r.cidr && a.origen === 'agente')).toBe(true);
 
   // Liberar una confirmada avisa que borra la asignación y la libera.
-  page.once('dialog', (d) => { expect(d.message()).toContain('asignación definitiva'); d.accept(); });
+  page.once('dialog', (d) => {
+    expect(d.message()).toContain('asignación definitiva');
+    d.accept();
+  });
   await confirmada.getByRole('button', { name: /Liberar/ }).click();
   await expect(page.locator('tr', { hasText: r.vpc })).toContainText('liberada');
   expect((await (await page.request.get('/api/v1/asignaciones')).json()).some((a) => a.cidr === r.cidr)).toBe(false);
@@ -126,7 +145,9 @@ test('la cuenta regresiva avanza sola y marca como vencida una reserva sin tiemp
   await page.waitForTimeout(2200);
   expect(await tiempo.textContent()).not.toBe(antes);
   // Simula que ya no le queda tiempo (sin esperar 24 h): la interfaz la muestra como vencida.
-  await tiempo.evaluate((e) => { e.dataset.fin = String(Date.now() - 1000); });
+  await tiempo.evaluate((e) => {
+    e.dataset.fin = String(Date.now() - 1000);
+  });
   await expect(tiempo).toHaveText('vencida');
   await request.delete(`/api/v1/reservas/${r.id}`, { headers: CAB });
 });
@@ -135,7 +156,9 @@ test('seguridad de la interfaz: lo que escribe un usuario se muestra como texto,
   const t = await tokenPorApi(request);
   const malicioso = `<img src=x onerror="window.__xss=1"><script>window.__xss=2</script>${unico()}`;
   const r = await (await reservarComo(request, t.token, { vpc: malicioso, ticket: 'NET-xss' })).json();
-  await page.addInitScript(() => { window.__xss = undefined; });
+  await page.addInitScript(() => {
+    window.__xss = undefined;
+  });
   await irA(page, 'Reservas');
   await expect(page.getByText(malicioso, { exact: true })).toBeVisible();
   expect(await page.evaluate(() => window.__xss)).toBeUndefined();

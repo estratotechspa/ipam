@@ -168,6 +168,8 @@ resources:
 # (Jira / proveedor OIDC). La base incluida solo acepta conexiones de la app y del Job de esquema.
 networkPolicy:
   enabled: true
+  # true = además crea una política de denegación por defecto para TODO el namespace (solo si el namespace es exclusivo del IPAM).
+  defaultDeny: false
   # Orígenes permitidos hacia la app. Vacío = cualquiera dentro del clúster (típico: el ingress controller
   # vive en otro namespace). Para restringir: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: ingress-nginx}}}]
   ingressFrom: []

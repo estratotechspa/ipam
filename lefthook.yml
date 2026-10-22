@@ -1,0 +1,24 @@
+# Hooks de Git con lefthook (https://github.com/evilmartians/lefthook). Instalar una vez:  brew install lefthook && lefthook install
+# (o `npx lefthook install`). Corren lo mismo que el CI, pero rápido y solo sobre lo que cambió.
+# Si no usas lefthook, los mismos controles se ejecutan con `make ci`.
+pre-commit:
+  parallel: true
+  commands:
+    portabilidad:
+      run: ./scripts/verificar-portabilidad.sh
+    lint:
+      glob: "mvp/**/*.js"
+      run: cd mvp && npx eslint .
+    formato:
+      glob: "mvp/**/*.js"
+      run: cd mvp && npx prettier --check "src/**/*.js" "e2e/**/*.js" "public/*.js" "scripts/*.js" "*.js" "../scripts/**/*.js"
+    secretos:
+      run: ./scripts/hooks/secretos-staged.sh
+commit-msg:
+  commands:
+    conventional-commits:
+      run: node scripts/hooks/verificar-commit.js {1}
+pre-push:
+  commands:
+    rama:
+      run: ./scripts/hooks/verificar-rama.sh

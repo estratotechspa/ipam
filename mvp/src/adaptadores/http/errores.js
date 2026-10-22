@@ -21,7 +21,6 @@ const error = (res, estado, codigo, mensaje, extra = {}) =>
 
 /** @param {{error: Function, warn: Function}} log */
 function manejadorDeErrores(log) {
-  // eslint-disable-next-line no-unused-vars
   return (err, req, res, _next) => {
     if (res.headersSent) return req.socket.destroy();
     const id = contexto.actual().request_id;

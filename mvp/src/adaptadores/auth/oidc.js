@@ -15,7 +15,9 @@ async function cliente() {
       const cfg = await lib.discovery(new URL(o.issuer), o.clientId, o.clientSecret, undefined, opciones);
       return { lib, config: cfg };
     })();
-    oidc.catch(() => { oidc = null; }); // reintentar en la siguiente petición si el proveedor no respondió
+    oidc.catch(() => {
+      oidc = null;
+    }); // reintentar en la siguiente petición si el proveedor no respondió
   }
   return oidc;
 }
@@ -35,13 +37,17 @@ function montarOidc(app, { repo, auditar, ruta }) {
         redirect_uri: `${config.http.publicUrl}/auth/callback`,
         scope: config.auth.oidc.scopes,
         code_challenge: await lib.calculatePKCECodeChallenge(verificador),
-        code_challenge_method: 'S256', state, nonce,
+        code_challenge_method: 'S256',
+        state,
+        nonce,
       };
       const dominios = config.auth.oidc.dominios;
       if (dominios.length === 1) params.hd = dominios[0]; // pista para Google Workspace; igual se valida al volver
       S.ponerCookie(req, res, S.LOGIN, S.sellar({ state, nonce, verificador, next: S.rutaSegura(req.query.next), exp: Date.now() / 1000 + 600 }), 600);
       res.redirect(lib.buildAuthorizationUrl(c, params).href);
-    } catch (e) { next(e); }
+    } catch (e) {
+      next(e);
+    }
   });
 
   ruta(app, 'get', '/auth/callback', async (req, res, next) => {
@@ -52,7 +58,9 @@ function montarOidc(app, { repo, auditar, ruta }) {
       if (!previo) return res.status(400).send('La solicitud de inicio de sesión expiró. <a href="/auth/login">Reintentar</a>');
       const { lib, config: c } = await cliente();
       const tokens = await lib.authorizationCodeGrant(c, new URL(config.http.publicUrl + req.originalUrl), {
-        pkceCodeVerifier: previo.verificador, expectedState: previo.state, expectedNonce: previo.nonce,
+        pkceCodeVerifier: previo.verificador,
+        expectedState: previo.state,
+        expectedNonce: previo.nonce,
       });
       const claims = tokens.claims();
       const email = String(claims.email || '').toLowerCase();
@@ -72,7 +80,9 @@ function montarOidc(app, { repo, auditar, ruta }) {
       S.ponerCookie(req, res, S.SESION, S.sellar({ email, nombre: claims.name || email, rol, exp: Date.now() / 1000 + horas * 3600 }), horas * 3600);
       await auditar('login', email, rol, {}, req.ip);
       res.redirect(S.rutaSegura(previo.next));
-    } catch (e) { next(e); }
+    } catch (e) {
+      next(e);
+    }
   });
 
   ruta(app, 'post', '/auth/logout', async (req, res) => {
@@ -82,7 +92,11 @@ function montarOidc(app, { repo, auditar, ruta }) {
     res.json({ ok: true, redirect: '/auth/sesion-cerrada' });
   });
   ruta(app, 'get', '/auth/sesion-cerrada', (_q, res) => {
-    res.type('html').send('<!doctype html><meta charset="utf-8"><title>Sesión cerrada</title><link rel="stylesheet" href="/brand.css"><body style="font:16px system-ui;margin:3rem"><h2>Sesión cerrada</h2><p><a href="/auth/login">Volver a entrar</a></p>');
+    res
+      .type('html')
+      .send(
+        '<!doctype html><meta charset="utf-8"><title>Sesión cerrada</title><link rel="stylesheet" href="/brand.css"><body style="font:16px system-ui;margin:3rem"><h2>Sesión cerrada</h2><p><a href="/auth/login">Volver a entrar</a></p>',
+      );
   });
 }
 

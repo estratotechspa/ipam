@@ -16,7 +16,8 @@ const EQUIVALENCIAS = { disable: 'disable', require: 'require', 'verify-ca': 've
  */
 function resolverConexion(url, modoSsl = '') {
   const texto = String(url || '');
-  if (!/^postgres(ql)?:\/\/.+/i.test(texto)) throw new ErrorDeConfiguracion(['DATABASE_URL no es una URL de PostgreSQL válida (postgres://usuario:clave@host:5432/base).']);
+  if (!/^postgres(ql)?:\/\/.+/i.test(texto))
+    throw new ErrorDeConfiguracion(['DATABASE_URL no es una URL de PostgreSQL válida (postgres://usuario:clave@host:5432/base).']);
   const i = texto.indexOf('?');
   const base = i === -1 ? texto : texto.slice(0, i);
   const params = new URLSearchParams(i === -1 ? '' : texto.slice(i + 1));
@@ -31,6 +32,9 @@ function resolverConexion(url, modoSsl = '') {
 
 function opcionesSsl(modo, ca) {
   if (modo === 'disable') return false;
+  // «require» = semántica de libpq: cifra el canal SIN verificar el certificado (los pooler de algunos proveedores usan una CA privada).
+  // Es una decisión consciente y documentada (docs/LIMITACIONES.md): para verificar, usa DATABASE_SSL=verify-full con DATABASE_SSL_CA.
+  // nosemgrep: problem-based-packs.insecure-transport.js-node.bypass-tls-verification.bypass-tls-verification
   if (modo === 'require') return { rejectUnauthorized: false };
   return ca ? { rejectUnauthorized: true, ca } : { rejectUnauthorized: true };
 }
@@ -44,7 +48,8 @@ const comillas = (esquema) => {
 function prepararSesion(client, bd) {
   return client.query(
     "select set_config('search_path', $1, false), set_config('statement_timeout', $2, false), set_config('idle_in_transaction_session_timeout', $3, false)",
-    [comillas(bd.esquema), String(bd.sentenciaTimeoutMs), String(bd.sentenciaTimeoutMs * 2)]);
+    [comillas(bd.esquema), String(bd.sentenciaTimeoutMs), String(bd.sentenciaTimeoutMs * 2)],
+  );
 }
 
 /**
@@ -69,11 +74,22 @@ class PoolConSesion extends Pool {
     if (cb) {
       return super.connect((err, cliente, hecho) => {
         if (err) return cb(err, cliente, hecho);
-        return this._listo(cliente).then(() => cb(null, cliente, hecho), (e) => { hecho(e); cb(e); });
+        return this._listo(cliente).then(
+          () => cb(null, cliente, hecho),
+          (e) => {
+            hecho(e);
+            cb(e);
+          },
+        );
       });
     }
     return super.connect().then(async (cliente) => {
-      try { await this._listo(cliente); } catch (e) { cliente.release(e); throw e; }
+      try {
+        await this._listo(cliente);
+      } catch (e) {
+        cliente.release(e);
+        throw e;
+      }
       return cliente;
     });
   }
@@ -82,10 +98,17 @@ class PoolConSesion extends Pool {
 /** @param {import('../../../config').config['bd']} bd @param {{error: Function, warn: Function}} log */
 function crearPool(bd, log) {
   const { connectionString, modo } = resolverConexion(bd.url, bd.ssl);
-  const pool = new PoolConSesion({
-    connectionString, ssl: opcionesSsl(modo, bd.sslCa), max: bd.poolMax, connectionTimeoutMillis: bd.conexionTimeoutMs,
-    idleTimeoutMillis: bd.ociosoMs, application_name: 'ipam',
-  }, (cliente) => prepararSesion(cliente, bd));
+  const pool = new PoolConSesion(
+    {
+      connectionString,
+      ssl: opcionesSsl(modo, bd.sslCa),
+      max: bd.poolMax,
+      connectionTimeoutMillis: bd.conexionTimeoutMs,
+      idleTimeoutMillis: bd.ociosoMs,
+      application_name: 'ipam',
+    },
+    (cliente) => prepararSesion(cliente, bd),
+  );
   // Un error en una conexión ociosa (reinicio de la base) no debe tumbar el proceso.
   pool.on('error', (e) => log.warn('Conexión ociosa con error (se reabrirá sola)', e));
   return pool;
@@ -94,7 +117,12 @@ function crearPool(bd, log) {
 /** Cliente suelto (migraciones). */
 async function crearCliente(url, bd) {
   const { connectionString, modo } = resolverConexion(url, bd.ssl);
-  const client = new Client({ connectionString, ssl: opcionesSsl(modo, bd.sslCa), connectionTimeoutMillis: bd.conexionTimeoutMs, application_name: 'ipam-migrar' });
+  const client = new Client({
+    connectionString,
+    ssl: opcionesSsl(modo, bd.sslCa),
+    connectionTimeoutMillis: bd.conexionTimeoutMs,
+    application_name: 'ipam-migrar',
+  });
   await client.connect();
   return client;
 }

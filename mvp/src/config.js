@@ -32,34 +32,66 @@ def('NODE_ENV', 'texto', 'development', 'Entorno. Con «production» se activan 
 def('PORT', 'entero', 8080, 'Puerto HTTP en el que escucha el servicio.', { min: 1, max: 65535 });
 def('ROL', 'texto', 'todos', 'Qué hace esta réplica: «api» (solo HTTP), «worker» (solo barredor) o «todos».', { opciones: ['api', 'worker', 'todos'] });
 def('LOG_LEVEL', 'texto', 'info', 'Nivel de log: debug, info, warn o error.', { opciones: ['debug', 'info', 'warn', 'error'] });
-def('TRUST_PROXY', 'texto', '', 'Saltos de proxy delante de la app (número). Hace que la IP del cliente, las cookies Secure y el rate limit funcionen tras un balanceador.', { ejemplo: '1' });
+def(
+  'TRUST_PROXY',
+  'texto',
+  '',
+  'Saltos de proxy delante de la app (número). Hace que la IP del cliente, las cookies Secure y el rate limit funcionen tras un balanceador.',
+  { ejemplo: '1' },
+);
 def('JSON_LIMIT', 'texto', '100kb', 'Tamaño máximo del cuerpo JSON de las peticiones normales.', { ejemplo: '100kb' });
 def('JSON_LIMIT_IMPORTAR', 'texto', '5mb', 'Tamaño máximo del cuerpo en POST /api/importar (respaldos).', { ejemplo: '5mb' });
 def('HSTS', 'booleano', false, 'Envía Strict-Transport-Security. Actívalo solo si el acceso es siempre por HTTPS.');
-def('PUBLIC_URL', 'texto', '', 'URL pública del IPAM (base del login OIDC y de los enlaces). Obligatoria con OIDC.', { ejemplo: 'https://ipam.empresa.example' });
+def('PUBLIC_URL', 'texto', '', 'URL pública del IPAM (base del login OIDC y de los enlaces). Obligatoria con OIDC.', {
+  ejemplo: 'https://ipam.empresa.example',
+});
 def('APAGADO_TIMEOUT_MS', 'entero', 15000, 'Tiempo máximo para terminar las peticiones en curso al recibir SIGTERM.', { min: 100, max: 600000 });
 def('SOLICITUD_TIMEOUT_MS', 'entero', 30000, 'Tiempo máximo que el servidor espera para recibir una petición completa.', { min: 1000, max: 600000 });
 
 // Base de datos (recurso adjunto)
-def('DATABASE_URL', 'texto', '', 'Cadena de conexión a PostgreSQL de la aplicación (usuario con permisos DML).', { obligatoria: true, secreta: true, ejemplo: 'postgres://ipam_app:CLAVE@host:5432/ipam?sslmode=require' });
-def('DATABASE_URL_MIGRACION', 'texto', '', 'Cadena de conexión del usuario migrador (DDL). Solo la usa `npm run migrar`. Si falta, se usa DATABASE_URL.', { secreta: true, ejemplo: 'postgres://ipam_migrador:CLAVE@host:5432/ipam' });
+def('DATABASE_URL', 'texto', '', 'Cadena de conexión a PostgreSQL de la aplicación (usuario con permisos DML).', {
+  obligatoria: true,
+  secreta: true,
+  ejemplo: 'postgres://ipam_app:CLAVE@host:5432/ipam?sslmode=require',
+});
+def('DATABASE_URL_MIGRACION', 'texto', '', 'Cadena de conexión del usuario migrador (DDL). Solo la usa `npm run migrar`. Si falta, se usa DATABASE_URL.', {
+  secreta: true,
+  ejemplo: 'postgres://ipam_migrador:CLAVE@host:5432/ipam',
+});
 def('DATABASE_SCHEMA', 'texto', 'public', 'Esquema de PostgreSQL donde viven las tablas del IPAM.', { ejemplo: 'ipam' });
-def('DATABASE_SSL', 'texto', '', 'TLS hacia la base: «disable», «require» (cifra sin verificar) o «verify-full» (verifica el certificado). Vacío = lo que diga DATABASE_URL (sslmode).', { opciones: ['', 'disable', 'require', 'verify-full'] });
+def(
+  'DATABASE_SSL',
+  'texto',
+  '',
+  'TLS hacia la base: «disable», «require» (cifra sin verificar) o «verify-full» (verifica el certificado). Vacío = lo que diga DATABASE_URL (sslmode).',
+  { opciones: ['', 'disable', 'require', 'verify-full'] },
+);
 def('DATABASE_SSL_CA', 'texto', '', 'Certificado de la autoridad (PEM) para verify-full. Acepta la forma _FILE.', { secreta: false });
 def('DB_POOL_MAX', 'entero', 10, 'Máximo de conexiones del pool por réplica.', { min: 1, max: 200 });
 def('DB_CONNECT_TIMEOUT_MS', 'entero', 5000, 'Tiempo máximo para abrir una conexión a la base.', { min: 100, max: 120000 });
 def('DB_STATEMENT_TIMEOUT_MS', 'entero', 15000, 'Tiempo máximo de una consulta (statement_timeout).', { min: 100, max: 600000 });
 def('DB_IDLE_TIMEOUT_MS', 'entero', 30000, 'Tiempo tras el cual se cierra una conexión ociosa.', { min: 1000, max: 3600000 });
-def('MIGRAR_AL_ARRANCAR', 'booleano', false, 'EXCEPCIÓN: aplica el esquema al arrancar (para entornos sin job previo, p. ej. el POC). Por defecto la app NO toca el esquema.');
+def(
+  'MIGRAR_AL_ARRANCAR',
+  'booleano',
+  false,
+  'EXCEPCIÓN: aplica el esquema al arrancar (para entornos sin job previo, p. ej. el POC). Por defecto la app NO toca el esquema.',
+);
 
 // Autenticación
 def('ALLOW_ANONYMOUS', 'booleano', false, 'Permite arrancar en producción sin OIDC ni Basic (acceso abierto como admin). Solo para demos.');
 def('APP_USER', 'texto', '', 'Usuario del modo Basic (un solo usuario, rol admin).', { ejemplo: 'admin' });
-def('APP_PASS', 'texto', '', 'Contraseña del modo Basic. Acepta texto plano o un hash `scrypt$…` (recomendado; ver `npm run hash-password`).', { secreta: true });
+def('APP_PASS', 'texto', '', 'Contraseña del modo Basic. Acepta texto plano o un hash `scrypt$…` (recomendado; ver `npm run hash-password`).', {
+  secreta: true,
+});
 def('SESSION_SECRET', 'texto', '', 'Clave (≥ 32 caracteres) con la que se firma la cookie de sesión OIDC.', { secreta: true });
 def('SESSION_HORAS', 'entero', 8, 'Duración de la sesión OIDC.', { min: 1, max: 720 });
-def('COOKIE_SECURE', 'texto', 'auto', 'Atributo Secure de las cookies: «auto» (si PUBLIC_URL es https o la petición llegó por HTTPS), «true» o «false».', { opciones: ['auto', 'true', 'false'] });
-def('OIDC_ISSUER', 'texto', '', 'URL del emisor OpenID Connect (Google, Entra, Okta, Keycloak…). Vacío = sin OIDC.', { ejemplo: 'https://accounts.google.com' });
+def('COOKIE_SECURE', 'texto', 'auto', 'Atributo Secure de las cookies: «auto» (si PUBLIC_URL es https o la petición llegó por HTTPS), «true» o «false».', {
+  opciones: ['auto', 'true', 'false'],
+});
+def('OIDC_ISSUER', 'texto', '', 'URL del emisor OpenID Connect (Google, Entra, Okta, Keycloak…). Vacío = sin OIDC.', {
+  ejemplo: 'https://accounts.google.com',
+});
 def('OIDC_CLIENT_ID', 'texto', '', 'Identificador del cliente OIDC.');
 def('OIDC_CLIENT_SECRET', 'texto', '', 'Secreto del cliente OIDC.', { secreta: true });
 def('OIDC_SCOPES', 'texto', 'openid email profile', 'Alcances solicitados al proveedor.');
@@ -78,19 +110,31 @@ def('TOKEN_VIDA_DIAS', 'entero', 90, 'Vigencia por defecto de un token de servic
 // Reservas
 def('RESERVA_TTL_HORAS', 'entero', 24, 'Vigencia por defecto de una reserva sin confirmar.', { min: 1, max: 720 });
 def('RESERVA_TTL_MAX_HORAS', 'entero', 72, 'Vigencia máxima que se puede pedir para una reserva.', { min: 1, max: 720 });
-def('CONFIRMACION_EXIGE_APROBADOR', 'booleano', true, 'Un token de servicio debe indicar quién aprobó (aprobado_por) y la referencia (MR) al confirmar. Regla human-in-the-loop.');
+def(
+  'CONFIRMACION_EXIGE_APROBADOR',
+  'booleano',
+  true,
+  'Un token de servicio debe indicar quién aprobó (aprobado_por) y la referencia (MR) al confirmar. Regla human-in-the-loop.',
+);
 def('BARREDOR_INTERVALO_SEGUNDOS', 'entero', 60, 'Cada cuánto corre el barredor (limpia reservas vencidas y contadores).', { min: 5, max: 3600 });
 
 // Límites
 def('RATE_LIMIT_POR_MINUTO', 'entero', 120, 'Peticiones de lectura por minuto por actor (token o usuario).', { min: 1, max: 1000000 });
 def('RATE_LIMIT_ESCRITURA_POR_MINUTO', 'entero', 30, 'Peticiones de escritura por minuto por actor.', { min: 1, max: 1000000 });
 def('RATE_LIMIT_IP_POR_MINUTO', 'entero', 600, 'Peticiones por minuto por dirección IP (suma de actores detrás de un mismo NAT).', { min: 1, max: 10000000 });
-def('RATE_LIMIT_AUTH_FALLOS_POR_MINUTO', 'entero', 10, 'Intentos de autenticación fallidos por minuto por IP (freno a la fuerza bruta).', { min: 1, max: 100000 });
+def('RATE_LIMIT_AUTH_FALLOS_POR_MINUTO', 'entero', 10, 'Intentos de autenticación fallidos por minuto por IP (freno a la fuerza bruta).', {
+  min: 1,
+  max: 100000,
+});
 def('CUOTA_RESERVAS_POR_TOKEN', 'entero', 20, 'Reservas «reservada» vigentes simultáneas por token (se puede fijar otra al crearlo).', { min: 1, max: 100000 });
-def('LIMITE_ALMACEN', 'texto', 'postgres', 'Dónde se cuentan las peticiones: «postgres» (varias réplicas) o «memoria» (solo pruebas).', { opciones: ['postgres', 'memoria'] });
+def('LIMITE_ALMACEN', 'texto', 'postgres', 'Dónde se cuentan las peticiones: «postgres» (varias réplicas) o «memoria» (solo pruebas).', {
+  opciones: ['postgres', 'memoria'],
+});
 
 // Métricas y eventos
-def('METRICS_TOKEN', 'texto', '', 'Token de lectura para GET /metrics (Authorization: Bearer). Sin token ni redes permitidas, /metrics queda deshabilitado.', { secreta: true });
+def('METRICS_TOKEN', 'texto', '', 'Token de lectura para GET /metrics (Authorization: Bearer). Sin token ni redes permitidas, /metrics queda deshabilitado.', {
+  secreta: true,
+});
 def('METRICS_ALLOW_CIDRS', 'lista', [], 'Redes IPv4 (CIDR) desde las que se puede leer /metrics.', { ejemplo: '10.0.0.0/8' });
 def('EVENTOS_PUBLICADORES', 'lista', ['log'], 'Adaptadores de eventos activos: «log» y/o «webhook».', { ejemplo: 'log,webhook' });
 def('EVENTOS_WEBHOOK_URL', 'texto', '', 'Destino del webhook saliente de eventos.', { ejemplo: 'https://eventos.empresa.example/ipam' });
@@ -107,7 +151,13 @@ def('OTEL_SERVICE_NAME', 'texto', 'ipam', 'Nombre del servicio en las trazas.');
 def('OTEL_TRACES_SAMPLER_ARG', 'texto', '1', 'Proporción de trazas que se muestrean (0 a 1).');
 
 // Jira y webhook entrante
-def('JIRA_WEBHOOK_SECRET', 'texto', '', 'Clave HMAC del webhook entrante de Jira. En producción no tiene valor por defecto: sin ella el webhook queda deshabilitado.', { secreta: true });
+def(
+  'JIRA_WEBHOOK_SECRET',
+  'texto',
+  '',
+  'Clave HMAC del webhook entrante de Jira. En producción no tiene valor por defecto: sin ella el webhook queda deshabilitado.',
+  { secreta: true },
+);
 def('JIRA_ENABLED', 'booleano', false, 'Activa la integración saliente con Jira.');
 def('JIRA_BASE_URL', 'texto', '', 'URL de Jira Cloud.', { ejemplo: 'https://empresa.atlassian.net' });
 def('JIRA_EMAIL', 'texto', '', 'Correo de la cuenta de servicio de Jira.');
@@ -177,7 +227,10 @@ function valor(nombre) {
       throw new ErrorDeConfiguracion([`${nombre} debe ser true o false (recibido ${mostrar}).`]);
     }
     case 'lista':
-      return String(r).split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
+      return String(r)
+        .split(',')
+        .map((x) => x.trim().toLowerCase())
+        .filter(Boolean);
     default: {
       const t = String(r);
       if (d.opciones && !d.opciones.includes(t)) {
@@ -192,70 +245,117 @@ const IDENTIFICADOR = /^[a-z_][a-z0-9_]{0,62}$/;
 const texto = (nombre) => valor(nombre);
 
 const config = {
-  get entorno() { return texto('NODE_ENV'); },
-  get produccion() { return texto('NODE_ENV') === 'production'; },
-  get rol() { return texto('ROL'); },
-  get log() { return { nivel: texto('LOG_LEVEL') }; },
+  get entorno() {
+    return texto('NODE_ENV');
+  },
+  get produccion() {
+    return texto('NODE_ENV') === 'production';
+  },
+  get rol() {
+    return texto('ROL');
+  },
+  get log() {
+    return { nivel: texto('LOG_LEVEL') };
+  },
   get http() {
     const tp = texto('TRUST_PROXY').trim();
-    const confiar = tp === '' || tp === 'false' ? undefined : (Number.isNaN(Number(tp)) ? tp : Number(tp));
+    const confiar = tp === '' || tp === 'false' ? undefined : Number.isNaN(Number(tp)) ? tp : Number(tp);
     return {
-      puerto: valor('PORT'), trustProxy: confiar, jsonLimite: texto('JSON_LIMIT'), jsonLimiteImportar: texto('JSON_LIMIT_IMPORTAR'),
-      hsts: valor('HSTS'), publicUrl: texto('PUBLIC_URL').replace(/\/+$/, ''), apagadoTimeoutMs: valor('APAGADO_TIMEOUT_MS'),
+      puerto: valor('PORT'),
+      trustProxy: confiar,
+      jsonLimite: texto('JSON_LIMIT'),
+      jsonLimiteImportar: texto('JSON_LIMIT_IMPORTAR'),
+      hsts: valor('HSTS'),
+      publicUrl: texto('PUBLIC_URL').replace(/\/+$/, ''),
+      apagadoTimeoutMs: valor('APAGADO_TIMEOUT_MS'),
       solicitudTimeoutMs: valor('SOLICITUD_TIMEOUT_MS'),
     };
   },
   get bd() {
     return {
-      url: texto('DATABASE_URL'), urlMigracion: texto('DATABASE_URL_MIGRACION') || texto('DATABASE_URL'), esquema: texto('DATABASE_SCHEMA'),
-      ssl: texto('DATABASE_SSL'), sslCa: texto('DATABASE_SSL_CA'), poolMax: valor('DB_POOL_MAX'), conexionTimeoutMs: valor('DB_CONNECT_TIMEOUT_MS'),
-      sentenciaTimeoutMs: valor('DB_STATEMENT_TIMEOUT_MS'), ociosoMs: valor('DB_IDLE_TIMEOUT_MS'), migrarAlArrancar: valor('MIGRAR_AL_ARRANCAR'),
+      url: texto('DATABASE_URL'),
+      urlMigracion: texto('DATABASE_URL_MIGRACION') || texto('DATABASE_URL'),
+      esquema: texto('DATABASE_SCHEMA'),
+      ssl: texto('DATABASE_SSL'),
+      sslCa: texto('DATABASE_SSL_CA'),
+      poolMax: valor('DB_POOL_MAX'),
+      conexionTimeoutMs: valor('DB_CONNECT_TIMEOUT_MS'),
+      sentenciaTimeoutMs: valor('DB_STATEMENT_TIMEOUT_MS'),
+      ociosoMs: valor('DB_IDLE_TIMEOUT_MS'),
+      migrarAlArrancar: valor('MIGRAR_AL_ARRANCAR'),
     };
   },
   get auth() {
     const issuer = texto('OIDC_ISSUER');
-    const user = texto('APP_USER'), pass = texto('APP_PASS');
+    const user = texto('APP_USER'),
+      pass = texto('APP_PASS');
     return {
       modo: issuer ? 'oidc' : user && pass ? 'basic' : 'none',
-      permitirAnonimo: valor('ALLOW_ANONYMOUS'), appUser: user, appPass: pass,
-      sesionSecreto: texto('SESSION_SECRET'), sesionHoras: valor('SESSION_HORAS'), cookieSecure: texto('COOKIE_SECURE'),
+      permitirAnonimo: valor('ALLOW_ANONYMOUS'),
+      appUser: user,
+      appPass: pass,
+      sesionSecreto: texto('SESSION_SECRET'),
+      sesionHoras: valor('SESSION_HORAS'),
+      cookieSecure: texto('COOKIE_SECURE'),
       tokenVidaDias: valor('TOKEN_VIDA_DIAS'),
       oidc: {
-        issuer, clientId: texto('OIDC_CLIENT_ID'), clientSecret: texto('OIDC_CLIENT_SECRET'), scopes: texto('OIDC_SCOPES'),
-        permitirInseguro: valor('OIDC_ALLOW_INSECURE'), dominios: valor('OIDC_ALLOWED_DOMAINS'),
-        correosAdmin: valor('OIDC_ADMIN_EMAILS'), correosSolicitante: valor('OIDC_REQUESTER_EMAILS'), correosLector: valor('OIDC_READER_EMAILS'),
-        claimGrupos: texto('OIDC_GROUPS_CLAIM'), gruposAdmin: valor('OIDC_ADMIN_GROUPS'), gruposSolicitante: valor('OIDC_REQUESTER_GROUPS'),
-        gruposLector: valor('OIDC_READER_GROUPS'), rolPorDefecto: texto('OIDC_DEFAULT_ROLE').toLowerCase(),
+        issuer,
+        clientId: texto('OIDC_CLIENT_ID'),
+        clientSecret: texto('OIDC_CLIENT_SECRET'),
+        scopes: texto('OIDC_SCOPES'),
+        permitirInseguro: valor('OIDC_ALLOW_INSECURE'),
+        dominios: valor('OIDC_ALLOWED_DOMAINS'),
+        correosAdmin: valor('OIDC_ADMIN_EMAILS'),
+        correosSolicitante: valor('OIDC_REQUESTER_EMAILS'),
+        correosLector: valor('OIDC_READER_EMAILS'),
+        claimGrupos: texto('OIDC_GROUPS_CLAIM'),
+        gruposAdmin: valor('OIDC_ADMIN_GROUPS'),
+        gruposSolicitante: valor('OIDC_REQUESTER_GROUPS'),
+        gruposLector: valor('OIDC_READER_GROUPS'),
+        rolPorDefecto: texto('OIDC_DEFAULT_ROLE').toLowerCase(),
       },
     };
   },
   get reservas() {
     return {
-      ttlHoras: valor('RESERVA_TTL_HORAS'), ttlMaxHoras: valor('RESERVA_TTL_MAX_HORAS'), exigeAprobador: valor('CONFIRMACION_EXIGE_APROBADOR'),
+      ttlHoras: valor('RESERVA_TTL_HORAS'),
+      ttlMaxHoras: valor('RESERVA_TTL_MAX_HORAS'),
+      exigeAprobador: valor('CONFIRMACION_EXIGE_APROBADOR'),
       barredorIntervaloSeg: valor('BARREDOR_INTERVALO_SEGUNDOS'),
     };
   },
   get limite() {
     return {
-      lecturaPorMinuto: valor('RATE_LIMIT_POR_MINUTO'), escrituraPorMinuto: valor('RATE_LIMIT_ESCRITURA_POR_MINUTO'),
-      ipPorMinuto: valor('RATE_LIMIT_IP_POR_MINUTO'), authFallosPorMinuto: valor('RATE_LIMIT_AUTH_FALLOS_POR_MINUTO'),
-      cuotaReservasPorToken: valor('CUOTA_RESERVAS_POR_TOKEN'), almacen: texto('LIMITE_ALMACEN'),
+      lecturaPorMinuto: valor('RATE_LIMIT_POR_MINUTO'),
+      escrituraPorMinuto: valor('RATE_LIMIT_ESCRITURA_POR_MINUTO'),
+      ipPorMinuto: valor('RATE_LIMIT_IP_POR_MINUTO'),
+      authFallosPorMinuto: valor('RATE_LIMIT_AUTH_FALLOS_POR_MINUTO'),
+      cuotaReservasPorToken: valor('CUOTA_RESERVAS_POR_TOKEN'),
+      almacen: texto('LIMITE_ALMACEN'),
     };
   },
-  get metricas() { return { token: texto('METRICS_TOKEN'), redesPermitidas: valor('METRICS_ALLOW_CIDRS') }; },
+  get metricas() {
+    return { token: texto('METRICS_TOKEN'), redesPermitidas: valor('METRICS_ALLOW_CIDRS') };
+  },
   get eventos() {
     return {
       publicadores: valor('EVENTOS_PUBLICADORES'),
       webhook: {
-        url: texto('EVENTOS_WEBHOOK_URL'), secreto: texto('EVENTOS_WEBHOOK_SECRET'), permitirHosts: valor('EVENTOS_WEBHOOK_PERMITIR_HOSTS'),
-        timeoutMs: valor('EVENTOS_WEBHOOK_TIMEOUT_MS'), reintentos: valor('EVENTOS_WEBHOOK_REINTENTOS'),
+        url: texto('EVENTOS_WEBHOOK_URL'),
+        secreto: texto('EVENTOS_WEBHOOK_SECRET'),
+        permitirHosts: valor('EVENTOS_WEBHOOK_PERMITIR_HOSTS'),
+        timeoutMs: valor('EVENTOS_WEBHOOK_TIMEOUT_MS'),
+        reintentos: valor('EVENTOS_WEBHOOK_REINTENTOS'),
       },
     };
   },
   get otel() {
     return {
-      activo: texto('OTEL_TRACES_EXPORTER') === 'otlp', endpoint: texto('OTEL_EXPORTER_OTLP_ENDPOINT'), cabeceras: texto('OTEL_EXPORTER_OTLP_HEADERS'),
-      servicio: texto('OTEL_SERVICE_NAME'), muestreo: Math.min(1, Math.max(0, Number(texto('OTEL_TRACES_SAMPLER_ARG')) || 0)),
+      activo: texto('OTEL_TRACES_EXPORTER') === 'otlp',
+      endpoint: texto('OTEL_EXPORTER_OTLP_ENDPOINT'),
+      cabeceras: texto('OTEL_EXPORTER_OTLP_HEADERS'),
+      servicio: texto('OTEL_SERVICE_NAME'),
+      muestreo: Math.min(1, Math.max(0, Number(texto('OTEL_TRACES_SAMPLER_ARG')) || 0)),
     };
   },
   get webhookJira() {
@@ -265,66 +365,123 @@ const config = {
   },
   get jira() {
     return {
-      activa: valor('JIRA_ENABLED'), baseUrl: texto('JIRA_BASE_URL'), email: texto('JIRA_EMAIL'), apiToken: texto('JIRA_API_TOKEN'),
-      proyecto: texto('JIRA_PROJECT'), tipoTicket: texto('JIRA_ISSUE_TYPE'), transicionFinal: texto('JIRA_DONE_TRANSITION'),
+      activa: valor('JIRA_ENABLED'),
+      baseUrl: texto('JIRA_BASE_URL'),
+      email: texto('JIRA_EMAIL'),
+      apiToken: texto('JIRA_API_TOKEN'),
+      proyecto: texto('JIRA_PROJECT'),
+      tipoTicket: texto('JIRA_ISSUE_TYPE'),
+      transicionFinal: texto('JIRA_DONE_TRANSITION'),
     };
   },
   get marca() {
     return {
-      nombre: texto('BRAND_NAME'), subtitulo: texto('BRAND_SUBTITLE'), pie: texto('BRAND_FOOTER'), colorBarra: texto('BRAND_COLOR_TOP'),
-      color: texto('BRAND_COLOR'), colorAcento: texto('BRAND_COLOR_ACCENT'), logoArchivo: texto('BRAND_LOGO_FILE'),
+      nombre: texto('BRAND_NAME'),
+      subtitulo: texto('BRAND_SUBTITLE'),
+      pie: texto('BRAND_FOOTER'),
+      colorBarra: texto('BRAND_COLOR_TOP'),
+      color: texto('BRAND_COLOR'),
+      colorAcento: texto('BRAND_COLOR_ACCENT'),
+      logoArchivo: texto('BRAND_LOGO_FILE'),
     };
   },
 };
 
-/** Devuelve { errores, avisos } sin lanzar. */
-function validar() {
-  const errores = [], avisos = [];
-  const intenta = (fn) => { try { return fn(); } catch (e) { (e.problemas || [e.message]).forEach((p) => errores.push(p)); return undefined; } };
+/** Acumula errores y avisos; `intenta` lee un valor y, si es inválido, anota el problema en vez de lanzar. */
+function crearContexto() {
+  const errores = [];
+  const avisos = [];
+  const intenta = (fn) => {
+    try {
+      return fn();
+    } catch (e) {
+      (e.problemas || [e.message]).forEach((p) => errores.push(p));
+      return undefined;
+    }
+  };
+  return { errores, avisos, intenta };
+}
 
-  // Cada grupo se lee dentro de intenta(): reúne todos los errores de tipo/rango/opciones.
-  for (const g of ['http', 'bd', 'auth', 'reservas', 'limite', 'metricas', 'eventos', 'otel', 'jira', 'marca', 'webhookJira']) intenta(() => config[g]);
-  for (const n of DEFINICIONES.keys()) {
-    if (process.env[n] && process.env[`${n}_FILE`]) avisos.push(`${n} y ${n}_FILE están definidas a la vez: se usa ${n}.`);
-  }
-
-  // Las comprobaciones de BD no dependen de que el resto de los valores sean válidos: se leen una a una.
+// Las comprobaciones de BD no dependen de que el resto de los valores sean válidos: se leen una a una.
+function validarBaseDeDatos({ errores, avisos, intenta }) {
   const url = intenta(() => valor('DATABASE_URL'));
   const esquema = intenta(() => valor('DATABASE_SCHEMA'));
   const ssl = intenta(() => valor('DATABASE_SSL'));
   if (url === '') errores.push('Falta DATABASE_URL (o DATABASE_URL_FILE).');
-  if (esquema !== undefined && !IDENTIFICADOR.test(esquema)) errores.push('DATABASE_SCHEMA debe ser un identificador simple en minúsculas (letras, números y _).');
-  if (ssl === 'verify-full' && !intenta(() => valor('DATABASE_SSL_CA'))) avisos.push('DATABASE_SSL=verify-full sin DATABASE_SSL_CA: se usarán las autoridades del sistema.');
+  if (esquema !== undefined && !IDENTIFICADOR.test(esquema))
+    errores.push('DATABASE_SCHEMA debe ser un identificador simple en minúsculas (letras, números y _).');
+  if (ssl === 'verify-full' && !intenta(() => valor('DATABASE_SSL_CA')))
+    avisos.push('DATABASE_SSL=verify-full sin DATABASE_SSL_CA: se usarán las autoridades del sistema.');
   if (intenta(() => valor('MIGRAR_AL_ARRANCAR'))) avisos.push('MIGRAR_AL_ARRANCAR=true: la app aplicará el esquema al arrancar (excepción solo para el POC).');
+}
 
-  const a = intenta(() => config.auth);
-  if (a) {
-    if (a.modo === 'oidc') {
-      if (config.produccion && config.http.publicUrl && !config.http.publicUrl.startsWith('https://') && a.cookieSecure !== 'true') {
-        avisos.push('PUBLIC_URL no es https: la cookie de sesión no llevará el atributo Secure (a menos que la petición llegue por HTTPS con TRUST_PROXY). En producción usa https o COOKIE_SECURE=true.');
-      }
-      const falta = [['OIDC_CLIENT_ID', a.oidc.clientId], ['OIDC_CLIENT_SECRET', a.oidc.clientSecret], ['PUBLIC_URL', config.http.publicUrl], ['SESSION_SECRET', a.sesionSecreto]]
-        .filter(([, v]) => !v).map(([k]) => k);
-      if (falta.length) errores.push(`Modo OIDC: faltan variables ${falta.join(', ')}.`);
-      if (a.sesionSecreto && a.sesionSecreto.length < 32) errores.push('SESSION_SECRET debe tener al menos 32 caracteres.');
-    }
-    if ((a.appUser && !a.appPass) || (!a.appUser && a.appPass)) errores.push('El modo Basic necesita APP_USER y APP_PASS juntos.');
-    if (config.produccion && a.modo === 'none' && !a.permitirAnonimo) {
-      errores.push('NODE_ENV=production sin autenticación: configura OIDC (OIDC_ISSUER…) o Basic (APP_USER y APP_PASS). Solo para demos: ALLOW_ANONYMOUS=true.');
-    }
-    if (a.modo === 'none' && a.permitirAnonimo) avisos.push('ALLOW_ANONYMOUS=true: cualquiera que llegue al servicio actúa como admin. Solo para demos.');
-    if (a.modo === 'basic') avisos.push('Modo Basic: pensado para POC y demos. Para uso real configura OIDC. Guarda APP_PASS como hash scrypt.');
-    if (a.modo === 'basic' && !String(a.appPass).startsWith('scrypt$')) avisos.push('APP_PASS está en texto plano: usa un hash (npm run hash-password).');
+function validarOidc({ errores, avisos }, a) {
+  if (config.produccion && config.http.publicUrl && !config.http.publicUrl.startsWith('https://') && a.cookieSecure !== 'true') {
+    avisos.push(
+      'PUBLIC_URL no es https: la cookie de sesión no llevará el atributo Secure (a menos que la petición llegue por HTTPS con TRUST_PROXY). En producción usa https o COOKIE_SECURE=true.',
+    );
   }
+  const falta = [
+    ['OIDC_CLIENT_ID', a.oidc.clientId],
+    ['OIDC_CLIENT_SECRET', a.oidc.clientSecret],
+    ['PUBLIC_URL', config.http.publicUrl],
+    ['SESSION_SECRET', a.sesionSecreto],
+  ]
+    .filter(([, v]) => !v)
+    .map(([k]) => k);
+  if (falta.length) errores.push(`Modo OIDC: faltan variables ${falta.join(', ')}.`);
+  if (a.sesionSecreto && a.sesionSecreto.length < 32) errores.push('SESSION_SECRET debe tener al menos 32 caracteres.');
+}
 
+function validarAutenticacion(ctx) {
+  const { errores, avisos, intenta } = ctx;
+  const a = intenta(() => config.auth);
+  if (!a) return;
+  if (a.modo === 'oidc') validarOidc(ctx, a);
+  if ((a.appUser && !a.appPass) || (!a.appUser && a.appPass)) errores.push('El modo Basic necesita APP_USER y APP_PASS juntos.');
+  if (config.produccion && a.modo === 'none' && !a.permitirAnonimo) {
+    errores.push('NODE_ENV=production sin autenticación: configura OIDC (OIDC_ISSUER…) o Basic (APP_USER y APP_PASS). Solo para demos: ALLOW_ANONYMOUS=true.');
+  }
+  if (a.modo === 'none' && a.permitirAnonimo) avisos.push('ALLOW_ANONYMOUS=true: cualquiera que llegue al servicio actúa como admin. Solo para demos.');
+  if (a.modo === 'basic') avisos.push('Modo Basic: pensado para POC y demos. Para uso real configura OIDC. Guarda APP_PASS como hash scrypt.');
+  if (a.modo === 'basic' && !String(a.appPass).startsWith('scrypt$')) avisos.push('APP_PASS está en texto plano: usa un hash (npm run hash-password).');
+}
+
+function validarReservasEventosYTrazas({ errores, intenta }) {
   const r = intenta(() => config.reservas);
   if (r && r.ttlHoras > r.ttlMaxHoras) errores.push('RESERVA_TTL_HORAS no puede superar RESERVA_TTL_MAX_HORAS.');
   const ev = intenta(() => config.eventos);
-  if (ev && ev.publicadores.includes('webhook') && !(ev.webhook.url && ev.webhook.secreto)) errores.push('El publicador «webhook» necesita EVENTOS_WEBHOOK_URL y EVENTOS_WEBHOOK_SECRET.');
+  if (ev && ev.publicadores.includes('webhook') && !(ev.webhook.url && ev.webhook.secreto))
+    errores.push('El publicador «webhook» necesita EVENTOS_WEBHOOK_URL y EVENTOS_WEBHOOK_SECRET.');
   if (ev) for (const p of ev.publicadores) if (!['log', 'webhook'].includes(p)) errores.push(`EVENTOS_PUBLICADORES: adaptador desconocido «${p}».`);
   const o = intenta(() => config.otel);
   if (o && o.activo && !o.endpoint) errores.push('OTEL_TRACES_EXPORTER=otlp necesita OTEL_EXPORTER_OTLP_ENDPOINT.');
-  return { errores: [...new Set(errores)], avisos: [...new Set(avisos)] };
+}
+
+/** Devuelve { errores, avisos } sin lanzar. */
+function validar() {
+  const ctx = crearContexto();
+  // Cada grupo se lee dentro de intenta(): reúne todos los errores de tipo/rango/opciones.
+  for (const g of ['http', 'bd', 'auth', 'reservas', 'limite', 'metricas', 'eventos', 'otel', 'jira', 'marca', 'webhookJira']) ctx.intenta(() => config[g]);
+  for (const n of DEFINICIONES.keys()) {
+    if (process.env[n] && process.env[`${n}_FILE`]) ctx.avisos.push(`${n} y ${n}_FILE están definidas a la vez: se usa ${n}.`);
+  }
+  validarBaseDeDatos(ctx);
+  validarAutenticacion(ctx);
+  validarReservasEventosYTrazas(ctx);
+  return { errores: [...new Set(ctx.errores)], avisos: [...new Set(ctx.avisos)] };
+}
+
+/** Validación mínima para `npm run migrar`: solo necesita la conexión del migrador, el esquema y el modo TLS (no la autenticación de la app). */
+function validarParaMigrar() {
+  const ctx = crearContexto();
+  const url = ctx.intenta(() => valor('DATABASE_URL_MIGRACION') || valor('DATABASE_URL'));
+  const esquema = ctx.intenta(() => valor('DATABASE_SCHEMA'));
+  ctx.intenta(() => valor('DATABASE_SSL'));
+  if (url === '') ctx.errores.push('Falta DATABASE_URL_MIGRACION (o DATABASE_URL): la conexión del usuario migrador.');
+  if (esquema !== undefined && !IDENTIFICADOR.test(esquema))
+    ctx.errores.push('DATABASE_SCHEMA debe ser un identificador simple en minúsculas (letras, números y _).');
+  return { errores: [...new Set(ctx.errores)], avisos: [] };
 }
 
 /** Valida al arrancar: lanza un único error con todos los problemas. Devuelve los avisos. */
@@ -337,4 +494,4 @@ function validarOFallar() {
 /** Catálogo para generar la documentación y comprobar que no queda nada sin documentar. */
 const listarVariables = () => [...DEFINICIONES.values()];
 
-module.exports = { config, validar, validarOFallar, listarVariables, ErrorDeConfiguracion, IDENTIFICADOR };
+module.exports = { config, validar, validarParaMigrar, validarOFallar, listarVariables, ErrorDeConfiguracion, IDENTIFICADOR };

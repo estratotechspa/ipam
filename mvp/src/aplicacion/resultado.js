@@ -12,7 +12,11 @@ const fallo = (tipo, error, extra = {}) => ({ ok: /** @type {false} */ (false), 
 /** Un dato guardado choca con una restricción de la base (solapamiento, fuera del pool, pool inexistente). */
 class ConflictoDeDatos extends Error {
   /** @param {string} mensaje @param {string} [codigo] */
-  constructor(mensaje, codigo) { super(mensaje); this.name = 'ConflictoDeDatos'; this.codigo = codigo; }
+  constructor(mensaje, codigo) {
+    super(mensaje);
+    this.name = 'ConflictoDeDatos';
+    this.codigo = codigo;
+  }
 }
 
 module.exports = { ok, fallo, ConflictoDeDatos };

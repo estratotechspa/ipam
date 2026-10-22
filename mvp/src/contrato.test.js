@@ -21,14 +21,22 @@ async function verificar(r, metodo, plantilla) {
   const tipo = r.headers.get('content-type') || '';
   if (!tipo.includes('application/json')) return null;
   const resuelta = def.$ref ? doc.components.responses[def.$ref.split('/').pop()] : def;
-  assert.ok(resuelta.content && resuelta.content['application/json'], `${metodo} ${plantilla} ${r.status}: devuelve JSON pero el contrato no describe su cuerpo`);
+  assert.ok(
+    resuelta.content && resuelta.content['application/json'],
+    `${metodo} ${plantilla} ${r.status}: devuelve JSON pero el contrato no describe su cuerpo`,
+  );
   const cuerpo = await r.json();
   const ref = def.$ref ? def.$ref.replace('#', '') : `/paths/${escapar(plantilla)}/${metodo.toLowerCase()}/responses/${r.status}`;
   const validar = validador.ajv.compile({ $ref: `openapi#${ref}/content/application~1json/schema` });
-  assert.equal(validar(cuerpo), true, `${metodo} ${plantilla} ${r.status}: la respuesta no cumple el contrato\n${JSON.stringify(validar.errors, null, 1)}\ncuerpo: ${JSON.stringify(cuerpo)}`);
+  assert.equal(
+    validar(cuerpo),
+    true,
+    `${metodo} ${plantilla} ${r.status}: la respuesta no cumple el contrato\n${JSON.stringify(validar.errors, null, 1)}\ncuerpo: ${JSON.stringify(cuerpo)}`,
+  );
   return cuerpo;
 }
-const llamar = (metodo, ruta, cuerpo, h = ADM) => fetch(url + ruta, { method: metodo, headers: h, body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo) });
+const llamar = (metodo, ruta, cuerpo, h = ADM) =>
+  fetch(url + ruta, { method: metodo, headers: h, body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo) });
 const comoAgente = (extra = {}) => ({ Authorization: `Bearer ${tokenAgente}`, 'Content-Type': 'application/json', ...extra });
 
 test.before(async () => {
@@ -39,7 +47,11 @@ test.before(async () => {
   const t = await (await llamar('POST', '/api/v1/tokens', { nombre: 'agente-contrato', rol: 'agente', cuota_reservas: 2 })).json();
   tokenAgente = t.token;
 });
-test.after(async () => { if (!hayBase) return; await s.parar(); await b.borrar(); });
+test.after(async () => {
+  if (!hayBase) return;
+  await s.parar();
+  await b.borrar();
+});
 
 test('el contrato publicado por el servicio es el mismo que construye el código', opts, async () => {
   for (const ruta of ['/api/openapi.json', '/api/v1/openapi.json']) {
@@ -47,7 +59,11 @@ test('el contrato publicado por el servicio es el mismo que construye el código
     assert.equal(r.status, 200);
     assert.deepEqual(await r.json(), JSON.parse(JSON.stringify({ ...doc })));
   }
-  assert.equal((await fetch(`${url}/api/openapi.json`, { headers: { Authorization: `Bearer ipam_${'Z'.repeat(43)}` } })).status, 401, 'el contrato exige credenciales');
+  assert.equal(
+    (await fetch(`${url}/api/openapi.json`, { headers: { Authorization: `Bearer ipam_${'Z'.repeat(43)}` } })).status,
+    401,
+    'el contrato exige credenciales',
+  );
 });
 
 test('lecturas: sondas, sesión, marca, pools, resumen, asignaciones, eventos', opts, async () => {
@@ -92,50 +108,50 @@ test('reservas: todos los códigos de respuesta reales cumplen el contrato', opt
   const rep = await llamar('POST', R, { ...base, ticket: 'NET-901' }, comoAgente({ 'Idempotency-Key': 'ct-1' }));
   assert.equal(rep.status, 200);
   assert.equal((await verificar(rep, 'POST', R)).repetida, true);
-  await verificar(await llamar('POST', R, { ...base, vpc: 'otra' }, comoAgente({ 'Idempotency-Key': 'ct-1' })), 'POST', R);          // 409 idempotencia
-  await verificar(await llamar('POST', R, { ...base, mascara: undefined, cidr: r.cidr }, comoAgente()), 'POST', R);                // 409 solapamiento
-  await verificar(await llamar('POST', R, { ...base, ttl_horas: 99 }, comoAgente()), 'POST', R);                                     // 400
-  await verificar(await llamar('POST', R, { ...base, campo_raro: 1 }, comoAgente()), 'POST', R);                                    // 400 forma
+  await verificar(await llamar('POST', R, { ...base, vpc: 'otra' }, comoAgente({ 'Idempotency-Key': 'ct-1' })), 'POST', R); // 409 idempotencia
+  await verificar(await llamar('POST', R, { ...base, mascara: undefined, cidr: r.cidr }, comoAgente()), 'POST', R); // 409 solapamiento
+  await verificar(await llamar('POST', R, { ...base, ttl_horas: 99 }, comoAgente()), 'POST', R); // 400
+  await verificar(await llamar('POST', R, { ...base, campo_raro: 1 }, comoAgente()), 'POST', R); // 400 forma
   await verificar(await llamar('POST', R, { ...base, pool: 'no-existe', ambiente: undefined, tipo: undefined }, comoAgente()), 'POST', R); // 404
-  await verificar(await llamar('POST', R, base, { ...ADM }), 'POST', R);                                                             // admin: 201
-  await verificar(await llamar('POST', R, base, comoAgente()), 'POST', R);                                                           // 2.ª del token (cuota 2)
-  await verificar(await llamar('POST', R, base, comoAgente()), 'POST', R);                                                           // 429 cuota
+  await verificar(await llamar('POST', R, base, { ...ADM }), 'POST', R); // admin: 201
+  await verificar(await llamar('POST', R, base, comoAgente()), 'POST', R); // 2.ª del token (cuota 2)
+  await verificar(await llamar('POST', R, base, comoAgente()), 'POST', R); // 429 cuota
   await b.sql("insert into pools (id,tipo,ambiente,proveedor,cidr) values ('gke-nodos-qa-2','Nodos','qa','GCP','10.77.0.0/16')");
-  await verificar(await llamar('POST', R, base, ADM), 'POST', R);                                                                    // 422 ambiguo
+  await verificar(await llamar('POST', R, base, ADM), 'POST', R); // 422 ambiguo
   await verificar(await llamar('GET', R), 'GET', R);
-  await verificar(await llamar('GET', `${R}?estado=rara`), 'GET', R);                                                                // 400
+  await verificar(await llamar('GET', `${R}?estado=rara`), 'GET', R); // 400
   await verificar(await llamar('GET', `${R}/${r.id}`), 'GET', `${R}/{id}`);
-  await verificar(await llamar('GET', `${R}/no-es-uuid`), 'GET', `${R}/{id}`);                                                       // 404
+  await verificar(await llamar('GET', `${R}/no-es-uuid`), 'GET', `${R}/{id}`); // 404
 
-  await verificar(await llamar('POST', `${R}/${r.id}/confirmar`, {}, comoAgente()), 'POST', `${R}/{id}/confirmar`);                  // 400 falta aprobación
+  await verificar(await llamar('POST', `${R}/${r.id}/confirmar`, {}, comoAgente()), 'POST', `${R}/{id}/confirmar`); // 400 falta aprobación
   const conf = await llamar('POST', `${R}/${r.id}/confirmar`, { aprobado_por: 'ana@empresa.example', referencia: 'https://gitlab.example/mr/1' }, comoAgente());
   assert.equal(conf.status, 200);
   assert.equal((await verificar(conf, 'POST', `${R}/{id}/confirmar`)).asignacion.origen, 'agente');
-  await verificar(await llamar('POST', `${R}/${r.id}/confirmar`, {}, ADM), 'POST', `${R}/{id}/confirmar`);                           // repetida
-  await verificar(await llamar('POST', `${R}/${r.id}/confirmar`, { raro: 1 }, comoAgente()), 'POST', `${R}/{id}/confirmar`);        // 400 forma
+  await verificar(await llamar('POST', `${R}/${r.id}/confirmar`, {}, ADM), 'POST', `${R}/{id}/confirmar`); // repetida
+  await verificar(await llamar('POST', `${R}/${r.id}/confirmar`, { raro: 1 }, comoAgente()), 'POST', `${R}/{id}/confirmar`); // 400 forma
   await verificar(await llamar('POST', `${R}/11111111-1111-4111-8111-111111111111/confirmar`, {}, ADM), 'POST', `${R}/{id}/confirmar`); // 404
   const otro = await (await llamar('POST', '/api/tokens', { nombre: 'otro-contrato', rol: 'agente' })).json();
   await verificar(await llamar('DELETE', `${R}/${r.id}`, undefined, { Authorization: `Bearer ${otro.token}` }), 'DELETE', `${R}/{id}`); // 403 no es dueño
   const lib = await verificar(await llamar('DELETE', `${R}/${r.id}`, undefined, comoAgente()), 'DELETE', `${R}/{id}`);
   assert.equal(lib.asignacion_borrada, true);
-  await verificar(await llamar('DELETE', `${R}/${r.id}`, undefined, comoAgente()), 'DELETE', `${R}/{id}`);                           // repetida
+  await verificar(await llamar('DELETE', `${R}/${r.id}`, undefined, comoAgente()), 'DELETE', `${R}/{id}`); // repetida
   const vieja = await (await llamar('POST', R, { ...base, pool: 'gke-nodos-qa-2', ambiente: undefined, tipo: undefined, ttl_horas: 1 }, ADM)).json();
   await b.sql("update reservas set expira_en = now() - interval '1 minute' where id = $1", [vieja.id]);
-  await verificar(await llamar('POST', `${R}/${vieja.id}/confirmar`, {}, ADM), 'POST', `${R}/{id}/confirmar`);                       // 409 expirada
+  await verificar(await llamar('POST', `${R}/${vieja.id}/confirmar`, {}, ADM), 'POST', `${R}/{id}/confirmar`); // 409 expirada
 });
 
 test('tokens, usuarios, auditoría, respaldo y Jira cumplen el contrato', opts, async () => {
   const T = '/api/v1/tokens';
   const creado = await verificar(await llamar('POST', T, { nombre: 'ct-token', rol: 'lector', expira_dias: 30 }), 'POST', T);
   assert.match(creado.token, /^ipam_/);
-  await verificar(await llamar('POST', T, { nombre: 'ct-token', rol: 'lector' }), 'POST', T);                       // 409
-  await verificar(await llamar('POST', T, { nombre: 'x', rol: 'admin' }), 'POST', T);                               // 400
-  await verificar(await llamar('POST', T, { nombre: 'ct-2', rol: 'lector' }, comoAgente()), 'POST', T);             // 403
+  await verificar(await llamar('POST', T, { nombre: 'ct-token', rol: 'lector' }), 'POST', T); // 409
+  await verificar(await llamar('POST', T, { nombre: 'x', rol: 'admin' }), 'POST', T); // 400
+  await verificar(await llamar('POST', T, { nombre: 'ct-2', rol: 'lector' }, comoAgente()), 'POST', T); // 403
   const lista = await verificar(await llamar('GET', T), 'GET', T);
   assert.ok(lista.every((t) => !('token' in t) && !('hash' in t)));
-  await verificar(await llamar('GET', T, undefined, comoAgente()), 'GET', T);                                       // 403
+  await verificar(await llamar('GET', T, undefined, comoAgente()), 'GET', T); // 403
   await verificar(await llamar('DELETE', `${T}/${creado.id}`), 'DELETE', `${T}/{id}`);
-  await verificar(await llamar('DELETE', `${T}/11111111-1111-4111-8111-111111111111`), 'DELETE', `${T}/{id}`);      // 404
+  await verificar(await llamar('DELETE', `${T}/11111111-1111-4111-8111-111111111111`), 'DELETE', `${T}/{id}`); // 404
 
   await verificar(await llamar('GET', '/api/v1/usuarios'), 'GET', '/api/v1/usuarios');
   await verificar(await llamar('PUT', '/api/v1/usuarios/ana%40empresa.example', { rol: 'solicitante' }), 'PUT', '/api/v1/usuarios/{email}');
@@ -145,10 +161,18 @@ test('tokens, usuarios, auditoría, respaldo y Jira cumplen el contrato', opts, 
 
   const resp = await verificar(await llamar('GET', '/api/v1/exportar.json'), 'GET', '/api/v1/exportar.json');
   await verificar(await llamar('POST', '/api/v1/importar', resp), 'POST', '/api/v1/importar');
-  await verificar(await llamar('POST', '/api/v1/importar', { hola: 1 }), 'POST', '/api/v1/importar');                // 400
+  await verificar(await llamar('POST', '/api/v1/importar', { hola: 1 }), 'POST', '/api/v1/importar'); // 400
 
-  await verificar(await llamar('POST', '/api/v1/jira/simular', { ambiente: 'dev', tipo: 'Nodos', mascara: 28, vpc: 'jira-ct' }), 'POST', '/api/v1/jira/simular');
-  await verificar(await llamar('POST', '/api/v1/jira/simular', { ambiente: 'prod', tipo: 'Inexistente', mascara: 28, vpc: 'x' }), 'POST', '/api/v1/jira/simular'); // 422
+  await verificar(
+    await llamar('POST', '/api/v1/jira/simular', { ambiente: 'dev', tipo: 'Nodos', mascara: 28, vpc: 'jira-ct' }),
+    'POST',
+    '/api/v1/jira/simular',
+  );
+  await verificar(
+    await llamar('POST', '/api/v1/jira/simular', { ambiente: 'prod', tipo: 'Inexistente', mascara: 28, vpc: 'x' }),
+    'POST',
+    '/api/v1/jira/simular',
+  ); // 422
   const x = await fetch(`${url}/api/v1/exportar.xlsx`, { headers: ADM });
   assert.equal(x.status, 200);
   await verificar(x, 'GET', '/api/v1/exportar.xlsx');

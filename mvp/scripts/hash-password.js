@@ -8,13 +8,21 @@ const { hashear } = require('../src/adaptadores/auth/contrasena');
 
 async function leerEntrada() {
   if (process.argv[2]) return process.argv[2];
-  if (process.stdin.isTTY) { console.error('Uso: printf %s "clave" | node scripts/hash-password.js'); process.exit(2); }
+  if (process.stdin.isTTY) {
+    console.error('Uso: printf %s "clave" | node scripts/hash-password.js');
+    process.exit(2);
+  }
   const partes = [];
   for await (const p of process.stdin) partes.push(p);
-  return Buffer.concat(partes).toString('utf8').replace(/\r?\n$/, '');
+  return Buffer.concat(partes)
+    .toString('utf8')
+    .replace(/\r?\n$/, '');
 }
 
 leerEntrada().then(async (clave) => {
-  if (clave.length < 12) { console.error('La clave debe tener al menos 12 caracteres.'); process.exit(2); }
+  if (clave.length < 12) {
+    console.error('La clave debe tener al menos 12 caracteres.');
+    process.exit(2);
+  }
   console.log(await hashear(clave));
 });

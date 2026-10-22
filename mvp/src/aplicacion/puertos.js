@@ -31,4 +31,11 @@
  * @property {(fn: (tx: any) => Promise<any>) => Promise<any>} transaccion
  */
 
+/**
+ * @typedef {Object} AlmacenLimite  Contadores del límite de peticiones (ventana deslizante). Adaptadores: PostgreSQL (por defecto) y memoria (pruebas).
+ * @property {(claves: string[], ventanaSeg?: number) => Promise<Array<{clave: string, actual: number, previa: number, avance: number}>>} incrementar  suma 1 a cada clave
+ * @property {(clave: string, ventanaSeg?: number) => Promise<{clave: string, actual: number, previa: number, avance: number}>} estado  lee sin sumar
+ * @property {(claves: string[], ventanaSeg?: number) => Promise<void>} devolver  resta 1 (una petición rechazada no consume cupo)
+ */
+
 module.exports = {};

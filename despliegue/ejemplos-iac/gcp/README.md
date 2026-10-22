@@ -3,7 +3,7 @@
 > **NO VALIDADO CONTRA UNA CUENTA REAL.** Se comprobó la sintaxis con `tofu validate` y se escanea con Checkov/Trivy en CI;
 > nadie ha ejecutado `tofu apply` con este código. Léelo, adáptalo y pruébalo primero en un proyecto desechable.
 
-Crea: Cloud SQL (PostgreSQL 16) · Cloud Run (servicio + job de migración) · Secret Manager · dos cuentas de servicio de **permisos mínimos**
+Crea: Cloud SQL (PostgreSQL 16, **sin IP pública**: acceso por IP privada con peering de servicios; Cloud Run sale a la VPC con egreso directo) · Cloud Run (servicio + job de migración) · Secret Manager · dos cuentas de servicio de **permisos mínimos**
 (`runtime`: solo Cloud SQL Client y sus propios secretos; `migrador`: solo Cloud SQL Client y el secreto de migración).
 
 ```bash

@@ -14,9 +14,17 @@ const SIN_SOLAPES = `select count(*)::int as n from (
     on x.id < y.id and x.pool_id = y.pool_id and x.cidr && y.cidr`;
 
 let b, s, s2, url;
-const llamar = (metodo, ruta, cuerpo, h = {}, base = url) => fetch(base + ruta, { method: metodo, headers: { ...H, ...h }, body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo) });
+const llamar = (metodo, ruta, cuerpo, h = {}, base = url) =>
+  fetch(base + ruta, { method: metodo, headers: { ...H, ...h }, body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo) });
 const json = async (r) => ({ estado: r.status, cuerpo: await r.json() });
-const reservar = (cuerpo, clave, base) => llamar('POST', '/api/reservas', { ambiente: 'qa', tipo: 'Nodos', mascara: 24, vpc: 'vpc-prueba', ...cuerpo }, clave ? { 'Idempotency-Key': clave } : {}, base);
+const reservar = (cuerpo, clave, base) =>
+  llamar(
+    'POST',
+    '/api/reservas',
+    { ambiente: 'qa', tipo: 'Nodos', mascara: 24, vpc: 'vpc-prueba', ...cuerpo },
+    clave ? { 'Idempotency-Key': clave } : {},
+    base,
+  );
 
 test.before(async () => {
   if (!hayBase) return;
@@ -25,12 +33,19 @@ test.before(async () => {
   s2 = await lanzarServicio({ DATABASE_URL: b.url, BARREDOR_INTERVALO_SEGUNDOS: '5' });
   url = s.url;
 });
-test.after(async () => { if (!hayBase) return; await Promise.all([s.parar(), s2.parar()]); await b.borrar(); });
+test.after(async () => {
+  if (!hayBase) return;
+  await Promise.all([s.parar(), s2.parar()]);
+  await b.borrar();
+});
 
 test('ciclo completo: reservar → ver → confirmar (origen agente) → liberar borra la asignación; todo idempotente', opts, async () => {
   const r = await json(await reservar({ ticket: 'NET-901' }, 'ciclo-1'));
   assert.equal(r.estado, 201);
-  assert.deepEqual({ pool: r.cuerpo.pool_id, estado: r.cuerpo.estado, rep: r.cuerpo.repetida, ticket: r.cuerpo.ticket }, { pool: 'gke-nodos-qa', estado: 'reservada', rep: false, ticket: 'NET-901' });
+  assert.deepEqual(
+    { pool: r.cuerpo.pool_id, estado: r.cuerpo.estado, rep: r.cuerpo.repetida, ticket: r.cuerpo.ticket },
+    { pool: 'gke-nodos-qa', estado: 'reservada', rep: false, ticket: 'NET-901' },
+  );
   assert.ok(r.cuerpo.segundos_restantes > 86000 && r.cuerpo.segundos_restantes <= 86400);
   const id = r.cuerpo.id;
 
@@ -48,7 +63,10 @@ test('ciclo completo: reservar → ver → confirmar (origen agente) → liberar
 
   const c = await json(await llamar('POST', `/api/reservas/${id}/confirmar`, {}));
   assert.equal(c.estado, 200);
-  assert.deepEqual({ estado: c.cuerpo.estado, origen: c.cuerpo.asignacion.origen, cidr: c.cuerpo.asignacion.cidr, rep: c.cuerpo.repetida }, { estado: 'confirmada', origen: 'agente', cidr: r.cuerpo.cidr, rep: false });
+  assert.deepEqual(
+    { estado: c.cuerpo.estado, origen: c.cuerpo.asignacion.origen, cidr: c.cuerpo.asignacion.cidr, rep: c.cuerpo.repetida },
+    { estado: 'confirmada', origen: 'agente', cidr: r.cuerpo.cidr, rep: false },
+  );
   assert.ok((await (await fetch(`${url}/api/asignaciones`)).json()).some((a) => a.origen === 'agente' && a.cidr === r.cuerpo.cidr));
   const c2 = await json(await llamar('POST', `/api/reservas/${id}/confirmar`, {}));
   assert.deepEqual({ estado: c2.estado, rep: c2.cuerpo.repetida }, { estado: 200, rep: true });
@@ -62,7 +80,10 @@ test('ciclo completo: reservar → ver → confirmar (origen agente) → liberar
 
   const aud = (await b.sql("select accion from auditoria where accion like '%reserva%' or accion = 'reservar' order by id")).rows.map((x) => x.accion);
   assert.deepEqual(aud, ['reservar', 'confirmar_reserva', 'liberar_reserva']);
-  assert.deepEqual((await b.sql("select distinct tipo from eventos where tipo like 'reserva_%' order by 1")).rows.map((x) => x.tipo), ['reserva_confirmada', 'reserva_creada', 'reserva_liberada']);
+  assert.deepEqual(
+    (await b.sql("select distinct tipo from eventos where tipo like 'reserva_%' order by 1")).rows.map((x) => x.tipo),
+    ['reserva_confirmada', 'reserva_creada', 'reserva_liberada'],
+  );
 });
 
 test('misma clave con reserva liberada → 409 (nunca 200); con otra petición → 409; errores con código y request_id', opts, async () => {
@@ -88,7 +109,11 @@ test('expiración con el reloj de la base: vencida = expirada al consultar; deja
 
   await b.sql("update reservas set expira_en = now() - interval '1 minute' where id = $1", [a.cuerpo.id]);
   assert.equal((await json(await fetch(`${url}/api/reservas/${a.cuerpo.id}`))).cuerpo.estado, 'expirada');
-  assert.equal((await b.sql('select estado from reservas where id = $1', [a.cuerpo.id])).rows[0].estado, 'reservada', 'la base aún dice «reservada»: la expiración es perezosa');
+  assert.equal(
+    (await b.sql('select estado from reservas where id = $1', [a.cuerpo.id])).rows[0].estado,
+    'reservada',
+    'la base aún dice «reservada»: la expiración es perezosa',
+  );
   assert.equal((await (await fetch(`${url}/api/pools?ambiente=qa`)).json())[0].reservas_vigentes, 0);
   const c = await json(await llamar('POST', `/api/reservas/${a.cuerpo.id}/confirmar`, {}));
   assert.deepEqual({ estado: c.estado, e: c.cuerpo.error }, { estado: 409, e: 'reserva_no_vigente' });
@@ -130,18 +155,30 @@ test('pool ambiguo → 422 con las opciones; mascara y cidr inconsistentes y TTL
   assert.equal((await json(await reservar({ pool: 'nope', ambiente: undefined, tipo: undefined }))).estado, 404);
   assert.equal((await json(await llamar('POST', '/api/reservas/no-es-uuid/confirmar', {}))).estado, 404);
   const forma = await json(await llamar('POST', '/api/reservas', { vpc: 5 }));
-  assert.deepEqual({ e: forma.estado, c: forma.cuerpo.error, campo: forma.cuerpo.detalles[0].campo }, { e: 400, c: 'validacion', campo: '/vpc' }, 'la forma la valida el contrato');
-  assert.equal((await json(await llamar('POST', '/api/reservas', { vpc: '   ', ambiente: 'qa', tipo: 'Nodos', mascara: 24 }))).cuerpo.error, 'vpc_invalido', 'las reglas de negocio las valida el dominio');
+  assert.deepEqual(
+    { e: forma.estado, c: forma.cuerpo.error, campo: forma.cuerpo.detalles[0].campo },
+    { e: 400, c: 'validacion', campo: '/vpc' },
+    'la forma la valida el contrato',
+  );
+  assert.equal(
+    (await json(await llamar('POST', '/api/reservas', { vpc: '   ', ambiente: 'qa', tipo: 'Nodos', mascara: 24 }))).cuerpo.error,
+    'vpc_invalido',
+    'las reglas de negocio las valida el dominio',
+  );
   await b.sql("update reservas set estado = 'liberada' where estado = 'reservada'");
 });
 
 test('concurrencia entre DOS instancias: 40 reservas y 20 asignaciones a la vez → ninguna se solapa', opts, async () => {
-  const pedir = (i) => (i % 3 === 0
-    ? llamar('POST', '/api/solicitudes', { pool: 'gke-nodos-qa', vpc: `conc-a-${i}`, mascara: 24 }, {}, i % 2 ? s.url : s2.url)
-    : reservar({ vpc: `conc-r-${i}` }, `conc-${i}`, i % 2 ? s.url : s2.url));
+  const pedir = (i) =>
+    i % 3 === 0
+      ? llamar('POST', '/api/solicitudes', { pool: 'gke-nodos-qa', vpc: `conc-a-${i}`, mascara: 24 }, {}, i % 2 ? s.url : s2.url)
+      : reservar({ vpc: `conc-r-${i}` }, `conc-${i}`, i % 2 ? s.url : s2.url);
   const rs = await Promise.all(Array.from({ length: 60 }, (_, i) => pedir(i)));
   const estados = rs.map((r) => r.status);
-  assert.ok(estados.every((e) => e === 201), `estados inesperados: ${JSON.stringify(estados.filter((e) => e !== 201))}`);
+  assert.ok(
+    estados.every((e) => e === 201),
+    `estados inesperados: ${JSON.stringify(estados.filter((e) => e !== 201))}`,
+  );
   const cuerpos = await Promise.all(rs.map((r) => r.json()));
   assert.equal(new Set(cuerpos.map((c) => c.cidr)).size, 60, 'ningún rango repetido');
   assert.equal((await b.sql(SIN_SOLAPES)).rows[0].n, 0, 'sin solapes entre reservas y asignaciones');
@@ -155,20 +192,36 @@ test('concurrencia entre DOS instancias: 40 reservas y 20 asignaciones a la vez 
 
 test('garantías de la base aunque se salten la API (disparadores y restricciones)', opts, async () => {
   const insertarReserva = (cidr, pool = 'gke-nodos-qa', clave = null, solicitante = 'directo') =>
-    b.sql("insert into reservas (pool_id, cidr, vpc, solicitante, ticket, clave_idem, expira_en) values ($1,$2,'v',$3,'NET-1',$4, now() + interval '1 hour')", [pool, cidr, solicitante, clave]);
+    b.sql("insert into reservas (pool_id, cidr, vpc, solicitante, ticket, clave_idem, expira_en) values ($1,$2,'v',$3,'NET-1',$4, now() + interval '1 hour')", [
+      pool,
+      cidr,
+      solicitante,
+      clave,
+    ]);
   await insertarReserva('10.20.230.0/24');
   await assert.rejects(insertarReserva('10.20.230.128/25'), (e) => e.code === '23P01', 'dos reservas vigentes no se solapan (exclusión GiST)');
-  await assert.rejects(b.sql("insert into asignaciones (pool_id, cidr, vpc, solicitante, ticket) values ('gke-nodos-qa','10.20.230.0/25','v','x','NET-2')"), (e) => e.code === '23P01', 'una asignación no pisa una reserva vigente');
+  await assert.rejects(
+    b.sql("insert into asignaciones (pool_id, cidr, vpc, solicitante, ticket) values ('gke-nodos-qa','10.20.230.0/25','v','x','NET-2')"),
+    (e) => e.code === '23P01',
+    'una asignación no pisa una reserva vigente',
+  );
   await assert.rejects(insertarReserva('10.20.0.0/22'), (e) => e.code === '23P01', 'una reserva no pisa una asignación (semilla 10.20.0.0/20)');
   await assert.rejects(insertarReserva('10.99.0.0/24'), (e) => e.code === '23514', 'fuera del pool');
   await insertarReserva('10.20.231.0/24', 'gke-nodos-qa', 'k-unica', 'dup');
-  await assert.rejects(insertarReserva('10.20.232.0/24', 'gke-nodos-qa', 'k-unica', 'dup'), (e) => e.code === '23505', 'índice único (solicitante, clave_idem)');
+  await assert.rejects(
+    insertarReserva('10.20.232.0/24', 'gke-nodos-qa', 'k-unica', 'dup'),
+    (e) => e.code === '23505',
+    'índice único (solicitante, clave_idem)',
+  );
   await insertarReserva('10.20.232.0/24', 'gke-nodos-qa', 'k-unica', 'otro');
   // Una reserva VENCIDA no bloquea una asignación aunque el barredor aún no la haya marcado.
   await b.sql("update reservas set expira_en = now() - interval '1 minute' where cidr = '10.20.230.0/24'");
   await b.sql("insert into asignaciones (pool_id, cidr, vpc, solicitante, ticket, origen) values ('gke-nodos-qa','10.20.230.0/25','v','x','NET-3','agente')");
   assert.equal((await b.sql("select origen from asignaciones where ticket = 'NET-3'")).rows[0].origen, 'agente', 'el origen «agente» es válido');
-  await assert.rejects(b.sql("insert into asignaciones (pool_id, cidr, vpc, solicitante, ticket, origen) values ('gke-nodos-qa','10.20.240.0/24','v','x','NET-4','otro')"), (e) => e.code === '23514');
+  await assert.rejects(
+    b.sql("insert into asignaciones (pool_id, cidr, vpc, solicitante, ticket, origen) values ('gke-nodos-qa','10.20.240.0/24','v','x','NET-4','otro')"),
+    (e) => e.code === '23514',
+  );
 });
 
 test('rutas versionadas: /api/v1/reservas es equivalente al alias /api/reservas', opts, async () => {

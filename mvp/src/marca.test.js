@@ -16,7 +16,13 @@ test('valores por defecto: IPAM, sin subtítulo ni logo', () => {
 
 test('nombre, subtítulo, pie y colores configurables', () => {
   limpiar();
-  Object.assign(process.env, { BRAND_NAME: 'NetOps', BRAND_SUBTITLE: 'Cliente S.A.', BRAND_FOOTER: 'Uso interno', BRAND_COLOR: '#0a7d4f', BRAND_COLOR_TOP: '#111' });
+  Object.assign(process.env, {
+    BRAND_NAME: 'NetOps',
+    BRAND_SUBTITLE: 'Cliente S.A.',
+    BRAND_FOOTER: 'Uso interno',
+    BRAND_COLOR: '#0a7d4f',
+    BRAND_COLOR_TOP: '#111',
+  });
   assert.deepEqual(marca.config(), { nombre: 'NetOps', subtitulo: 'Cliente S.A.', pie: 'Uso interno', logo: null });
   assert.match(marca.css(), /--top:#111;--blue:#0a7d4f/);
 });

@@ -8,8 +8,20 @@ const log = { error() {} };
 const dormir = (ms) => new Promise((ok) => setTimeout(ok, ms));
 
 test('ejecuta periódicamente y nunca se solapa consigo mismo', async () => {
-  let activas = 0, maximo = 0, veces = 0;
-  const p = crearPlanificador({ intervaloMs: 10, log, ejecutar: async () => { activas++; maximo = Math.max(maximo, activas); veces++; await dormir(30); activas--; } });
+  let activas = 0,
+    maximo = 0,
+    veces = 0;
+  const p = crearPlanificador({
+    intervaloMs: 10,
+    log,
+    ejecutar: async () => {
+      activas++;
+      maximo = Math.max(maximo, activas);
+      veces++;
+      await dormir(30);
+      activas--;
+    },
+  });
   p.iniciar();
   await dormir(250);
   await p.detener();
@@ -20,7 +32,14 @@ test('ejecuta periódicamente y nunca se solapa consigo mismo', async () => {
 
 test('un fallo no detiene el barredor', async () => {
   let veces = 0;
-  const p = crearPlanificador({ intervaloMs: 10, log, ejecutar: async () => { veces++; throw new Error('boom'); } });
+  const p = crearPlanificador({
+    intervaloMs: 10,
+    log,
+    ejecutar: async () => {
+      veces++;
+      throw new Error('boom');
+    },
+  });
   p.iniciar();
   await dormir(150);
   await p.detener();
@@ -29,7 +48,14 @@ test('un fallo no detiene el barredor', async () => {
 
 test('detener() espera a la ejecución en curso', async () => {
   let terminada = false;
-  const p = crearPlanificador({ intervaloMs: 5, log, ejecutar: async () => { await dormir(80); terminada = true; } });
+  const p = crearPlanificador({
+    intervaloMs: 5,
+    log,
+    ejecutar: async () => {
+      await dormir(80);
+      terminada = true;
+    },
+  });
   p.iniciar();
   await dormir(30);
   await p.detener();

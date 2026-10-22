@@ -6,7 +6,15 @@ const { crearTokens } = require('./tokens');
 
 const ADMIN = { nombre: 'jefe@empresa.example', rol: 'admin', tipo: 'oidc' };
 function entorno() {
-  const reloj = { t: new Date('2026-10-21T12:00:00Z'), ahora() { return this.t; }, avanzar(ms) { this.t = new Date(this.t.getTime() + ms); } };
+  const reloj = {
+    t: new Date('2026-10-21T12:00:00Z'),
+    ahora() {
+      return this.t;
+    },
+    avanzar(ms) {
+      this.t = new Date(this.t.getTime() + ms);
+    },
+  };
   const repo = crearRepositorioMemoria({ reloj });
   const tokens = crearTokens({ repo, generador, config: { auth: { tokenVidaDias: 90 } } });
   return { reloj, repo, tokens };
@@ -17,7 +25,10 @@ test('crear: devuelve el token una sola vez; en el repositorio solo queda el has
   const r = await e.tokens.crear(ADMIN, { nombre: 'agente-redes', rol: 'agente' });
   assert.equal(r.ok, true);
   assert.match(r.token, /^ipam_[A-Za-z0-9_-]{43}$/);
-  assert.deepEqual({ nombre: r.meta.nombre, rol: r.meta.rol, estado: r.meta.estado, creado_por: r.meta.creado_por, prefijo: r.meta.prefijo }, { nombre: 'agente-redes', rol: 'agente', estado: 'activo', creado_por: ADMIN.nombre, prefijo: r.token.slice(0, 9) });
+  assert.deepEqual(
+    { nombre: r.meta.nombre, rol: r.meta.rol, estado: r.meta.estado, creado_por: r.meta.creado_por, prefijo: r.meta.prefijo },
+    { nombre: 'agente-redes', rol: 'agente', estado: 'activo', creado_por: ADMIN.nombre, prefijo: r.token.slice(0, 9) },
+  );
   assert.ok(!('hash' in r.meta) && !('token' in r.meta));
   const guardado = e.repo.datos.tokens[0];
   assert.equal(guardado.hash, generador.hashear(r.token));
@@ -58,7 +69,10 @@ test('revocar es idempotente y un id desconocido da 404', async () => {
   const { meta } = await e.tokens.crear(ADMIN, { nombre: 'x1', rol: 'lector' });
   const a = await e.tokens.revocar(meta.id);
   const b = await e.tokens.revocar(meta.id);
-  assert.deepEqual({ a: a.token.estado, b: b.token.estado, igual: String(a.token.revocado_en) === String(b.token.revocado_en) }, { a: 'revocado', b: 'revocado', igual: true });
+  assert.deepEqual(
+    { a: a.token.estado, b: b.token.estado, igual: String(a.token.revocado_en) === String(b.token.revocado_en) },
+    { a: 'revocado', b: 'revocado', igual: true },
+  );
   assert.equal((await e.tokens.revocar('11111111-1111-4111-8111-111111111111')).error, 'no_encontrado');
   assert.equal((await e.tokens.revocar('zz')).error, 'no_encontrado');
 });
@@ -84,5 +98,8 @@ test('por_vencer: aparece cuando faltan menos de 7 días', async () => {
   await e.tokens.crear(ADMIN, { nombre: 'corto', rol: 'agente', expira_dias: 5 });
   await e.tokens.crear(ADMIN, { nombre: 'largo', rol: 'agente', expira_dias: 30 });
   const l = (await e.tokens.listar()).tokens;
-  assert.deepEqual(l.map((t) => [t.nombre, t.por_vencer]).sort(), [['corto', true], ['largo', false]]);
+  assert.deepEqual(l.map((t) => [t.nombre, t.por_vencer]).sort(), [
+    ['corto', true],
+    ['largo', false],
+  ]);
 });

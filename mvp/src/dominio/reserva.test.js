@@ -23,10 +23,12 @@ test('TTL: por defecto, dentro del máximo; se rechaza (no se recorta) lo que lo
 });
 
 test('propiedad: un TTL válido siempre queda entre 1 y el máximo', () => {
-  fc.assert(fc.property(fc.integer({ min: -1000, max: 1000 }), fc.integer({ min: 1, max: 720 }), (n, max) => {
-    const r = R.validarTtl(n, { defecto: 1, max });
-    return r.ok ? r.horas >= 1 && r.horas <= max : (n < 1 || n > max);
-  }));
+  fc.assert(
+    fc.property(fc.integer({ min: -1000, max: 1000 }), fc.integer({ min: 1, max: 720 }), (n, max) => {
+      const r = R.validarTtl(n, { defecto: 1, max });
+      return r.ok ? r.horas >= 1 && r.horas <= max : n < 1 || n > max;
+    }),
+  );
 });
 
 test('idempotencia: reserva viva se repite; liberada o expirada se rechaza (nunca 200)', () => {
@@ -77,7 +79,11 @@ test('validaciones de clave, ticket y aprobación humana', () => {
   assert.equal(R.validarTicket('x y').ok, false);
   assert.equal(R.validarAprobacion({}, true).error, 'falta_aprobacion');
   assert.equal(R.validarAprobacion({ aprobado_por: 'ana' }, true).error, 'falta_aprobacion');
-  assert.deepEqual(R.validarAprobacion({ aprobado_por: 'ana', referencia: 'https://gitlab.example/mr/1' }, true), { ok: true, aprobadoPor: 'ana', referencia: 'https://gitlab.example/mr/1' });
+  assert.deepEqual(R.validarAprobacion({ aprobado_por: 'ana', referencia: 'https://gitlab.example/mr/1' }, true), {
+    ok: true,
+    aprobadoPor: 'ana',
+    referencia: 'https://gitlab.example/mr/1',
+  });
   assert.equal(R.validarAprobacion({}, false).ok, true, 'una persona desde la interfaz no necesita declararlo');
   assert.equal(R.validarAprobacion({ referencia: 'x'.repeat(301) }, false).ok, false);
 });

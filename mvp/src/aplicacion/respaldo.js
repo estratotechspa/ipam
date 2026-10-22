@@ -13,7 +13,10 @@ const ORIGENES_IMPORTABLES = ['panel', 'jira', 'semilla', 'agente'];
 function crearRespaldo({ repo, reloj, rolesUsuario }) {
   async function exportar() {
     const d = await repo.exportarDatos();
-    return ok({ respaldo: { formato: 'ipam-respaldo', version: 1, generado: reloj.ahora().toISOString(), ...d }, resumen: { pools: d.pools.length, asignaciones: d.asignaciones.length } });
+    return ok({
+      respaldo: { formato: 'ipam-respaldo', version: 1, generado: reloj.ahora().toISOString(), ...d },
+      resumen: { pools: d.pools.length, asignaciones: d.asignaciones.length },
+    });
   }
 
   /** Todo o nada: si algún segmento se solapa, no se importa nada. */
@@ -23,7 +26,8 @@ function crearRespaldo({ repo, reloj, rolesUsuario }) {
       return fallo('validacion', 'No es un respaldo de IPAM (formato ipam-respaldo, versión 1).');
     }
     for (const p of d.pools) {
-      if (!p.id || !p.tipo || !AMBIENTES.includes(p.ambiente) || !p.proveedor || !parse(String(p.cidr))) return fallo('validacion', `Pool inválido: ${JSON.stringify(p).slice(0, 120)}`);
+      if (!p.id || !p.tipo || !AMBIENTES.includes(p.ambiente) || !p.proveedor || !parse(String(p.cidr)))
+        return fallo('validacion', `Pool inválido: ${JSON.stringify(p).slice(0, 120)}`);
     }
     for (const a of d.asignaciones) {
       const c = parse(String(a.cidr));
@@ -36,7 +40,8 @@ function crearRespaldo({ repo, reloj, rolesUsuario }) {
         for (const p of d.pools) r.pools += await tx.insertarPoolSiNoExiste(p);
         for (const a of d.asignaciones) {
           const origen = ORIGENES_IMPORTABLES.includes(a.origen) ? a.origen : 'panel';
-          if (await tx.insertarAsignacionImportada({ ...a, origen })) r.asignaciones += 1; else r.omitidas += 1;
+          if (await tx.insertarAsignacionImportada({ ...a, origen })) r.asignaciones += 1;
+          else r.omitidas += 1;
         }
         for (const u of Array.isArray(d.usuarios) ? d.usuarios : []) {
           if (u.email && rolesUsuario.includes(u.rol)) r.usuarios += await tx.insertarUsuarioSiNoExiste(u);

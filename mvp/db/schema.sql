@@ -202,3 +202,23 @@ create unlogged table if not exists limite_contador (
 
 insert into esquema_version (version, descripcion) values (5, 'fase 5: contadores del limite de peticiones')
   on conflict (version) do nothing;
+
+-- ============================================================================
+-- Permisos del rol de la aplicación (solo si existe `ipam_app`; ver db/roles.sql)
+-- ============================================================================
+-- Se ejecuta con el rol migrador (dueño de las tablas) y se repite en cada migración. Sin el rol, no hace nada (desarrollo local).
+do $$
+declare
+  esq text := current_schema();
+begin
+  if exists (select 1 from pg_roles where rolname = 'ipam_app') then
+    execute format('grant usage on schema %I to ipam_app', esq);
+    execute format('grant select, insert, update, delete on all tables in schema %I to ipam_app', esq);
+    execute format('grant usage, select on all sequences in schema %I to ipam_app', esq);
+    -- La auditoría y los eventos son de solo inserción para la app (además de los disparadores, que lo impiden a cualquiera).
+    execute format('revoke update, delete, truncate on %I.auditoria from ipam_app', esq);
+    execute format('revoke update, delete, truncate on %I.eventos from ipam_app', esq);
+    -- La versión del esquema solo la cambia el migrador.
+    execute format('revoke insert, update, delete, truncate on %I.esquema_version from ipam_app', esq);
+  end if;
+end $$;

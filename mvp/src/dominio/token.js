@@ -27,7 +27,8 @@ const prefijoDe = (token) => token.slice(0, PREFIJO_LARGO);
  */
 function validarCreacion(e, { vidaDefectoDias }) {
   const malo = (/** @type {string} */ error, /** @type {string} */ mensaje) => ({ ok: /** @type {false} */ (false), error, mensaje });
-  if (typeof e.nombre !== 'string' || !NOMBRE.test(e.nombre)) return malo('nombre_invalido', 'nombre: de 2 a 41 caracteres, en minúsculas, números y guiones, empezando con letra o número (p. ej. agente-redes).');
+  if (typeof e.nombre !== 'string' || !NOMBRE.test(e.nombre))
+    return malo('nombre_invalido', 'nombre: de 2 a 41 caracteres, en minúsculas, números y guiones, empezando con letra o número (p. ej. agente-redes).');
   if (typeof e.rol !== 'string' || !ROLES.includes(e.rol)) return malo('rol_invalido', `rol debe ser uno de: ${ROLES.join(', ')}.`);
   let dias = vidaDefectoDias;
   if (e.expira_dias !== undefined && e.expira_dias !== null && e.expira_dias !== '') {

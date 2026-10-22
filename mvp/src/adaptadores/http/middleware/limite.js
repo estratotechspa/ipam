@@ -20,7 +20,9 @@ function crearMiddlewareLimite({ limite }) {
     return res.status(429).json({
       error: 'rate_limit',
       mensaje: `Demasiadas peticiones${r.motivo === 'ip' ? ' desde esta dirección' : ''}. Reintenta en ${r.retryAfter} segundo${r.retryAfter === 1 ? '' : 's'}.`,
-      retry_after: r.retryAfter, limite_por_minuto: r.limite, request_id: contexto.actual().request_id,
+      retry_after: r.retryAfter,
+      limite_por_minuto: r.limite,
+      request_id: contexto.actual().request_id,
     });
   };
 }

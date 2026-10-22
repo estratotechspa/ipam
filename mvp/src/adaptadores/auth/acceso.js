@@ -39,7 +39,12 @@ function crearAcceso({ rechazo = () => {}, autenticarToken, auditar = async () =
   return async (req, res, next) => {
     if (esPublica(req.path)) return next();
     const modo = config.auth.modo;
-    const fijar = (nombre, rol, tipo, mostrar, extra = {}) => { req.actor = { nombre, rol, tipo, ...extra }; req.usuario = nombre; req.rol = rol; req.nombre = mostrar || nombre; };
+    const fijar = (nombre, rol, tipo, mostrar, extra = {}) => {
+      req.actor = { nombre, rol, tipo, ...extra };
+      req.usuario = nombre;
+      req.rol = rol;
+      req.nombre = mostrar || nombre;
+    };
 
     // 1) Token de servicio: se evalúa PRIMERO, en cualquier modo (oidc, basic o abierto). Un token inválido es 401 aunque el modo sea abierto.
     //    Sin cookie no hay CSRF: no se exige X-Requested-With.
@@ -50,7 +55,15 @@ function crearAcceso({ rechazo = () => {}, autenticarToken, auditar = async () =
       const b = await frenoFuerzaBruta.bloqueada(req.ip);
       if (b.bloqueada) {
         rechazo('fuerza_bruta', req);
-        return res.set('Retry-After', String(b.retryAfter)).status(429).json({ error: 'rate_limit', mensaje: `Demasiados intentos fallidos de autenticación desde esta dirección. Reintenta en ${b.retryAfter} segundo${b.retryAfter === 1 ? '' : 's'}.`, retry_after: b.retryAfter, request_id: contexto.actual().request_id });
+        return res
+          .set('Retry-After', String(b.retryAfter))
+          .status(429)
+          .json({
+            error: 'rate_limit',
+            mensaje: `Demasiados intentos fallidos de autenticación desde esta dirección. Reintenta en ${b.retryAfter} segundo${b.retryAfter === 1 ? '' : 's'}.`,
+            retry_after: b.retryAfter,
+            request_id: contexto.actual().request_id,
+          });
       }
     }
     if (autenticarToken && /^Bearer\s/i.test(cab)) {
@@ -59,7 +72,10 @@ function crearAcceso({ rechazo = () => {}, autenticarToken, auditar = async () =
         rechazo(`token_${r.motivo}`, req);
         if (frenoFuerzaBruta) await frenoFuerzaBruta.fallo(req.ip);
         await auditar('token_rechazado', r.nombre ? `svc:${r.nombre}` : 'desconocido', null, { motivo: r.motivo }, req.ip); // nunca el token presentado
-        return res.set('WWW-Authenticate', 'Bearer realm="IPAM"').status(401).json({ error: 'token_invalido', mensaje: 'Token inválido, vencido o revocado.', request_id: contexto.actual().request_id });
+        return res
+          .set('WWW-Authenticate', 'Bearer realm="IPAM"')
+          .status(401)
+          .json({ error: 'token_invalido', mensaje: 'Token inválido, vencido o revocado.', request_id: contexto.actual().request_id });
       }
       fijar(r.actor.nombre, r.actor.rol, 'token', r.actor.nombre, { tokenId: r.actor.tokenId, cuota: r.actor.cuota });
       return next();

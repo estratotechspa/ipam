@@ -8,7 +8,15 @@
     "test": "node --test --test-concurrency=1 --test-timeout=120000 \"src/**/*.test.js\"",
     "test:e2e": "playwright test",
     "migrar": "node src/cli/migrar.js",
-    "hash-password": "node scripts/hash-password.js"
+    "hash-password": "node scripts/hash-password.js",
+    "lint": "eslint .",
+    "formato": "prettier --write \"src/**/*.js\" \"e2e/**/*.js\" \"public/*.js\" \"scripts/*.js\" \"*.js\" \"../scripts/**/*.js\"",
+    "formato:verificar": "prettier --check \"src/**/*.js\" \"e2e/**/*.js\" \"public/*.js\" \"scripts/*.js\" \"*.js\" \"../scripts/**/*.js\"",
+    "tipos": "tsc -p tsconfig.json",
+    "cobertura": "node --test --test-concurrency=1 --experimental-test-coverage --test-coverage-include=\"src/dominio/**/*.js\" --test-coverage-include=\"src/aplicacion/**/*.js\" --test-coverage-exclude=\"**/*.test.js\" --test-coverage-lines=80 --test-coverage-functions=80 --test-coverage-branches=80 \"src/dominio/*.test.js\" \"src/aplicacion/*.test.js\"",
+    "auditar": "npm audit --omit=dev --audit-level=high",
+    "licencias": "license-checker-rseidelsohn --production --summary --excludePrivatePackages --excludePackages 'buffers@0.1.1' --onlyAllow 'MIT;ISC;Apache-2.0;BSD-2-Clause;BSD-3-Clause;0BSD;BlueOak-1.0.0;Python-2.0;CC0-1.0;CC-BY-4.0;Unlicense'",
+    "sbom": "cyclonedx-npm --omit dev --ignore-npm-errors --spec-version 1.5 --output-format JSON --output-file ../sbom/ipam.cdx.json"
   },
   "engines": {
     "node": ">=22"
@@ -29,9 +37,19 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",
+    "@cyclonedx/cyclonedx-npm": "^6.0.1",
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.64.1",
     "@seriousme/openapi-schema-validator": "^2.11.0",
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.20.5",
+    "@types/pg": "^8.23.1",
+    "eslint": "^10.13.0",
     "fast-check": "^3.23.2",
-    "oidc-provider": "^9.12.2"
+    "globals": "^17.13.0",
+    "license-checker-rseidelsohn": "^4.4.2",
+    "oidc-provider": "^9.12.2",
+    "prettier": "^3.9.10",
+    "typescript": "^5.9.3"
   }
 }

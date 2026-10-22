@@ -59,11 +59,17 @@ function libres(poolCidr, ocupadosCidr, len, max = 3) {
   let cur = p.start;
   for (const o of ocup) {
     if (o.end < cur) continue;
-    while (out.length < max && cur + size - 1 < o.start && cur + size - 1 <= p.end) { out.push(`${n2ip(cur)}/${len}`); cur += size; }
+    while (out.length < max && cur + size - 1 < o.start && cur + size - 1 <= p.end) {
+      out.push(`${n2ip(cur)}/${len}`);
+      cur += size;
+    }
     if (out.length >= max) return out;
     cur = Math.max(cur, Math.ceil((o.end + 1) / size) * size);
   }
-  while (out.length < max && cur + size - 1 <= p.end) { out.push(`${n2ip(cur)}/${len}`); cur += size; }
+  while (out.length < max && cur + size - 1 <= p.end) {
+    out.push(`${n2ip(cur)}/${len}`);
+    cur += size;
+  }
   return out;
 }
 

@@ -19,10 +19,22 @@ const ADMIN = { nombre: 'jefe@empresa.example', rol: 'admin', tipo: 'oidc' };
 const aprob = { aprobado_por: 'ana@empresa.example', referencia: 'https://gitlab.example/redes/-/merge_requests/12' };
 
 function entorno({ cuota = 3, exigeAprobador = true } = {}) {
-  const reloj = { t: new Date('2026-10-21T12:00:00Z'), ahora() { return this.t; }, avanzar(h) { this.t = new Date(this.t.getTime() + h * 3600_000); } };
+  const reloj = {
+    t: new Date('2026-10-21T12:00:00Z'),
+    ahora() {
+      return this.t;
+    },
+    avanzar(h) {
+      this.t = new Date(this.t.getTime() + h * 3600_000);
+    },
+  };
   const repo = crearRepositorioMemoria({ reloj, pools: POOLS });
   const publicados = [];
-  const eventos = { publicar: async (tipo, d) => { publicados.push({ tipo, ...d }); } };
+  const eventos = {
+    publicar: async (tipo, d) => {
+      publicados.push({ tipo, ...d });
+    },
+  };
   const config = { reservas: { ttlHoras: 24, ttlMaxHoras: 72, exigeAprobador }, limite: { cuotaReservasPorToken: cuota } };
   const reservas = crearReservas({ repo, eventos, config });
   const asignaciones = crearAsignaciones({ repo, eventos, tickets: { activo: () => false, faltantes: () => [] } });
@@ -35,11 +47,17 @@ test('reserva por ambiente y tipo: elige el pool, calcula el primer rango libre 
   const e = entorno();
   const r = await pedir(e, AGENTE, { ticket: 'NET-900' });
   assert.equal(r.ok, true);
-  assert.deepEqual({ pool: r.reserva.pool_id, cidr: r.reserva.cidr, estado: r.reserva.estado, ticket: r.reserva.ticket, repetida: r.repetida }, { pool: 'qa-nodos', cidr: '10.220.0.0/24', estado: 'reservada', ticket: 'NET-900', repetida: false });
+  assert.deepEqual(
+    { pool: r.reserva.pool_id, cidr: r.reserva.cidr, estado: r.reserva.estado, ticket: r.reserva.ticket, repetida: r.repetida },
+    { pool: 'qa-nodos', cidr: '10.220.0.0/24', estado: 'reservada', ticket: 'NET-900', repetida: false },
+  );
   assert.equal(r.reserva.segundos_restantes, 24 * 3600);
   assert.equal(r.reserva.solicitante, 'svc:agente-redes');
   assert.ok(!('clave_idem' in r.reserva), 'la clave de idempotencia no se expone');
-  assert.deepEqual(e.publicados.map((p) => p.tipo), ['reserva_creada']);
+  assert.deepEqual(
+    e.publicados.map((p) => p.tipo),
+    ['reserva_creada'],
+  );
   const r2 = await pedir(e, AGENTE);
   assert.equal(r2.reserva.cidr, '10.220.1.0/24', 'la segunda reserva toma el siguiente rango libre');
   assert.match(r2.reserva.ticket, /^NET-\d+$/, 'sin ticket, se genera uno');
@@ -49,7 +67,10 @@ test('ambiente y tipo ambiguos → 422 con las opciones; sin pools → 422', asy
   const e = entorno();
   const r = await pedir(e, AGENTE, { tipo: 'Pods' });
   assert.deepEqual({ ok: r.ok, tipo: r.tipo, error: r.error }, { ok: false, tipo: 'ambiguo', error: 'ambiguo' });
-  assert.deepEqual(r.opciones.map((o) => o.pool), ['qa-pods-a', 'qa-pods-b']);
+  assert.deepEqual(
+    r.opciones.map((o) => o.pool),
+    ['qa-pods-a', 'qa-pods-b'],
+  );
   const n = await pedir(e, AGENTE, { ambiente: 'prod' });
   assert.equal(n.error, 'sin_pool');
   assert.deepEqual(n.opciones, []);
@@ -58,7 +79,11 @@ test('ambiente y tipo ambiguos → 422 con las opciones; sin pools → 422', asy
 
 test('validaciones de la petición', async () => {
   const e = entorno();
-  const falla = async (extra, codigo) => { const r = await pedir(e, AGENTE, extra); assert.equal(r.ok, false); assert.equal(r.error, codigo, JSON.stringify(extra)); };
+  const falla = async (extra, codigo) => {
+    const r = await pedir(e, AGENTE, extra);
+    assert.equal(r.ok, false);
+    assert.equal(r.error, codigo, JSON.stringify(extra));
+  };
   await falla({ vpc: '' }, 'vpc_invalido');
   await falla({ vpc: 123 }, 'vpc_invalido');
   await falla({ ambiente: 'staging' }, 'falta_destino');
@@ -84,7 +109,10 @@ test('sin solapes: dos reservas, o una reserva y una asignación, nunca pisan el
   const e = entorno();
   assert.equal((await pedir(e, AGENTE, { mascara: undefined, cidr: '10.220.4.0/22' })).ok, true);
   const choque = await pedir(e, OTRO, { mascara: undefined, cidr: '10.220.5.0/24' });
-  assert.deepEqual({ tipo: choque.tipo, error: choque.error, fuente: choque.conflicto.fuente }, { tipo: 'conflicto', error: 'solapamiento', fuente: 'reserva' });
+  assert.deepEqual(
+    { tipo: choque.tipo, error: choque.error, fuente: choque.conflicto.fuente },
+    { tipo: 'conflicto', error: 'solapamiento', fuente: 'reserva' },
+  );
   assert.ok(choque.sugeridos.length > 0 && !choque.sugeridos.some((s) => s.startsWith('10.220.4.') || s.startsWith('10.220.5.')));
   // Una asignación directa también respeta la reserva vigente.
   const a = await e.asignaciones.asignar({ pool: 'qa-nodos', vpc: 'panel', cidr: '10.220.12.0/24', solicitante: 'ana', origen: 'panel' });
@@ -107,7 +135,10 @@ test('idempotencia: misma clave y reserva viva → repetida; liberada o expirada
 
   await e.reservas.liberar(AGENTE, a.reserva.id);
   const tras = await pedir(e, AGENTE, {}, 'mr-1:crear');
-  assert.deepEqual({ ok: tras.ok, tipo: tras.tipo, error: tras.error, estado: tras.estado }, { ok: false, tipo: 'conflicto', error: 'clave_idem_usada', estado: 'liberada' });
+  assert.deepEqual(
+    { ok: tras.ok, tipo: tras.tipo, error: tras.error, estado: tras.estado },
+    { ok: false, tipo: 'conflicto', error: 'clave_idem_usada', estado: 'liberada' },
+  );
 
   const c = await pedir(e, AGENTE, {}, 'mr-2:crear');
   e.reloj.avanzar(25);
@@ -126,7 +157,10 @@ test('expiración perezosa: una reserva vencida deja de ocupar y de poder confir
   assert.equal((await e.reservas.obtener(a.reserva.id)).reserva.estado, 'expirada', 'ya expirada al consultar');
   assert.equal((await e.reservas.listar({ estado: 'expirada' })).reservas.length, 1);
   const c = await e.reservas.confirmar(AGENTE, a.reserva.id, aprob);
-  assert.deepEqual({ ok: c.ok, tipo: c.tipo, error: c.error, estado: c.estado }, { ok: false, tipo: 'conflicto', error: 'reserva_no_vigente', estado: 'expirada' });
+  assert.deepEqual(
+    { ok: c.ok, tipo: c.tipo, error: c.error, estado: c.estado },
+    { ok: false, tipo: 'conflicto', error: 'reserva_no_vigente', estado: 'expirada' },
+  );
   assert.equal((await pedir(e, OTRO, { mascara: undefined, cidr: '10.220.8.0/24' })).ok, true, 'el rango quedó libre');
   assert.ok(e.publicados.some((p) => p.tipo === 'reserva_expirada' && p.reserva === a.reserva.id));
 });
@@ -141,8 +175,17 @@ test('human-in-the-loop: un agente solo confirma con aprobación humana declarad
 
   const c = await e.reservas.confirmar(AGENTE, a.reserva.id, aprob);
   assert.equal(c.ok, true);
-  assert.deepEqual({ estado: c.reserva.estado, origen: c.asignacion.origen, cidr: c.asignacion.cidr, ticket: c.asignacion.ticket, solicitante: c.asignacion.solicitante, rep: c.repetida },
-    { estado: 'confirmada', origen: 'agente', cidr: a.reserva.cidr, ticket: 'NET-901', solicitante: 'svc:agente-redes', rep: false });
+  assert.deepEqual(
+    {
+      estado: c.reserva.estado,
+      origen: c.asignacion.origen,
+      cidr: c.asignacion.cidr,
+      ticket: c.asignacion.ticket,
+      solicitante: c.asignacion.solicitante,
+      rep: c.repetida,
+    },
+    { estado: 'confirmada', origen: 'agente', cidr: a.reserva.cidr, ticket: 'NET-901', solicitante: 'svc:agente-redes', rep: false },
+  );
   assert.equal(c.reserva.asignacion_id, c.asignacion.id);
   assert.deepEqual(c.aprobacion, aprob);
   const ev = e.publicados.find((p) => p.tipo === 'reserva_confirmada');
@@ -203,7 +246,10 @@ test('cuota por token: máximo de reservas vigentes simultáneas; confirmar o li
   const a = await pedir(e, AGENTE);
   assert.equal((await pedir(e, AGENTE)).ok, true);
   const tercera = await pedir(e, AGENTE);
-  assert.deepEqual({ ok: tercera.ok, tipo: tercera.tipo, error: tercera.error, vigentes: tercera.vigentes, limite: tercera.limite }, { ok: false, tipo: 'cuota', error: 'cuota_excedida', vigentes: 2, limite: 2 });
+  assert.deepEqual(
+    { ok: tercera.ok, tipo: tercera.tipo, error: tercera.error, vigentes: tercera.vigentes, limite: tercera.limite },
+    { ok: false, tipo: 'cuota', error: 'cuota_excedida', vigentes: 2, limite: 2 },
+  );
   assert.match(tercera.mensaje, /Tienes 2 reservas vigentes de 2/);
   assert.equal((await pedir(e, OTRO)).ok, true, 'la cuota es por token');
   await e.reservas.liberar(AGENTE, a.reserva.id);
@@ -226,9 +272,18 @@ test('listar con filtros por estado, pool y solicitante; obtener', async () => {
   const b = await pedir(e, OTRO, { ambiente: 'dev' });
   await e.reservas.confirmar(OTRO, b.reserva.id, aprob);
   assert.equal((await e.reservas.listar({})).reservas.length, 2);
-  assert.deepEqual((await e.reservas.listar({ estado: 'confirmada' })).reservas.map((r) => r.id), [b.reserva.id]);
-  assert.deepEqual((await e.reservas.listar({ pool: 'qa-nodos' })).reservas.map((r) => r.id), [a.reserva.id]);
-  assert.deepEqual((await e.reservas.listar({ solicitante: 'svc:otro' })).reservas.map((r) => r.id), [b.reserva.id]);
+  assert.deepEqual(
+    (await e.reservas.listar({ estado: 'confirmada' })).reservas.map((r) => r.id),
+    [b.reserva.id],
+  );
+  assert.deepEqual(
+    (await e.reservas.listar({ pool: 'qa-nodos' })).reservas.map((r) => r.id),
+    [a.reserva.id],
+  );
+  assert.deepEqual(
+    (await e.reservas.listar({ solicitante: 'svc:otro' })).reservas.map((r) => r.id),
+    [b.reserva.id],
+  );
   assert.equal((await e.reservas.listar({ estado: 'rara' })).error, 'estado_invalido');
   assert.equal((await e.reservas.obtener(a.reserva.id)).reserva.id, a.reserva.id);
   assert.equal((await e.reservas.obtener('xx')).error, 'no_encontrado');
@@ -241,7 +296,10 @@ test('barredor: marca las vencidas, publica el evento y no repite el trabajo dem
   e.reloj.avanzar(26);
   const r = await e.barrido.barrer();
   assert.equal(r.ejecutado, true);
-  assert.deepEqual(r.expiradas.map((x) => x.id), [a.reserva.id]);
+  assert.deepEqual(
+    r.expiradas.map((x) => x.id),
+    [a.reserva.id],
+  );
   assert.ok(e.publicados.some((p) => p.tipo === 'reserva_expirada' && p.reserva === a.reserva.id));
   const otraVez = await e.barrido.barrer();
   assert.deepEqual({ ejecutado: otraVez.ejecutado, motivo: otraVez.motivo }, { ejecutado: false, motivo: 'reciente' }, 'no repite el trabajo enseguida');

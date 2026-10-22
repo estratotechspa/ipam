@@ -7,21 +7,34 @@ const crypto = require('node:crypto');
 const SECRET = 'secreto-de-pruebas';
 process.env.JIRA_WEBHOOK_SECRET = SECRET;
 // Estas pruebas hacen muchas escrituras seguidas con un solo actor: se sube el límite de peticiones (la lógica del límite se prueba en limite.test.js).
-Object.assign(process.env, { RATE_LIMIT_POR_MINUTO: '100000', RATE_LIMIT_ESCRITURA_POR_MINUTO: '100000', RATE_LIMIT_IP_POR_MINUTO: '100000', RATE_LIMIT_AUTH_FALLOS_POR_MINUTO: '100000' });
+Object.assign(process.env, {
+  RATE_LIMIT_POR_MINUTO: '100000',
+  RATE_LIMIT_ESCRITURA_POR_MINUTO: '100000',
+  RATE_LIMIT_IP_POR_MINUTO: '100000',
+  RATE_LIMIT_AUTH_FALLOS_POR_MINUTO: '100000',
+});
 const hay = !!process.env.DATABASE_URL;
 const opts = { skip: hay ? false : 'sin DATABASE_URL' };
 
 let server, base, db;
-const post = (ruta, cuerpo, h = {}) => fetch(base + ruta, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'ipam', ...h }, body: JSON.stringify(cuerpo) });
+const post = (ruta, cuerpo, h = {}) =>
+  fetch(base + ruta, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'ipam', ...h }, body: JSON.stringify(cuerpo) });
 const firma = (txt) => 'sha256=' + crypto.createHmac('sha256', SECRET).update(txt).digest('hex');
 
 test.before(async () => {
   if (!hay) return;
   ({ app: server, db } = require('./server'));
-  server = await new Promise((ok) => { const s = server.listen(0, () => ok(s)); });
+  server = await new Promise((ok) => {
+    const s = server.listen(0, () => ok(s));
+  });
   base = `http://127.0.0.1:${server.address().port}`;
 });
-test.after(async () => { if (hay) { server.close(); await db.end(); } });
+test.after(async () => {
+  if (hay) {
+    server.close();
+    await db.end();
+  }
+});
 
 test('salud y estado de Jira (desactivada por defecto)', opts, async () => {
   assert.deepEqual(await (await fetch(base + '/api/health')).json(), { ok: true });
@@ -50,7 +63,8 @@ test('concurrencia: 20 solicitudes simultáneas → 20 segmentos distintos', opt
   const cidrs = (await Promise.all(rs.map((r) => r.json()))).map((x) => x.cidr);
   assert.equal(new Set(cidrs).size, 20);
   for (const a of await (await fetch(base + '/api/asignaciones')).json()) {
-    if (a.vpc.startsWith('conc-')) assert.equal((await fetch(`${base}/api/asignaciones/${a.id}`, { method: 'DELETE', headers: { 'X-Requested-With': 'ipam' } })).status, 200);
+    if (a.vpc.startsWith('conc-'))
+      assert.equal((await fetch(`${base}/api/asignaciones/${a.id}`, { method: 'DELETE', headers: { 'X-Requested-With': 'ipam' } })).status, 200);
   }
 });
 
@@ -66,9 +80,17 @@ test('asignar y liberar devuelve el espacio', opts, async () => {
 
 test('webhook de Jira: firma inválida → 401; firma válida → asigna', opts, async () => {
   const cuerpo = JSON.stringify({ ticket: 'NET-9001', ambiente: 'qa', tipo: 'Nodos', mascara: 24, vpc: 'vpc-webhook' });
-  const mal = await fetch(base + '/webhook/jira', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-hub-signature-256': 'sha256=00' }, body: cuerpo });
+  const mal = await fetch(base + '/webhook/jira', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-hub-signature-256': 'sha256=00' },
+    body: cuerpo,
+  });
   assert.equal(mal.status, 401);
-  const bien = await fetch(base + '/webhook/jira', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-hub-signature-256': firma(cuerpo) }, body: cuerpo });
+  const bien = await fetch(base + '/webhook/jira', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-hub-signature-256': firma(cuerpo) },
+    body: cuerpo,
+  });
   assert.equal(bien.status, 200);
   const d = await bien.json();
   assert.equal(d.ticket, 'NET-9001');
@@ -106,7 +128,10 @@ test('respaldo JSON: exporta, restaura lo borrado y rechaza solapamientos sin im
   assert.equal(rest.asignaciones, 1);
 
   // Un respaldo con un segmento que se solapa con otro existente se rechaza completo.
-  const malo = { ...resp, asignaciones: [{ pool_id: 'gke-pods-prod', cidr: '10.64.8.0/22', vpc: 'choque', solicitante: 'x', ticket: 'NET-7777', origen: 'panel' }] };
+  const malo = {
+    ...resp,
+    asignaciones: [{ pool_id: 'gke-pods-prod', cidr: '10.64.8.0/22', vpc: 'choque', solicitante: 'x', ticket: 'NET-7777', origen: 'panel' }],
+  };
   const res = await post('/api/importar', malo);
   assert.equal(res.status, 409);
   assert.ok(!(await (await fetch(base + '/api/asignaciones')).json()).some((x) => x.ticket === 'NET-7777'));

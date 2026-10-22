@@ -45,14 +45,22 @@ function validarTtl(pedido, { defecto, max }) {
 function validarClaveIdem(v) {
   if (v === undefined || v === null || v === '') return { ok: true, clave: null };
   const s = String(v);
-  return CLAVE_IDEM.test(s) ? { ok: true, clave: s } : { ok: false, error: 'clave_idem_invalida', mensaje: 'Idempotency-Key admite 1 a 128 caracteres: letras, números, punto, guion, guion bajo y dos puntos.' };
+  return CLAVE_IDEM.test(s)
+    ? { ok: true, clave: s }
+    : {
+        ok: false,
+        error: 'clave_idem_invalida',
+        mensaje: 'Idempotency-Key admite 1 a 128 caracteres: letras, números, punto, guion, guion bajo y dos puntos.',
+      };
 }
 
 /** @param {unknown} v */
 function validarTicket(v) {
   if (v === undefined || v === null || v === '') return { ok: true, ticket: null };
   const s = String(v).trim();
-  return TICKET.test(s) ? { ok: true, ticket: s } : { ok: false, error: 'ticket_invalido', mensaje: 'ticket admite hasta 64 caracteres: letras, números y . _ # : / -' };
+  return TICKET.test(s)
+    ? { ok: true, ticket: s }
+    : { ok: false, error: 'ticket_invalido', mensaje: 'ticket admite hasta 64 caracteres: letras, números y . _ # : / -' };
 }
 
 /**
@@ -101,18 +109,34 @@ function decidirLiberacion(efectivo) {
  * Datos de aprobación humana que debe traer una confirmación hecha por un agente (token de servicio).
  * Quien confirma desde la interfaz ya ES la persona que aprueba, así que ahí no se exige.
  * @param {{aprobado_por?: unknown, referencia?: unknown}|undefined} cuerpo @param {boolean} exigir
+ * @returns {{ok: true, aprobadoPor: string|null, referencia: string|null} | {ok: false, error: string, mensaje: string}}
  */
 function validarAprobacion(cuerpo, exigir) {
   const aprobadoPor = cuerpo && typeof cuerpo.aprobado_por === 'string' ? cuerpo.aprobado_por.trim() : '';
   const referencia = cuerpo && typeof cuerpo.referencia === 'string' ? cuerpo.referencia.trim() : '';
-  if (referencia.length > REFERENCIA_MAX || aprobadoPor.length > 200) return { ok: false, error: 'aprobacion_invalida', mensaje: 'aprobado_por o referencia exceden el largo permitido.' };
+  if (referencia.length > REFERENCIA_MAX || aprobadoPor.length > 200)
+    return { ok: false, error: 'aprobacion_invalida', mensaje: 'aprobado_por o referencia exceden el largo permitido.' };
   if (exigir && (!aprobadoPor || !referencia)) {
-    return { ok: false, error: 'falta_aprobacion', mensaje: 'Confirmar exige aprobación humana: indica aprobado_por (quién aprobó) y referencia (p. ej. la URL del MR aprobado).' };
+    return {
+      ok: false,
+      error: 'falta_aprobacion',
+      mensaje: 'Confirmar exige aprobación humana: indica aprobado_por (quién aprobó) y referencia (p. ej. la URL del MR aprobado).',
+    };
   }
   return { ok: true, aprobadoPor: aprobadoPor || null, referencia: referencia || null };
 }
 
 module.exports = {
-  ESTADOS, estadoEfectivo, puedeOperar, validarTtl, validarClaveIdem, validarTicket, resolverPool, decidirIdempotencia, mismaPeticion,
-  decidirConfirmacion, decidirLiberacion, validarAprobacion,
+  ESTADOS,
+  estadoEfectivo,
+  puedeOperar,
+  validarTtl,
+  validarClaveIdem,
+  validarTicket,
+  resolverPool,
+  decidirIdempotencia,
+  mismaPeticion,
+  decidirConfirmacion,
+  decidirLiberacion,
+  validarAprobacion,
 };

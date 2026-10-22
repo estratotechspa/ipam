@@ -14,7 +14,7 @@ const SQL_INCREMENTAR = `
     returning clave, cuenta)
   select inc.clave, inc.cuenta as actual, coalesce(p.cuenta, 0) as previa, t.avance
     from inc cross join t left join limite_contador p on p.clave = inc.clave and p.ventana = t.ventana - 1`;
-const SQL_CONSULTAR = `
+const SQL_ESTADO = `
   with t as (
     select (extract(epoch from now())::bigint / $2) as ventana, (extract(epoch from now())::bigint % $2)::float8 / $2 as avance)
   select $1::text as clave, coalesce(a.cuenta, 0) as actual, coalesce(p.cuenta, 0) as previa, t.avance
@@ -35,8 +35,8 @@ function crearAlmacenPostgres(db) {
       return (await db.query(SQL_INCREMENTAR, [unicas, ventanaSeg])).rows.map(fila);
     },
     /** Estado de una clave sin sumar. */
-    async consultar(clave, ventanaSeg = VENTANA_SEG) {
-      return fila((await db.query(SQL_CONSULTAR, [clave, ventanaSeg])).rows[0]);
+    async estado(clave, ventanaSeg = VENTANA_SEG) {
+      return fila((await db.query(SQL_ESTADO, [clave, ventanaSeg])).rows[0]);
     },
     /** Quita 1 a las claves: una petición rechazada no debe consumir cupo. */
     async devolver(claves, ventanaSeg = VENTANA_SEG) {

@@ -21,11 +21,17 @@ function crearSolicitud({ log, metricas, trazas }) {
       res.on('finish', () => {
         const segundos = Number(process.hrtime.bigint() - inicio) / 1e9;
         // Ruta «de plantilla» (/api/v1/reservas/:id), no la real: evita explosión de etiquetas y no filtra identificadores.
-        const plantilla = req.route && req.route.path ? req.route.path : (res.statusCode === 404 ? 'no_encontrada' : 'estatico');
+        const plantilla = req.route && req.route.path ? req.route.path : res.statusCode === 404 ? 'no_encontrada' : 'estatico';
         metricas.solicitud(plantilla, req.method, res.statusCode, segundos);
         span.terminar(res.statusCode, plantilla);
-        const nivel = res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : (SILENCIOSAS.has(req.path) ? 'debug' : 'info');
-        log[nivel]('petición', { metodo: req.method, ruta: plantilla === 'estatico' || plantilla === 'no_encontrada' ? req.path : plantilla, estado: res.statusCode, duracion_ms: Math.round(segundos * 1000 * 100) / 100, ip: req.ip });
+        const nivel = res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : SILENCIOSAS.has(req.path) ? 'debug' : 'info';
+        log[nivel]('petición', {
+          metodo: req.method,
+          ruta: plantilla === 'estatico' || plantilla === 'no_encontrada' ? req.path : plantilla,
+          estado: res.statusCode,
+          duracion_ms: Math.round(segundos * 1000 * 100) / 100,
+          ip: req.ip,
+        });
       });
       next();
     });

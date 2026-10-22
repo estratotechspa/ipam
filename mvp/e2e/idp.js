@@ -8,8 +8,13 @@ const GRUPOS = { 'jefe@empresa.cl': ['ipam-admins'] };
 (async () => {
   const { default: Provider } = await import('oidc-provider');
   const provider = new Provider(`http://127.0.0.1:${PUERTO}`, {
-    clients: [{ client_id: 'ipam', client_secret: 's3cret', redirect_uris: [`${APP}/auth/callback`], grant_types: ['authorization_code'], response_types: ['code'] }],
-    findAccount: async (_c, id) => ({ accountId: id, claims: async () => ({ sub: id, email: id, email_verified: true, name: id.split('@')[0], groups: GRUPOS[id] || [] }) }),
+    clients: [
+      { client_id: 'ipam', client_secret: 's3cret', redirect_uris: [`${APP}/auth/callback`], grant_types: ['authorization_code'], response_types: ['code'] },
+    ],
+    findAccount: async (_c, id) => ({
+      accountId: id,
+      claims: async () => ({ sub: id, email: id, email_verified: true, name: id.split('@')[0], groups: GRUPOS[id] || [] }),
+    }),
     claims: { openid: ['sub'], email: ['email', 'email_verified'], profile: ['name'], groups: ['groups'] },
     conformIdTokenClaims: false,
     features: { devInteractions: { enabled: true } },

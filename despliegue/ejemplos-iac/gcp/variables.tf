@@ -42,10 +42,14 @@ variable "clave_basic_hash" {
   sensitive   = true
 }
 
-variable "red_privada" {
-  description = "Red de VPC (self_link) para la IP privada de Cloud SQL. Vacío = IP pública con autorización solo por socket."
+variable "red" {
+  description = "VPC (self_link) donde vive Cloud SQL con IP PRIVADA y por donde sale Cloud Run hacia la base (egreso directo a la VPC). La base no tiene IP pública."
   type        = string
-  default     = ""
+}
+
+variable "subred" {
+  description = "Subred de esa VPC que usa Cloud Run para el egreso directo (necesita direcciones libres)."
+  type        = string
 }
 
 variable "proteger_borrado" {

@@ -72,7 +72,10 @@ test('cada operación documenta resumen, etiqueta y respuestas; las protegidas d
       assert.ok(o.tags && o.tags.length, `${nombre}: sin etiqueta`);
       assert.ok(Object.keys(o.responses).length >= 1, `${nombre}: sin respuestas`);
       if (o.security && o.security.length) assert.ok(o.responses[401], `${nombre}: protegida pero sin 401 documentado`);
-      if (o.operationId) { assert.ok(!ids.has(o.operationId), `operationId repetido ${o.operationId}`); ids.add(o.operationId); }
+      if (o.operationId) {
+        assert.ok(!ids.has(o.operationId), `operationId repetido ${o.operationId}`);
+        ids.add(o.operationId);
+      }
     }
   }
   // Los endpoints de agentes están documentados con sus errores clave.
@@ -98,7 +101,8 @@ test('los ejemplos de peticiones y respuestas en cada operación cumplen el esqu
       const o = item[m];
       const contenidos = [];
       if (o.requestBody) contenidos.push(['petición', o.requestBody.content, `/paths/${camino.replace(/\//g, '~1')}/${m}/requestBody`]);
-      for (const [estado, r] of Object.entries(o.responses)) if (r.content) contenidos.push([`respuesta ${estado}`, r.content, `/paths/${camino.replace(/\//g, '~1')}/${m}/responses/${estado}`]);
+      for (const [estado, r] of Object.entries(o.responses))
+        if (r.content) contenidos.push([`respuesta ${estado}`, r.content, `/paths/${camino.replace(/\//g, '~1')}/${m}/responses/${estado}`]);
       for (const [que, content, base] of contenidos) {
         const mt = content['application/json'];
         if (!mt || mt.example === undefined) continue;

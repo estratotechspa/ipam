@@ -6,7 +6,10 @@ const crypto = require('node:crypto');
 const { promisify } = require('node:util');
 
 const scrypt = promisify(crypto.scrypt);
-const N = 16384, R = 8, P = 1, LARGO = 32;
+const N = 16384,
+  R = 8,
+  P = 1,
+  LARGO = 32;
 
 /** Compara dos textos sin filtrar su contenido ni su largo por tiempo. */
 function igualConstante(a, b) {
@@ -31,7 +34,9 @@ async function verificar(contrasena, guardado) {
     const esperado = Buffer.from(hash, 'base64');
     const h = await scrypt(contrasena, Buffer.from(sal, 'base64'), esperado.length, { N: +n, r: +r, p: +p, maxmem: 128 * +n * +r * 2 });
     return h.length === esperado.length && crypto.timingSafeEqual(h, esperado);
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 }
 
 module.exports = { igualConstante, hashear, verificar };

@@ -20,14 +20,20 @@ function abrir(valor) {
   try {
     const o = JSON.parse(Buffer.from(p, 'base64url').toString());
     return o.exp && o.exp > Date.now() / 1000 ? o : null;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 function cookies(req) {
   const out = {};
   for (const par of String(req.headers.cookie || '').split(';')) {
     const i = par.indexOf('=');
     if (i > 0) {
-      try { out[par.slice(0, i).trim()] = decodeURIComponent(par.slice(i + 1).trim()); } catch { /* cookie mal codificada: se ignora */ }
+      try {
+        out[par.slice(0, i).trim()] = decodeURIComponent(par.slice(i + 1).trim());
+      } catch {
+        /* cookie mal codificada: se ignora */
+      }
     }
   }
   return out;

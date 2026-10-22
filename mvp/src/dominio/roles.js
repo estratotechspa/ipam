@@ -14,7 +14,11 @@ const ROLES_TOKEN = ['lector', 'agente'];
 const tiene = (rol, minimo) => ORDEN.indexOf(String(rol)) >= 0 && ORDEN.indexOf(String(rol)) >= ORDEN.indexOf(minimo);
 
 /** @param {unknown} v @returns {string[]} */
-const lista = (v) => String(v || '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
+const lista = (v) =>
+  String(v || '')
+    .split(',')
+    .map((x) => x.trim().toLowerCase())
+    .filter(Boolean);
 
 /**
  * Rol que le toca a una persona que inició sesión con OIDC.
@@ -41,7 +45,9 @@ function resolverRol(claims, filaDb, cfg) {
 /** @param {Record<string, any>} claims @param {string[]} dominios */
 function dominioPermitido(claims, dominios) {
   if (!dominios.length) return true;
-  const dom = String(claims.email || '').toLowerCase().split('@')[1];
+  const dom = String(claims.email || '')
+    .toLowerCase()
+    .split('@')[1];
   return dominios.includes(dom);
 }
 

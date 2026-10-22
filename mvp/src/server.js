@@ -21,8 +21,12 @@ const version = require('../package.json').version;
 
 const instancia = `${os.hostname()}-${crypto.randomBytes(3).toString('hex')}`;
 const log = crearLogger({
-  nivel: config.log.nivel, base: { servicio: 'ipam' },
-  contexto: () => { const c = contexto.actual(); return { request_id: c.request_id, actor: c.actor, trace_id: c.trace_id }; },
+  nivel: config.log.nivel,
+  base: { servicio: 'ipam' },
+  contexto: () => {
+    const c = contexto.actual();
+    return { request_id: c.request_id, actor: c.actor, trace_id: c.trace_id };
+  },
 });
 
 const trazas = config.otel.activo ? require('./adaptadores/trazas/otel').crearTrazas({ log, version }) : require('./adaptadores/trazas/nula');

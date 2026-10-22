@@ -48,7 +48,10 @@ async function iniciar(c) {
     cerrando = (async () => {
       log.info('Apagado ordenado iniciado', { senal });
       estado.apagando = true; // /readyz pasa a 503: el balanceador deja de enviar tráfico
-      const limite = setTimeout(() => { log.warn('Tiempo de apagado agotado: se cierran las conexiones restantes'); servidor.closeAllConnections(); }, config.http.apagadoTimeoutMs);
+      const limite = setTimeout(() => {
+        log.warn('Tiempo de apagado agotado: se cierran las conexiones restantes');
+        servidor.closeAllConnections();
+      }, config.http.apagadoTimeoutMs);
       limite.unref();
       const cerrado = new Promise((ok) => servidor.close(ok)); // deja de aceptar y espera las peticiones en curso
       servidor.closeIdleConnections();
@@ -61,7 +64,13 @@ async function iniciar(c) {
     })();
     return cerrando;
   }
-  for (const s of ['SIGTERM', 'SIGINT']) process.once(s, () => apagar(s).then(() => process.exit(0), () => process.exit(1)));
+  for (const s of ['SIGTERM', 'SIGINT'])
+    process.once(s, () =>
+      apagar(s).then(
+        () => process.exit(0),
+        () => process.exit(1),
+      ),
+    );
   return { servidor, apagar, planificador };
 }
 

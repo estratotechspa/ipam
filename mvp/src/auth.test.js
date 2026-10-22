@@ -5,7 +5,12 @@ const assert = require('node:assert/strict');
 const http = require('node:http');
 
 // Estas pruebas hacen muchas escrituras seguidas con un solo actor: se sube el límite de peticiones (la lógica del límite se prueba en limite.test.js).
-Object.assign(process.env, { RATE_LIMIT_POR_MINUTO: '100000', RATE_LIMIT_ESCRITURA_POR_MINUTO: '100000', RATE_LIMIT_IP_POR_MINUTO: '100000', RATE_LIMIT_AUTH_FALLOS_POR_MINUTO: '100000' });
+Object.assign(process.env, {
+  RATE_LIMIT_POR_MINUTO: '100000',
+  RATE_LIMIT_ESCRITURA_POR_MINUTO: '100000',
+  RATE_LIMIT_IP_POR_MINUTO: '100000',
+  RATE_LIMIT_AUTH_FALLOS_POR_MINUTO: '100000',
+});
 const hay = !!process.env.DATABASE_URL;
 const opts = { skip: hay ? false : 'sin DATABASE_URL' };
 const GRUPOS = { 'ana@empresa.cl': ['ipam-solicitantes'], 'jefe@empresa.cl': ['ipam-admins'] };
@@ -15,16 +20,22 @@ let app, base, idp, db;
 
 // Navegador mínimo: mantiene cookies por origen y sigue redirecciones a mano.
 class Navegador {
-  constructor() { this.jar = new Map(); }
-  cookies(url) { return [...(this.jar.get(new URL(url).origin) || new Map())].map(([k, v]) => `${k}=${v}`).join('; '); }
+  constructor() {
+    this.jar = new Map();
+  }
+  cookies(url) {
+    return [...(this.jar.get(new URL(url).origin) || new Map())].map(([k, v]) => `${k}=${v}`).join('; ');
+  }
   guardar(url, res) {
     const o = new URL(url).origin;
     const m = this.jar.get(o) || new Map();
     for (const c of res.headers.getSetCookie()) {
       const [par, ...attrs] = c.split(';');
       const i = par.indexOf('=');
-      const nombre = par.slice(0, i).trim(), valor = par.slice(i + 1).trim();
-      if (!valor || /max-age=0/i.test(attrs.join(';'))) m.delete(nombre); else m.set(nombre, valor);
+      const nombre = par.slice(0, i).trim(),
+        valor = par.slice(i + 1).trim();
+      if (!valor || /max-age=0/i.test(attrs.join(';'))) m.delete(nombre);
+      else m.set(nombre, valor);
     }
     this.jar.set(o, m);
   }
@@ -51,27 +62,42 @@ class Navegador {
       const accion = new URL(html.match(/<form[^>]*action="([^"]*)"/)[1], url).href;
       const campos = { ...extra };
       for (const m of html.matchAll(/<input[^>]*type="hidden"[^>]*name="([^"]+)"[^>]*value="([^"]*)"/g)) campos[m[1]] = m[2];
-      return this.seguir(accion, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(campos).toString() });
+      return this.seguir(accion, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams(campos).toString(),
+      });
     };
     ({ res, url } = await formulario({ login: email, password: 'x' }));
     if (res.status === 200) ({ res, url } = await formulario({}));
     // `url` es ahora la URL de retorno hacia /auth/callback
     return this.pedir(url);
   }
-  api(ruta, init = {}) { return this.pedir(base + ruta, { ...init, headers: { ...H, ...(init.headers || {}) } }); }
+  api(ruta, init = {}) {
+    return this.pedir(base + ruta, { ...init, headers: { ...H, ...(init.headers || {}) } });
+  }
 }
 
 test.before(async () => {
   if (!hay) return;
   Object.assign(process.env, {
-    OIDC_CLIENT_ID: 'ipam', OIDC_CLIENT_SECRET: 's3cret', PUBLIC_URL: 'http://127.0.0.1:1', SESSION_SECRET: 'x'.repeat(40),
-    OIDC_ALLOW_INSECURE: 'true', OIDC_SCOPES: 'openid email profile groups', OIDC_ADMIN_EMAILS: 'root@empresa.cl',
-    OIDC_ADMIN_GROUPS: 'ipam-admins', OIDC_REQUESTER_GROUPS: 'ipam-solicitantes', OIDC_ALLOWED_DOMAINS: 'empresa.cl',
+    OIDC_CLIENT_ID: 'ipam',
+    OIDC_CLIENT_SECRET: 's3cret',
+    PUBLIC_URL: 'http://127.0.0.1:1',
+    SESSION_SECRET: 'x'.repeat(40),
+    OIDC_ALLOW_INSECURE: 'true',
+    OIDC_SCOPES: 'openid email profile groups',
+    OIDC_ADMIN_EMAILS: 'root@empresa.cl',
+    OIDC_ADMIN_GROUPS: 'ipam-admins',
+    OIDC_REQUESTER_GROUPS: 'ipam-solicitantes',
+    OIDC_ALLOWED_DOMAINS: 'empresa.cl',
   });
   // 1) La app escucha primero para conocer su URL; 2) el IdP registra ese retorno; 3) se activa OIDC_ISSUER.
   process.env.OIDC_ISSUER = 'http://127.0.0.1:1';
   ({ app, db } = require('./server'));
-  const srvApp = await new Promise((ok) => { const s = app.listen(0, () => ok(s)); });
+  const srvApp = await new Promise((ok) => {
+    const s = app.listen(0, () => ok(s));
+  });
   base = `http://127.0.0.1:${srvApp.address().port}`;
   process.env.PUBLIC_URL = base;
   app = srvApp;
@@ -81,8 +107,13 @@ test.before(async () => {
   await new Promise((ok) => srvIdp.listen(0, '127.0.0.1', ok));
   const emisor = `http://127.0.0.1:${srvIdp.address().port}`;
   const provider = new Provider(emisor, {
-    clients: [{ client_id: 'ipam', client_secret: 's3cret', redirect_uris: [`${base}/auth/callback`], grant_types: ['authorization_code'], response_types: ['code'] }],
-    findAccount: async (_c, id) => ({ accountId: id, claims: async () => ({ sub: id, email: id, email_verified: true, name: id.split('@')[0], groups: GRUPOS[id] || [] }) }),
+    clients: [
+      { client_id: 'ipam', client_secret: 's3cret', redirect_uris: [`${base}/auth/callback`], grant_types: ['authorization_code'], response_types: ['code'] },
+    ],
+    findAccount: async (_c, id) => ({
+      accountId: id,
+      claims: async () => ({ sub: id, email: id, email_verified: true, name: id.split('@')[0], groups: GRUPOS[id] || [] }),
+    }),
     claims: { openid: ['sub'], email: ['email', 'email_verified'], profile: ['name'], groups: ['groups'] },
     conformIdTokenClaims: false,
     features: { devInteractions: { enabled: true } },
@@ -91,7 +122,14 @@ test.before(async () => {
   idp = srvIdp;
   process.env.OIDC_ISSUER = emisor;
 });
-test.after(async () => { if (hay) { app.close(); idp.close(); await db.query("delete from usuarios where email like '%@empresa.cl' or email like '%@gmail.com'"); await db.end(); } });
+test.after(async () => {
+  if (hay) {
+    app.close();
+    idp.close();
+    await db.query("delete from usuarios where email like '%@empresa.cl' or email like '%@gmail.com'");
+    await db.end();
+  }
+});
 
 test('sin sesión: la página redirige al login y la API responde 401; salud abierta', opts, async () => {
   const n = new Navegador();
@@ -167,7 +205,18 @@ test('CSRF, cookie manipulada y cierre de sesión', opts, async () => {
   assert.equal(sinCab.status, 403);
 
   const falso = new Navegador();
-  falso.jar.set(base, new Map([['ipam_sesion', n.jar.get(base).get('ipam_sesion').replace(/.$/, (c) => (c === 'A' ? 'B' : 'A'))]]));
+  falso.jar.set(
+    base,
+    new Map([
+      [
+        'ipam_sesion',
+        n.jar
+          .get(base)
+          .get('ipam_sesion')
+          .replace(/.$/, (c) => (c === 'A' ? 'B' : 'A')),
+      ],
+    ]),
+  );
   assert.equal((await falso.api('/api/me')).status, 401);
 
   const out = await n.api('/auth/logout', { method: 'POST', body: '{}' });

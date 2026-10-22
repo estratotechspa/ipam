@@ -25,7 +25,10 @@ function montar(app, { casos, tickets, publicador, validacion }) {
     if (!forma.ok) return res.status(400).json({ error: 'faltan campos', detalles: forma.errores });
     const b = req.body;
     const r = await casos.jira.procesarTicket(b);
-    if (!r.ok) return res.status(r.tipo === 'ambiguo' ? 422 : r.tipo === 'conflicto' ? 409 : r.tipo === 'no_encontrado' ? 404 : 400).json({ ticket: b.ticket, error: r.error });
+    if (!r.ok)
+      return res
+        .status(r.tipo === 'ambiguo' ? 422 : r.tipo === 'conflicto' ? 409 : r.tipo === 'no_encontrado' ? 404 : 400)
+        .json({ ticket: b.ticket, error: r.error });
     res.json({ ticket: r.ticket, pool: r.pool, cidr: r.cidr });
   });
 

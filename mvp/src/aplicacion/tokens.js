@@ -5,8 +5,18 @@ const { ok, fallo, ConflictoDeDatos } = require('./resultado');
 
 /** Lo que ve el cliente de un token: nunca el hash. */
 const presentar = (t) => ({
-  id: t.id, nombre: t.nombre, prefijo: t.prefijo, rol: t.rol, cuota_reservas: t.cuota_reservas, creado_por: t.creado_por, creado_en: t.creado_en,
-  expira_en: t.expira_en, ultimo_uso: t.ultimo_uso, revocado_en: t.revocado_en, estado: t.estado, por_vencer: !!t.por_vencer,
+  id: t.id,
+  nombre: t.nombre,
+  prefijo: t.prefijo,
+  rol: t.rol,
+  cuota_reservas: t.cuota_reservas,
+  creado_por: t.creado_por,
+  creado_en: t.creado_en,
+  expira_en: t.expira_en,
+  ultimo_uso: t.ultimo_uso,
+  revocado_en: t.revocado_en,
+  estado: t.estado,
+  por_vencer: !!t.por_vencer,
 });
 
 /**
@@ -19,10 +29,21 @@ function crearTokens({ repo, generador, config }) {
     if (!v.ok) return fallo('validacion', v.error, { mensaje: v.mensaje });
     const { token, hash } = generador.generar();
     try {
-      const fila = await repo.insertarToken({ nombre: v.nombre, prefijo: T.prefijoDe(token), hash, rol: v.rol, cuota: v.cuota, creadoPor: actor.nombre, dias: v.dias });
+      const fila = await repo.insertarToken({
+        nombre: v.nombre,
+        prefijo: T.prefijoDe(token),
+        hash,
+        rol: v.rol,
+        cuota: v.cuota,
+        creadoPor: actor.nombre,
+        dias: v.dias,
+      });
       return ok({ token, meta: presentar(fila) });
     } catch (e) {
-      if (e instanceof ConflictoDeDatos && e.codigo === '23505') return fallo('conflicto', 'nombre_en_uso', { mensaje: `Ya existe un token llamado «${v.nombre}». Para rotar, crea uno con otro nombre (p. ej. ${v.nombre}-2) y revoca el anterior.` });
+      if (e instanceof ConflictoDeDatos && e.codigo === '23505')
+        return fallo('conflicto', 'nombre_en_uso', {
+          mensaje: `Ya existe un token llamado «${v.nombre}». Para rotar, crea uno con otro nombre (p. ej. ${v.nombre}-2) y revoca el anterior.`,
+        });
       throw e;
     }
   }

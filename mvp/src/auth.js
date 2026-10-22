@@ -15,4 +15,14 @@ function validarConfiguracion() {
   if (propios.length) throw new ErrorDeConfiguracion(propios);
 }
 
-module.exports = { ROLES: roles.ROLES_USUARIO, tiene: roles.tiene, modo, requiere, resolverRol, dominioPermitido, validarConfiguracion, sellar: S.sellar, abrir: S.abrir };
+module.exports = {
+  ROLES: roles.ROLES_USUARIO,
+  tiene: roles.tiene,
+  modo,
+  requiere,
+  resolverRol,
+  dominioPermitido,
+  validarConfiguracion,
+  sellar: S.sellar,
+  abrir: S.abrir,
+};

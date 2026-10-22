@@ -19,7 +19,10 @@ test('lo versionado en docs/ coincide con lo que genera scripts/ci/generar-alert
 });
 
 test('cada alerta y cada panel del dashboard usan solo métricas que expone el IPAM', () => {
-  const textos = [...ALERTAS.map((a) => a.query), ...JSON.stringify(JSON.parse(salidas()['docs/ops/gcp/dashboard-ipam.json'])).match(/"prometheusQuery":"[^"]+"/g)];
+  const textos = [
+    ...ALERTAS.map((a) => a.query),
+    ...JSON.stringify(JSON.parse(salidas()['docs/ops/gcp/dashboard-ipam.json'])).match(/"prometheusQuery":"[^"]+"/g),
+  ];
   let revisadas = 0;
   for (const q of textos) {
     for (const m of String(q).matchAll(/\bipam_[a-z0-9_]+/g)) {

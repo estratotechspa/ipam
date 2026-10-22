@@ -15,8 +15,10 @@ function config() {
 function css() {
   const m = cfg.marca;
   // Valores por defecto de cada color (si el configurado no es #rrggbb).
-  return `:root{--top:${color(m.colorBarra, '#12203a')};--blue:${color(m.color, '#2d6cdf')};--accent:${color(m.colorAcento, '#4da3ff')}}\n`
-    + `@media (prefers-color-scheme:dark){:root{--top:${color(m.colorBarra, '#0a1020')}}}\n`;
+  return (
+    `:root{--top:${color(m.colorBarra, '#12203a')};--blue:${color(m.color, '#2d6cdf')};--accent:${color(m.colorAcento, '#4da3ff')}}\n` +
+    `@media (prefers-color-scheme:dark){:root{--top:${color(m.colorBarra, '#0a1020')}}}\n`
+  );
 }
 
 const TIPOS = [
@@ -38,7 +40,9 @@ function logo() {
       cache = { ruta: archivo, mtime: st.mtimeMs, datos: t ? { tipo: t[0], buffer: b } : null };
     }
     return cache.datos;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 function montar(app) {
@@ -48,7 +52,12 @@ function montar(app) {
     const l = logo();
     if (!l) return res.status(404).end();
     // Un SVG abierto directamente podría ejecutar scripts: se aísla con sandbox. Dentro de <img> nunca los ejecuta.
-    res.set({ 'Content-Type': l.tipo, 'Cache-Control': 'no-cache', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox", 'X-Content-Type-Options': 'nosniff' });
+    res.set({
+      'Content-Type': l.tipo,
+      'Cache-Control': 'no-cache',
+      'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+      'X-Content-Type-Options': 'nosniff',
+    });
     res.send(l.buffer);
   });
 }

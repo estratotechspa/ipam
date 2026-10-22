@@ -6,11 +6,31 @@ const dns = require('node:dns');
 
 const bloqueadas = new net.BlockList();
 for (const [red, bits] of [
-  ['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8], ['169.254.0.0', 16], ['172.16.0.0', 12],
-  ['192.0.0.0', 24], ['192.0.2.0', 24], ['192.168.0.0', 16], ['198.18.0.0', 15], ['198.51.100.0', 24], ['203.0.113.0', 24],
-  ['224.0.0.0', 4], ['240.0.0.0', 4],
-]) bloqueadas.addSubnet(red, bits, 'ipv4');
-for (const [red, bits] of [['::', 128], ['::1', 128], ['fc00::', 7], ['fe80::', 10], ['ff00::', 8], ['2001:db8::', 32]]) bloqueadas.addSubnet(red, bits, 'ipv6');
+  ['0.0.0.0', 8],
+  ['10.0.0.0', 8],
+  ['100.64.0.0', 10],
+  ['127.0.0.0', 8],
+  ['169.254.0.0', 16],
+  ['172.16.0.0', 12],
+  ['192.0.0.0', 24],
+  ['192.0.2.0', 24],
+  ['192.168.0.0', 16],
+  ['198.18.0.0', 15],
+  ['198.51.100.0', 24],
+  ['203.0.113.0', 24],
+  ['224.0.0.0', 4],
+  ['240.0.0.0', 4],
+])
+  bloqueadas.addSubnet(red, bits, 'ipv4');
+for (const [red, bits] of [
+  ['::', 128],
+  ['::1', 128],
+  ['fc00::', 7],
+  ['fe80::', 10],
+  ['ff00::', 8],
+  ['2001:db8::', 32],
+])
+  bloqueadas.addSubnet(red, bits, 'ipv6');
 
 const NOMBRES_BLOQUEADOS = new Set(['localhost', 'metadata.google.internal', 'metadata', 'instance-data']);
 
@@ -19,13 +39,19 @@ function ipv4Incrustada(ip) {
   const m = /^(?:::ffff:|64:ff9b::)(\d+\.\d+\.\d+\.\d+)$/i.exec(ip);
   if (m) return m[1];
   const h = /^(?:::ffff:|64:ff9b::)([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i.exec(ip);
-  if (h) { const a = parseInt(h[1], 16), b = parseInt(h[2], 16); return `${a >> 8}.${a & 255}.${b >> 8}.${b & 255}`; }
+  if (h) {
+    const a = parseInt(h[1], 16),
+      b = parseInt(h[2], 16);
+    return `${a >> 8}.${a & 255}.${b >> 8}.${b & 255}`;
+  }
   return null;
 }
 
 /** ¿Esta dirección IP es un destino prohibido? @param {string} ip */
 function esDireccionBloqueada(ip) {
-  const limpia = String(ip).replace(/^\[|\]$/g, '').split('%')[0];
+  const limpia = String(ip)
+    .replace(/^\[|\]$/g, '')
+    .split('%')[0];
   const tipo = net.isIP(limpia);
   if (!tipo) return true; // no es una IP: por prudencia, bloqueada
   if (tipo === 6) {
@@ -42,7 +68,11 @@ function esDireccionBloqueada(ip) {
  */
 function validarDestino(texto, permitirHosts = []) {
   let u;
-  try { u = new URL(texto); } catch { throw new Error('URL de destino inválida'); }
+  try {
+    u = new URL(texto);
+  } catch {
+    throw new Error('URL de destino inválida');
+  }
   if (u.protocol !== 'https:' && u.protocol !== 'http:') throw new Error('Solo se permiten destinos http o https');
   if (u.username || u.password) throw new Error('La URL de destino no puede llevar credenciales');
   const host = u.hostname.replace(/^\[|\]$/g, '').toLowerCase();

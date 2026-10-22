@@ -20,28 +20,37 @@ async function migrar({ url, bd, log, esperarMs = 60000, rutaSql = RUTA_SQL }) {
   let client;
   // La base puede estar arrancando (docker compose, Cloud SQL tras un reinicio): se espera con retroceso.
   for (let n = 1; ; n++) {
-    try { client = await crearCliente(url, bd); break; } catch (e) {
+    try {
+      client = await crearCliente(url, bd);
+      break;
+    } catch (e) {
       if (Date.now() > limite) throw e;
       log.warn(`Esperando a la base de datos (intento ${n})`, e);
       await dormir(Math.min(5000, 500 * n));
     }
   }
   try {
-    await reintentar(async () => {
-      await client.query('begin');
-      try {
-        // Un solo migrador a la vez aunque se lancen dos jobs por error.
-        await client.query("select pg_advisory_xact_lock(hashtext('ipam:migrar'))");
-        if (bd.esquema !== 'public') {
-          // El nombre ya está validado (IDENTIFICADOR) y se cita con %I en el servidor: nada se concatena en JS.
-          const ddl = (await client.query("select format('create schema if not exists %I', $1::text) as sql", [bd.esquema])).rows[0].sql;
-          await client.query(ddl);
+    await reintentar(
+      async () => {
+        await client.query('begin');
+        try {
+          // Un solo migrador a la vez aunque se lancen dos jobs por error.
+          await client.query("select pg_advisory_xact_lock(hashtext('ipam:migrar'))");
+          if (bd.esquema !== 'public') {
+            // El nombre ya está validado (IDENTIFICADOR) y se cita con %I en el servidor: nada se concatena en JS.
+            const ddl = (await client.query("select format('create schema if not exists %I', $1::text) as sql", [bd.esquema])).rows[0].sql;
+            await client.query(ddl);
+          }
+          await prepararSesion(client, bd);
+          await client.query(sql);
+          await client.query('commit');
+        } catch (e) {
+          await client.query('rollback').catch(() => {});
+          throw e;
         }
-        await prepararSesion(client, bd);
-        await client.query(sql);
-        await client.query('commit');
-      } catch (e) { await client.query('rollback').catch(() => {}); throw e; }
-    }, { intentos: 3, baseMs: 500, alReintentar: (e, n) => log.warn(`Migración: error transitorio, reintento ${n}`, e) });
+      },
+      { intentos: 3, baseMs: 500, alReintentar: (e, n) => log.warn(`Migración: error transitorio, reintento ${n}`, e) },
+    );
     const version = await versionActual(client);
     log.info('Esquema aplicado', { version, esquema: comillas(bd.esquema) });
     return { version, esquema: bd.esquema };

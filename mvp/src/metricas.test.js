@@ -7,9 +7,20 @@ const { ipEnRedes } = require('./adaptadores/http/rutas/metricas');
 const opts = { skip: hayBase ? false : 'sin DATABASE_URL' };
 const ADM = { 'X-Requested-With': 'ipam', 'Content-Type': 'application/json' };
 const TOKEN_METRICAS = 'token-de-metricas-solo-para-pruebas-0123456789';
-const NOMBRES = ['ipam_http_requests_total', 'ipam_http_request_duration_seconds', 'ipam_reservas_activas', 'ipam_reservas_total', 'ipam_reservas_expiradas_total',
-  'ipam_pool_utilizacion_ratio', 'ipam_tokens_activos', 'ipam_tokens_por_vencer', 'ipam_auth_rechazos_total', 'ipam_rate_limit_excedido_total',
-  'ipam_barredor_ultima_ejecucion_timestamp', 'ipam_db_up'];
+const NOMBRES = [
+  'ipam_http_requests_total',
+  'ipam_http_request_duration_seconds',
+  'ipam_reservas_activas',
+  'ipam_reservas_total',
+  'ipam_reservas_expiradas_total',
+  'ipam_pool_utilizacion_ratio',
+  'ipam_tokens_activos',
+  'ipam_tokens_por_vencer',
+  'ipam_auth_rechazos_total',
+  'ipam_rate_limit_excedido_total',
+  'ipam_barredor_ultima_ejecucion_timestamp',
+  'ipam_db_up',
+];
 
 /** Lee una métrica del texto de Prometheus: devuelve el valor de la línea que coincide con nombre y etiquetas. */
 function valor(texto, nombre, etiquetas = {}) {
@@ -37,12 +48,14 @@ test('protección: sin METRICS_TOKEN ni redes queda deshabilitado (404); con tok
   const b = await crearBaseAislada();
   const cerrar = [];
   try {
-    const libre = await lanzarServicio({ DATABASE_URL: b.url }); cerrar.push(libre);
+    const libre = await lanzarServicio({ DATABASE_URL: b.url });
+    cerrar.push(libre);
     const r0 = await fetch(`${libre.url}/metrics`);
     assert.equal(r0.status, 404, 'sin configurar, deshabilitado');
     assert.equal((await fetch(`${libre.url}/metrics`, { headers: { Authorization: `Bearer ${TOKEN_METRICAS}` } })).status, 404);
 
-    const conToken = await lanzarServicio({ DATABASE_URL: b.url, METRICS_TOKEN: TOKEN_METRICAS }); cerrar.push(conToken);
+    const conToken = await lanzarServicio({ DATABASE_URL: b.url, METRICS_TOKEN: TOKEN_METRICAS });
+    cerrar.push(conToken);
     assert.equal((await fetch(`${conToken.url}/metrics`)).status, 401);
     const mal = await fetch(`${conToken.url}/metrics`, { headers: { Authorization: 'Bearer otro-token' } });
     assert.equal(mal.status, 401);
@@ -52,29 +65,50 @@ test('protección: sin METRICS_TOKEN ni redes queda deshabilitado (404); con tok
     assert.match(ok.headers.get('content-type'), /^text\/plain; version=0\.0\.4/);
     assert.equal(ok.headers.get('cache-control'), 'no-store');
     // Un token de servicio del IPAM NO sirve para leer métricas (y viceversa).
-    const svc = await (await fetch(`${conToken.url}/api/tokens`, { method: 'POST', headers: ADM, body: JSON.stringify({ nombre: 'otro-uso', rol: 'agente' }) })).json();
+    const svc = await (
+      await fetch(`${conToken.url}/api/tokens`, { method: 'POST', headers: ADM, body: JSON.stringify({ nombre: 'otro-uso', rol: 'agente' }) })
+    ).json();
     assert.equal((await fetch(`${conToken.url}/metrics`, { headers: { Authorization: `Bearer ${svc.token}` } })).status, 401);
     assert.equal((await fetch(`${conToken.url}/api/pools`, { headers: { Authorization: `Bearer ${TOKEN_METRICAS}` } })).status, 401);
     assert.ok(!conToken.crudo().includes(TOKEN_METRICAS), 'el token de métricas no sale en los logs');
 
-    const porRed = await lanzarServicio({ DATABASE_URL: b.url, METRICS_ALLOW_CIDRS: '10.0.0.0/8', TRUST_PROXY: '1' }); cerrar.push(porRed);
+    const porRed = await lanzarServicio({ DATABASE_URL: b.url, METRICS_ALLOW_CIDRS: '10.0.0.0/8', TRUST_PROXY: '1' });
+    cerrar.push(porRed);
     assert.equal((await fetch(`${porRed.url}/metrics`)).status, 403, 'desde 127.0.0.1 no está permitido');
     assert.equal((await fetch(`${porRed.url}/metrics`, { headers: { 'X-Forwarded-For': '10.20.30.40' } })).status, 200, 'una IP de la red permitida sí');
     assert.equal((await fetch(`${porRed.url}/metrics`, { headers: { 'X-Forwarded-For': '11.20.30.40' } })).status, 403);
 
-    const ambos = await lanzarServicio({ DATABASE_URL: b.url, METRICS_ALLOW_CIDRS: '127.0.0.0/8', METRICS_TOKEN: TOKEN_METRICAS }); cerrar.push(ambos);
+    const ambos = await lanzarServicio({ DATABASE_URL: b.url, METRICS_ALLOW_CIDRS: '127.0.0.0/8', METRICS_TOKEN: TOKEN_METRICAS });
+    cerrar.push(ambos);
     assert.equal((await fetch(`${ambos.url}/metrics`)).status, 401, 'la red coincide pero falta el token');
     assert.equal((await fetch(`${ambos.url}/metrics`, { headers: { Authorization: `Bearer ${TOKEN_METRICAS}` } })).status, 200);
-  } finally { await Promise.all(cerrar.map((s) => s.parar())); await b.borrar(); }
+  } finally {
+    await Promise.all(cerrar.map((s) => s.parar()));
+    await b.borrar();
+  }
 });
 
 test('expone las métricas acordadas, con valores reales y sin explosión de etiquetas ni secretos', opts, async () => {
   const b = await crearBaseAislada();
-  const s = await lanzarServicio({ DATABASE_URL: b.url, METRICS_TOKEN: TOKEN_METRICAS, BARREDOR_INTERVALO_SEGUNDOS: '5', RATE_LIMIT_POR_MINUTO: '8', RATE_LIMIT_IP_POR_MINUTO: '100000' });
+  const s = await lanzarServicio({
+    DATABASE_URL: b.url,
+    METRICS_TOKEN: TOKEN_METRICAS,
+    BARREDOR_INTERVALO_SEGUNDOS: '5',
+    RATE_LIMIT_POR_MINUTO: '8',
+    RATE_LIMIT_IP_POR_MINUTO: '100000',
+  });
   try {
-    const t = await (await fetch(`${s.url}/api/tokens`, { method: 'POST', headers: ADM, body: JSON.stringify({ nombre: 'metricas-1', rol: 'agente', expira_dias: 3 }) })).json();
+    const t = await (
+      await fetch(`${s.url}/api/tokens`, { method: 'POST', headers: ADM, body: JSON.stringify({ nombre: 'metricas-1', rol: 'agente', expira_dias: 3 }) })
+    ).json();
     await fetch(`${s.url}/api/tokens`, { method: 'POST', headers: ADM, body: JSON.stringify({ nombre: 'metricas-2', rol: 'lector', expira_dias: 60 }) });
-    const r = await (await fetch(`${s.url}/api/reservas`, { method: 'POST', headers: ADM, body: JSON.stringify({ ambiente: 'qa', tipo: 'Nodos', mascara: 22, vpc: 'metricas' }) })).json();
+    const r = await (
+      await fetch(`${s.url}/api/reservas`, {
+        method: 'POST',
+        headers: ADM,
+        body: JSON.stringify({ ambiente: 'qa', tipo: 'Nodos', mascara: 22, vpc: 'metricas' }),
+      })
+    ).json();
     await fetch(`${s.url}/api/reservas/${r.id}`, { headers: ADM });
     await fetch(`${s.url}/api/pools`, { headers: { Authorization: `Bearer ipam_${'M'.repeat(43)}` } }); // token inválido → rechazo
 
@@ -82,7 +116,10 @@ test('expone las métricas acordadas, con valores reales y sin explosión de eti
     for (const n of NOMBRES) assert.ok(txt.includes(`# TYPE ${n} `), `falta la métrica ${n}`);
     assert.equal(valor(txt, 'ipam_db_up'), 1);
     assert.equal(valor(txt, 'ipam_reservas_activas'), 1);
-    assert.deepEqual(['reservada', 'confirmada', 'liberada', 'expirada'].map((e) => valor(txt, 'ipam_reservas_total', { estado: e })), [1, 0, 0, 0]);
+    assert.deepEqual(
+      ['reservada', 'confirmada', 'liberada', 'expirada'].map((e) => valor(txt, 'ipam_reservas_total', { estado: e })),
+      [1, 0, 0, 0],
+    );
     assert.equal(valor(txt, 'ipam_tokens_activos'), 2);
     assert.equal(valor(txt, 'ipam_tokens_por_vencer'), 1, 'solo el token que vence en 3 días');
     const util = valor(txt, 'ipam_pool_utilizacion_ratio', { pool: 'gke-nodos-qa' });
@@ -103,18 +140,26 @@ test('expone las métricas acordadas, con valores reales y sin explosión de eti
 
     // Barredor y expiración: tras vencer una reserva, el barredor la marca y los contadores lo reflejan.
     await b.sql("update reservas set expira_en = now() - interval '1 second' where id = $1", [r.id]);
-    let fin = Date.now() + 20000, ultima = 0, expiradas = 0, porEstado;
+    const fin = Date.now() + 20000;
+    let ultima = 0,
+      expiradas = 0,
+      porEstado;
     while (Date.now() < fin) {
       await dormir(1500);
       const x = await metricas(s);
-      ultima = valor(x, 'ipam_barredor_ultima_ejecucion_timestamp'); expiradas = valor(x, 'ipam_reservas_expiradas_total'); porEstado = valor(x, 'ipam_reservas_total', { estado: 'expirada' });
+      ultima = valor(x, 'ipam_barredor_ultima_ejecucion_timestamp');
+      expiradas = valor(x, 'ipam_reservas_expiradas_total');
+      porEstado = valor(x, 'ipam_reservas_total', { estado: 'expirada' });
       if (expiradas >= 1 && ultima > 0) break;
     }
     assert.ok(ultima > Date.now() / 1000 - 60, 'el barredor corrió hace poco');
     assert.equal(expiradas, 1, 'una reserva expirada');
     assert.equal(porEstado, 1);
     assert.equal(valor(await metricas(s), 'ipam_reservas_activas'), 0);
-  } finally { await s.parar(); await b.borrar(); }
+  } finally {
+    await s.parar();
+    await b.borrar();
+  }
 });
 
 test('los medidores salen de la base: dos réplicas ven lo mismo; y con la base caída /metrics sigue respondiendo con ipam_db_up 0', opts, async () => {
@@ -132,7 +177,10 @@ test('los medidores salen de la base: dos réplicas ven lo mismo; y con la base 
     const r = await fetch(`${caida.url}/metrics`, { headers: { Authorization: `Bearer ${TOKEN_METRICAS}` } });
     assert.equal(r.status, 200);
     assert.equal(valor(await r.text(), 'ipam_db_up'), 0);
-  } finally { await Promise.all([s1.parar(), s2.parar(), caida && caida.parar()]); await b.borrar(); }
+  } finally {
+    await Promise.all([s1.parar(), s2.parar(), caida && caida.parar()]);
+    await b.borrar();
+  }
 });
 
 test('ROL=worker también expone /metrics', opts, async () => {
@@ -142,5 +190,8 @@ test('ROL=worker también expone /metrics', opts, async () => {
     const txt = await metricas(w);
     assert.equal(valor(txt, 'ipam_db_up'), 1);
     assert.equal((await fetch(`${w.url}/api/pools`)).status, 404);
-  } finally { await w.parar(); await b.borrar(); }
+  } finally {
+    await w.parar();
+    await b.borrar();
+  }
 });

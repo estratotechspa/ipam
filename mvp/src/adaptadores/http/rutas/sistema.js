@@ -25,7 +25,12 @@ function montar(app, { db, estado, log }) {
 
   // Alias histórico de salud (conserva la respuesta de siempre).
   ruta(app, 'get', '/api/health', async (_q, res) => {
-    try { await con(db.query('select 1'), 2000); res.json({ ok: true }); } catch { res.status(503).json({ ok: false }); }
+    try {
+      await con(db.query('select 1'), 2000);
+      res.json({ ok: true });
+    } catch {
+      res.status(503).json({ ok: false });
+    }
   });
 }
 
@@ -33,7 +38,9 @@ const MODO = { oidc: 'oidc', basic: 'basic', token: 'token', anonimo: 'none' };
 
 /** Datos de la sesión actual. Va DESPUÉS del middleware de acceso. */
 function montarSesion(app) {
-  api(app, 'get', '/me', (req, res) => res.json({ modo: MODO[req.actor && req.actor.tipo] || 'none', usuario: req.usuario, nombre: req.nombre || req.usuario, rol: req.rol }));
+  api(app, 'get', '/me', (req, res) =>
+    res.json({ modo: MODO[req.actor && req.actor.tipo] || 'none', usuario: req.usuario, nombre: req.nombre || req.usuario, rol: req.rol }),
+  );
 }
 
 module.exports = { montar, montarSesion };
