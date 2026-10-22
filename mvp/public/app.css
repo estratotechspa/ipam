@@ -21,7 +21,8 @@ td{padding:9px 8px;border-bottom:1px solid var(--line2)}
 .bar i{display:block;height:100%;background:var(--accent)}
 code{background:var(--line2);padding:2px 6px;border-radius:4px}
 .btn{background:var(--blue);color:#fff;padding:9px 16px;border-radius:6px;border:0;font:inherit;cursor:pointer}
-.btn.sec{background:transparent;color:var(--blue);border:1px solid var(--blue)}
+.btn.sec{background:transparent;color:color-mix(in srgb,var(--blue) 70%,#000);border:1px solid var(--blue)}
+@media (prefers-color-scheme:dark){.btn.sec{color:color-mix(in srgb,var(--blue) 60%,#fff)}}
 label{display:block;font-size:12px;color:var(--mut);margin-top:10px}
 input,select{width:100%;border:1px solid var(--line);border-radius:6px;padding:9px;background:var(--card);color:var(--fg);font:inherit;margin:4px 0 4px}
 .alert{background:#fdecec;border:1px solid #e99;border-radius:8px;padding:14px;margin-bottom:14px;color:#8a1f1f}

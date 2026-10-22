@@ -37,6 +37,8 @@ Es la pantalla de inicio. Arriba hay cuatro números:
 Debajo, una fila por pool: su **tipo** (Nodos, Pods, Servicios), **ambiente**, **proveedor** (p. ej. GCP), **CIDR base** (el rango grande), cuántas asignaciones tiene y una **barra de uso**. Úsala para detectar pools que se llenan; con alertas configuradas ([OBSERVABILIDAD](ops/OBSERVABILIDAD.md)) avisan al pasar de 80 % y 90 %.
 **Exportar a Excel** baja una planilla con todo.
 
+**Filtro por ambiente y proveedor:** arriba de la tabla hay dos listas, **Ambiente** (`dev`, `qa`, `pre`, `prod`) y **Proveedor** (p. ej. GCP). Al elegir una, los números y la tabla muestran solo esos pools. El filtro **se conserva** al pasar a Asignaciones y Reservas, que también quedan acotadas; **Limpiar filtro** lo quita.
+
 ### Asignaciones — «lo ya entregado»
 La lista oficial de segmentos definitivos: **segmento**, **pool**, **proyecto/VPC**, cuántas **direcciones** son, quién lo **solicitó**, el **origen** (`panel`, `jira`, `agente`, `semilla`), el **ticket** y la **fecha**.
 - **Exportar a Excel** para auditorías o reportes.
@@ -46,8 +48,8 @@ La lista oficial de segmentos definitivos: **segmento**, **pool**, **proyecto/VP
 ### Solicitar — «necesito un rango ahora» (solicitante y admin)
 Formulario para pedir un segmento **definitivo** de inmediato:
 1. Elige el **pool** (ambiente y tipo correctos).
-2. Escribe el **proyecto / VPC** (el nombre de quien lo usará).
-3. Deja **CIDR manual** vacío para que el IPAM entregue el primer segmento libre del tamaño que elijas en **Máscara** (`/22` = 1.024 direcciones, `/24` = 256…). Si necesitas un rango específico, escríbelo; debe caer dentro del pool.
+2. Escribe el **proyecto / VPC** (el nombre de quien lo usará; es obligatorio).
+3. Deja **CIDR manual** vacío para que el IPAM entregue el primer segmento libre del tamaño que elijas en **Máscara**, de `/8` a `/32` (`/22` = 1.024 direcciones, `/24` = 256, `/26` = 64, `/28` = 16…). Si necesitas un rango específico, escríbelo; debe caer dentro del pool.
 4. Pulsa **Solicitar**.
 
 Si el rango que pediste choca con otro, el IPAM **no asigna nada**: te muestra con quién choca (proyecto, persona, fecha) y te ofrece **segmentos libres** con un botón «Usar».

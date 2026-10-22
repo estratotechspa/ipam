@@ -48,14 +48,68 @@ $('nav').onclick = (e) => {
 };
 const fail = (id, e) => ($(id).innerHTML = `<div class="alert">No se pudo cargar: ${esc(e.message)}</div>`);
 
+// Filtro global por ambiente y proveedor: vale para Pools, Asignaciones y Reservas (se conserva al cambiar de pestaña).
+const FILTRO = { ambiente: '', proveedor: '' };
+const pasaFiltro = (p) => (!FILTRO.ambiente || p.ambiente === FILTRO.ambiente) && (!FILTRO.proveedor || p.proveedor === FILTRO.proveedor);
+const camposFiltro = (todos, recargar) => {
+  const unicos = (k) => [...new Set(todos.map((p) => p[k]))].sort();
+  const reponer = async (id) => {
+    await recargar();
+    const el = document.getElementById(id);
+    if (el) el.focus();
+  };
+  const sel = (id, k, etiqueta) =>
+    h(
+      'label',
+      null,
+      etiqueta,
+      h(
+        'select',
+        {
+          id,
+          onchange: (e) => {
+            FILTRO[k] = e.target.value;
+            reponer(id);
+          },
+        },
+        h('option', { value: '' }, 'Todos'),
+        unicos(k).map((v) => h('option', { value: v, selected: FILTRO[k] === v }, v)),
+      ),
+    );
+  return [
+    sel('f-ambiente', 'ambiente', 'Ambiente'),
+    sel('f-proveedor', 'proveedor', 'Proveedor'),
+    h(
+      'button',
+      {
+        type: 'button',
+        class: 'btn sec',
+        onclick: () => {
+          FILTRO.ambiente = '';
+          FILTRO.proveedor = '';
+          recargar();
+        },
+      },
+      'Limpiar filtro',
+    ),
+  ];
+};
+const barraFiltro = (todos, recargar) =>
+  h(
+    'form',
+    { class: 'filtros', role: 'search', 'aria-label': 'Filtrar por ambiente y proveedor', onsubmit: (e) => e.preventDefault() },
+    camposFiltro(todos, recargar),
+  );
+
 async function renderPools() {
   try {
-    const [pools, r] = await Promise.all([get('/api/pools'), get('/api/resumen')]);
+    const [todos, r] = await Promise.all([get('/api/pools'), get('/api/resumen')]);
+    const pools = todos.filter(pasaFiltro);
     $('pools').innerHTML =
       `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h2>Estado de pools</h2><a class="btn sec" href="/api/exportar.xlsx" download>⬇ Exportar a Excel</a></div>
-  <div class="row"><div class="card"><div class="kpi">${r.pools}</div><div class="sub">Pools</div></div>
-  <div class="card"><div class="kpi">${r.asignaciones}</div><div class="sub">Asignaciones activas</div></div>
-  <div class="card"><div class="kpi">${(r.uso_promedio * 100).toFixed(1).replace('.', ',')}%</div><div class="sub">Uso promedio</div></div>
+  <div class="row"><div class="card"><div class="kpi">${pools.length}</div><div class="sub">Pools</div></div>
+  <div class="card"><div class="kpi">${pools.reduce((n, p) => n + p.asignaciones, 0)}</div><div class="sub">Asignaciones activas</div></div>
+  <div class="card"><div class="kpi">${((pools.length ? pools.reduce((n, p) => n + p.uso, 0) / pools.length : 0) * 100).toFixed(1).replace('.', ',')}%</div><div class="sub">Uso promedio</div></div>
   <div class="card"><div class="kpi">${r.solapamientos}</div><div class="sub">Solapamientos (la base de datos los impide)</div></div></div>
   <div class="card tablewrap" style="margin-top:16px"><table><tr><th>Pool</th><th>Tipo</th><th>Ambiente</th><th>Proveedor</th><th>CIDR base</th><th>Asig.</th><th>Uso</th></tr>
   ${pools
@@ -66,6 +120,7 @@ async function renderPools() {
   <td><div class="bar" title="${(p.uso * 100).toFixed(2)}%"><i style="width:${Math.max(p.uso * 100, 1)}%"></i></div></td></tr>`,
     )
     .join('')}</table></div>`;
+    $('pools').prepend(barraFiltro(todos, renderPools));
   } catch (e) {
     fail('pools', e);
   }
@@ -73,7 +128,9 @@ async function renderPools() {
 
 async function renderAsig() {
   try {
-    const a = await get('/api/asignaciones');
+    const [todosPools, todasAsig] = await Promise.all([get('/api/pools'), get('/api/asignaciones')]);
+    const deEsePool = new Map(todosPools.map((p) => [p.id, p]));
+    const a = todasAsig.filter((x) => deEsePool.has(x.pool_id) && pasaFiltro(deEsePool.get(x.pool_id)));
     $('asig').innerHTML =
       `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h2>Asignaciones</h2><span><a class="btn" href="/api/exportar.xlsx" download>⬇ Exportar a Excel</a> ${puede('admin') ? '<a class="btn sec" href="/api/exportar.json" download title="Respaldo completo para llevar el IPAM a otra infraestructura">⬇ Respaldo JSON</a>' : ''}</span></div><div class="card tablewrap"><table><tr><th>Segmento</th><th>Pool</th><th>Proyecto / VPC</th><th>Direcciones</th><th>Solicitó</th><th>Origen</th><th>Ticket</th><th>Fecha</th><th></th></tr>
   ${a
@@ -84,6 +141,7 @@ async function renderAsig() {
   <td>${puede('admin') ? `<button class="btn sec" data-del="${x.id}" data-c="${esc(x.cidr)}">Liberar</button>` : ''}</td></tr>`,
     )
     .join('')}</table></div>`;
+    $('asig').prepend(barraFiltro(todosPools, renderAsig));
     $('asig')
       .querySelectorAll('[data-del]')
       .forEach(
@@ -291,11 +349,16 @@ async function renderReservas() {
     if (f.estado) qs.set('estado', f.estado);
     if (f.pool) qs.set('pool', f.pool);
     const [pools, todas] = await Promise.all([get('/api/v1/pools'), get('/api/v1/reservas' + (String(qs) ? '?' + qs : ''))]);
-    const lista = todas.filter((r) => !f.solicitante || r.solicitante.toLowerCase().includes(f.solicitante.toLowerCase()));
+    const poolDe = new Map(pools.map((p) => [p.id, p]));
+    const lista = todas.filter(
+      (r) =>
+        (!f.solicitante || r.solicitante.toLowerCase().includes(f.solicitante.toLowerCase())) && poolDe.has(r.pool_id) && pasaFiltro(poolDe.get(r.pool_id)),
+    );
     const estado = h('div', { id: 'res-msg', 'aria-live': 'polite' });
     const filtros = h(
       'form',
       { class: 'filtros', role: 'search', 'aria-label': 'Filtrar reservas', onsubmit: (e) => e.preventDefault() },
+      camposFiltro(pools, renderReservas),
       h(
         'label',
         null,

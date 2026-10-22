@@ -35,3 +35,23 @@ test('un CIDR solapado muestra la alerta y sugiere segmentos libres', async ({ p
   await expect(page.locator('#s-res .alert')).toContainText('Solapamiento detectado');
   await expect(page.locator('#s-res .sug').first()).toBeVisible();
 });
+
+test('el filtro por ambiente y proveedor acota Pools, Asignaciones y Reservas', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Estado de pools' })).toBeVisible();
+  const filas = page.locator('#pools tbody tr').filter({ has: page.locator('td') });
+  const total = await filas.count();
+  expect(total).toBeGreaterThan(1);
+  await page.selectOption('#pools #f-ambiente', 'prod');
+  await expect(page.locator('#pools #f-ambiente')).toBeFocused();
+  const prod = await filas.count();
+  expect(prod).toBeGreaterThan(0);
+  expect(prod).toBeLessThan(total);
+  for (const t of await page.locator('#pools tbody tr td:nth-child(3)').allTextContents()) expect(t.toLowerCase()).toContain('prod');
+  // El filtro se conserva en otra pestaña.
+  await page.getByRole('button', { name: 'Asignaciones', exact: true }).click();
+  await expect(page.locator('#asig #f-ambiente')).toHaveValue('prod');
+  await page.getByRole('button', { name: 'Limpiar filtro' }).first().click();
+  await page.getByRole('button', { name: 'Pools', exact: true }).click();
+  await expect(page.locator('#pools #f-ambiente')).toHaveValue('');
+});
