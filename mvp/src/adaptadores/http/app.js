@@ -17,6 +17,7 @@ const jiraRutas = require('./rutas/jira');
 const reservasRutas = require('./rutas/reservas');
 const tokensRutas = require('./rutas/tokens');
 const contratoRutas = require('./rutas/contrato');
+const metricasRutas = require('./rutas/metricas');
 const { construirOpenApi } = require('../../openapi');
 const { crearValidador } = require('./validacion');
 const { crearMiddlewareLimite } = require('./middleware/limite');
@@ -57,6 +58,7 @@ function crearApp(deps) {
 
   // Públicas (no exigen sesión): sondas, marca, /auth.
   sistema.montar(app, { db, estado, log });
+  metricasRutas.montar(app, { metricas });
   marca.montar(app);
   montarOidc(app, { repo, auditar, ruta });
 

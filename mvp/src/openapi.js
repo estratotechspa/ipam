@@ -252,6 +252,15 @@ function rutas() {
   p['/healthz'] = { get: op({ tag: 'Operación', summary: 'Vivo (liveness)', description: 'No toca la base de datos. Para `livenessProbe` y `HEALTHCHECK`.', ok: { 200: respuesta('El proceso responde.', 'Salud', { ok: true }) }, seguridad: publico }) };
   p['/readyz'] = { get: op({ tag: 'Operación', summary: 'Listo (readiness)', description: 'Base alcanzable y esquema al día. 503 si no, o si el servicio se está apagando. Para `readinessProbe`, `healthCheckPath` y Cloud Run.', ok: { 200: respuesta('Listo para atender.', 'Listo', { ok: true, esquema: { version: 4, minima: 4 } }), 503: respuesta('Todavía no, o apagándose.', 'Listo', { ok: false, motivo: 'esquema_desactualizado' }) }, seguridad: publico }) };
   p['/api/health'] = { get: op({ tag: 'Operación', summary: 'Salud (alias histórico)', description: 'Se conserva por compatibilidad; prefiere `/healthz` y `/readyz`.', ok: { 200: respuesta('Base alcanzable.', 'Salud', { ok: true }), 503: respuesta('Base no disponible.', 'Salud', { ok: false }) }, seguridad: publico }) };
+  p['/metrics'] = {
+    get: {
+      ...op({ tag: 'Operación', summary: 'Métricas en formato Prometheus', seguridad: publico,
+        description: 'Se protege con un token de lectura propio (`METRICS_TOKEN`, `Authorization: Bearer`) y/o por red (`METRICS_ALLOW_CIDRS`). Sin ninguno de los dos queda **deshabilitado** (404). No cuenta para el límite de peticiones. Medidores de reservas, tokens, pools y barredor salen de la base de datos (correctos con varias réplicas); los contadores son por réplica y Prometheus los suma.',
+        ok: { 200: { description: 'Texto en formato de exposición de Prometheus.', content: { 'text/plain': { schema: { type: 'string' } } } } },
+        extra: { 401: respuesta('Token de métricas inválido.', 'Error'), 403: respuesta('Dirección fuera de las redes permitidas.', 'Error'), 404: respuesta('Métricas deshabilitadas.', 'Error') } }),
+      security: [{ metricsToken: [] }],
+    },
+  };
   p['/api/v1/openapi.json'] = { 'x-alias-legado': '/api/openapi.json', get: op({ tag: 'Operación', summary: 'Este contrato (OpenAPI 3.1)', ok: { 200: respuesta('El documento OpenAPI.', { type: 'object' }) } }) };
   p['/api/v1/me'] = { 'x-alias-legado': '/api/me', get: op({ tag: 'Sesión', summary: 'Quién soy', description: 'Con un token de servicio, `modo` es `token`.', ok: { 200: respuesta('Identidad y rol actuales.', 'Me', { modo: 'token', usuario: 'svc:agente-redes', nombre: 'svc:agente-redes', rol: 'agente' }) } }) };
   p['/api/config'] = { get: op({ tag: 'Sesión', summary: 'Marca (nombre, subtítulo, logo)', ok: { 200: respuesta('Datos de marca.', 'Marca') }, seguridad: publico }) };
@@ -346,6 +355,7 @@ function construirOpenApi({ servidor = '/' } = {}) {
       securitySchemes: {
         bearerToken: { type: 'http', scheme: 'bearer', bearerFormat: 'ipam_ + 43 caracteres', description: 'Token de servicio (rol lector o agente).' },
         sesion: { type: 'apiKey', in: 'cookie', name: 'ipam_sesion', description: 'Cookie de sesión OIDC (HttpOnly, SameSite). Los cambios exigen `X-Requested-With: ipam`.' },
+        metricsToken: { type: 'http', scheme: 'bearer', description: 'METRICS_TOKEN: solo sirve para leer /metrics.' },
         basic: { type: 'http', scheme: 'basic', description: 'Modo Basic de un solo usuario (POC). Los cambios exigen `X-Requested-With: ipam`.' },
       },
       responses,

@@ -40,14 +40,24 @@ async function crearBaseAislada({ esquema = true, semilla = true } = {}) {
   return base;
 }
 
-const puertoLibre = () => new Promise((ok, mal) => { const s = net.createServer(); s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => ok(p)); }); s.on('error', mal); });
+// Se prueba en todas las interfaces (como escucha el servicio) para no elegir un puerto que otro proceso ya usa en «::».
+const puertoLibre = () => new Promise((ok, mal) => { const s = net.createServer(); s.listen(0, () => { const p = s.address().port; s.close(() => ok(p)); }); s.on('error', mal); });
 const dormir = (ms) => new Promise((ok) => setTimeout(ok, ms));
 
 /**
  * Lanza `node src/server.js` como proceso aparte con el entorno indicado (no hereda variables del IPAM).
  * Devuelve { url, puerto, proceso, logs(), parar(senal), salida: Promise<{codigo, senal}> }.
  */
-async function lanzarServicio(env, { esperar = true } = {}) {
+async function lanzarServicio(env, opciones = {}) {
+  // Entre elegir un puerto libre y que el servicio lo abra, otro proceso puede ganarle: si pasa, se reintenta con otro puerto.
+  for (let intento = 1; ; intento++) {
+    try { return await lanzarUnaVez(env, opciones); } catch (e) {
+      if (intento >= 5 || !/EADDRINUSE/.test(String(e.message))) throw e;
+    }
+  }
+}
+
+async function lanzarUnaVez(env, { esperar = true } = {}) {
   const puerto = await puertoLibre();
   const limpio = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(DATABASE|APP_|OIDC_|SESSION_|ALLOW_|ROL$|NODE_ENV|PORT|JIRA|METRICS|RATE_|CUOTA|RESERVA|MIGRAR|EVENTOS|OTEL|TRUST|LOG_|LIMITE|BARREDOR|COOKIE|DB_|TOKEN_|CONFIRMACION|HSTS|APAGADO|SOLICITUD|JSON_)/.test(k)));
   const proceso = spawn(process.execPath, [path.join(RAIZ, 'src', 'server.js')], { env: { ...limpio, PORT: String(puerto), LOG_LEVEL: 'info', NODE_OPTIONS: '--throw-deprecation', RATE_LIMIT_POR_MINUTO: '100000', RATE_LIMIT_ESCRITURA_POR_MINUTO: '100000', RATE_LIMIT_IP_POR_MINUTO: '100000', RATE_LIMIT_AUTH_FALLOS_POR_MINUTO: '100000', ...env }, stdio: ['ignore', 'pipe', 'pipe'] });

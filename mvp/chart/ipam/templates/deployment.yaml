@@ -35,7 +35,7 @@ spec:
             - configMapRef: {name: {{ include "ipam.name" . }}-config}
           env:
             {{- if .Values.secrets.asFiles }}
-            {{- range $k := list "DATABASE_URL" "APP_USER" "APP_PASS" "JIRA_WEBHOOK_SECRET" "OIDC_CLIENT_SECRET" "SESSION_SECRET" }}
+            {{- range $k := list "DATABASE_URL" "APP_USER" "APP_PASS" "JIRA_WEBHOOK_SECRET" "OIDC_CLIENT_SECRET" "SESSION_SECRET" "METRICS_TOKEN" }}
             - {name: {{ $k }}_FILE, value: /etc/ipam-secrets/{{ $k }}}
             {{- end }}
             {{- else }}
@@ -43,7 +43,7 @@ spec:
             - name: {{ $k }}
               valueFrom: {secretKeyRef: {name: {{ include "ipam.secretName" $ }}, key: {{ $k }}}}
             {{- end }}
-            {{- range $k := list "OIDC_CLIENT_SECRET" "SESSION_SECRET" }}
+            {{- range $k := list "OIDC_CLIENT_SECRET" "SESSION_SECRET" "METRICS_TOKEN" }}
             - name: {{ $k }}
               valueFrom: {secretKeyRef: {name: {{ include "ipam.secretName" $ }}, key: {{ $k }}, optional: true}}
             {{- end }}

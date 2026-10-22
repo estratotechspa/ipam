@@ -275,6 +275,23 @@ function crearRepositorio(db) {
     async tocarUltimoUso(id) {
       await db.query("update tokens_servicio set ultimo_uso = now() where id = $1 and (ultimo_uso is null or ultimo_uso < now() - interval '1 minute')", [id]);
     },
+    /** Datos para las métricas, todos con el reloj de la base. */
+    async estadisticas() {
+      const r = (await db.query(
+        `select (select count(*) from reservas where ${RESERVA_VIGENTE})::int as activas,
+                (select count(*) from tokens_servicio where revocado_en is null and expira_en > now())::int as tokens_activos,
+                (select count(*) from tokens_servicio where revocado_en is null and expira_en > now() and expira_en < now() + interval '7 days')::int as tokens_por_vencer,
+                (select coalesce(extract(epoch from ultima_ejecucion), 0) from barredor_estado where id = 1)::float8 as barredor`)).rows[0];
+      const porEstado = {};
+      for (const f of (await db.query(`select ${ESTADO_EFECTIVO} as estado, count(*)::int as n from reservas group by 1`)).rows) porEstado[f.estado] = f.n;
+      const pools = (await db.query(
+        `select p.id, ((a.tam + r.tam) / (2^(32-masklen(p.cidr)))::float8) as ratio
+           from pools p
+           left join lateral (select coalesce(sum(2^(32-masklen(cidr))),0)::float8 as tam from asignaciones where pool_id = p.id) a on true
+           left join lateral (select coalesce(sum(2^(32-masklen(cidr))),0)::float8 as tam from reservas where pool_id = p.id and ${RESERVA_VIGENTE}) r on true
+          order by p.id`)).rows;
+      return { reservas: { activas: r.activas, porEstado }, tokens: { activos: r.tokens_activos, porVencer: r.tokens_por_vencer }, barredor: r.barredor, pools };
+    },
     async listarEventos() {
       return (await db.query('select id, ts, tipo, detalle from eventos order by id desc limit 50')).rows;
     },

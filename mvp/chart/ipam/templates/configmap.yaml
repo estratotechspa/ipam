@@ -28,6 +28,9 @@ data:
   RATE_LIMIT_ESCRITURA_POR_MINUTO: {{ .Values.limites.escrituraPorMinuto | quote }}
   RATE_LIMIT_IP_POR_MINUTO: {{ .Values.limites.ipPorMinuto | quote }}
   RATE_LIMIT_AUTH_FALLOS_POR_MINUTO: {{ .Values.limites.authFallosPorMinuto | quote }}
+  {{- with .Values.metrics.allowCidrs }}
+  METRICS_ALLOW_CIDRS: {{ . | quote }}
+  {{- end }}
   CUOTA_RESERVAS_POR_TOKEN: {{ .Values.limites.cuotaReservasPorToken | quote }}
   RESERVA_TTL_HORAS: {{ .Values.config.reservaTtlHoras | quote }}
   RESERVA_TTL_MAX_HORAS: {{ .Values.config.reservaTtlMaxHoras | quote }}

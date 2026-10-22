@@ -9,6 +9,7 @@ const { crearLogger } = require('./adaptadores/log/logger');
 const { crearPool } = require('./adaptadores/persistencia/postgres/pool');
 const { crearRepositorio } = require('./adaptadores/persistencia/postgres/repositorio');
 const { crearPublicador } = require('./adaptadores/eventos');
+const { crearMetricas } = require('./adaptadores/metricas/prom');
 const tickets = require('./adaptadores/tickets/jira');
 const generadorToken = require('./adaptadores/auth/token');
 const { crearCasos } = require('./aplicacion');
@@ -16,7 +17,6 @@ const { crearLimite } = require('./aplicacion/limite');
 const { crearAlmacenPostgres } = require('./adaptadores/limite/postgres');
 const { crearAlmacenMemoria } = require('./adaptadores/limite/memoria');
 const { crearApp } = require('./adaptadores/http/app');
-const metricas = require('./adaptadores/metricas/nula');
 const version = require('../package.json').version;
 
 const instancia = `${os.hostname()}-${crypto.randomBytes(3).toString('hex')}`;
@@ -32,7 +32,8 @@ function construir() {
   const db = crearPool(config.bd, log);
   const repo = crearRepositorio(db);
   const reloj = { ahora: () => new Date() };
-  const publicador = crearPublicador({ repo, log, cfg: config.eventos });
+  const metricas = crearMetricas({ repo, log });
+  const publicador = crearPublicador({ repo, log, cfg: config.eventos, extra: [metricas] });
   const auditor = {
     // La auditoría nunca bloquea ni rompe la operación: si falla, queda en el log. El request_id sale del contexto.
     registrar: ({ accion, usuario, rol = null, detalle = {}, ip = null }) =>

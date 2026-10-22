@@ -29,6 +29,10 @@ ingress:
     kubernetes.io/ingress.allow-http: "false"
     networking.gke.io/managed-certificates: ipam-cert     # recurso ManagedCertificate creado aparte
     # kubernetes.io/ingress.global-static-ip-name: ipam-ip
+# Métricas: Google Managed Prometheus recolecta /metrics con un PodMonitoring (solo se activa aquí, en GKE).
+metrics:
+  enabled: true
+  podMonitoring: {enabled: true, interval: 30s}
 networkPolicy:
   enabled: true
   # Permitir la salida hacia la IP privada de Cloud SQL (5432):

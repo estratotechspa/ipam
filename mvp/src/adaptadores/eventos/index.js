@@ -9,9 +9,9 @@ const adaptadorLog = (log) => ({ publicar: async (tipo, detalle = {}) => { log.i
 /** Guarda el evento en la tabla `eventos` (lo muestra la pestaña Jira). */
 const adaptadorTabla = (repo) => ({ publicar: (tipo, detalle = {}) => repo.registrarEvento(tipo, detalle) });
 
-/** @param {{repo: any, log: any, cfg: import('../../config').config['eventos']}} o */
-function crearPublicador({ repo, log, cfg }) {
-  const adaptadores = [adaptadorTabla(repo)];
+/** @param {{repo: any, log: any, cfg: import('../../config').config['eventos'], extra?: Array<{publicar: Function}>}} o */
+function crearPublicador({ repo, log, cfg, extra = [] }) {
+  const adaptadores = [adaptadorTabla(repo), ...extra];
   if (cfg.publicadores.includes('log')) adaptadores.push(adaptadorLog(log));
   if (cfg.publicadores.includes('webhook')) adaptadores.push(crearWebhook(cfg.webhook, log));
   return {

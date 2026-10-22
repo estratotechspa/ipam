@@ -1,0 +1,31 @@
+{
+  "displayName": "IPAM · el barredor no corre hace más de 5 minutos",
+  "documentation": {
+    "content": "Solo tiene sentido si el servicio está SIEMPRE encendido (no en planes gratuitos que duermen). La corrección no depende del barredor (la expiración es perezosa), pero las reservas vencidas no se limpian. Ver `docs/ops/RUNBOOK.md` → «El barredor no corre».\n\nMétrica de origen: expresión PromQL `time() - ipam_barredor_ultima_ejecucion_timestamp > 300`.",
+    "mimeType": "text/markdown"
+  },
+  "userLabels": {
+    "servicio": "ipam",
+    "severidad": "warning"
+  },
+  "conditions": [
+    {
+      "displayName": "IPAM · el barredor no corre hace más de 5 minutos",
+      "conditionPrometheusQueryLanguage": {
+        "query": "time() - ipam_barredor_ultima_ejecucion_timestamp > 300",
+        "duration": "60s",
+        "evaluationInterval": "60s",
+        "alertRule": "IpamBarredorDetenido",
+        "labels": {
+          "severidad": "warning"
+        }
+      }
+    }
+  ],
+  "combiner": "OR",
+  "enabled": true,
+  "alertStrategy": {
+    "autoClose": "1800s"
+  },
+  "notificationChannels": []
+}

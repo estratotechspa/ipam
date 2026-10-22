@@ -41,6 +41,15 @@ limites:
   authFallosPorMinuto: 10       # intentos de autenticación fallidos por minuto por IP (freno a la fuerza bruta)
   cuotaReservasPorToken: 20     # reservas «reservada» vigentes simultáneas por token (cada token puede tener la suya al crearlo)
 
+# Métricas Prometheus (GET /metrics). Sin token ni redes permitidas, el endpoint queda deshabilitado (404).
+metrics:
+  enabled: false                # true = se genera/usa un METRICS_TOKEN (Secret) para leer /metrics
+  allowCidrs: ""                # redes IPv4 desde las que se puede leer /metrics, separadas por coma (p. ej. 10.0.0.0/8)
+  # Google Managed Prometheus: crea un PodMonitoring que recolecta /metrics con el token. Solo se activa en values-gke.yaml.
+  podMonitoring:
+    enabled: false
+    interval: 30s
+
 # Marca: todo opcional y sin reconstruir la imagen.
 branding:
   name: ""                      # vacío = «IPAM»
@@ -88,6 +97,7 @@ secrets:
   appPass: ""
   jiraWebhookSecret: ""         # vacío = se genera
   oidcClientSecret: ""          # secreto del cliente OIDC (obligatorio si auth.oidc.issuer)
+  metricsToken: ""              # token de lectura de /metrics; vacío con metrics.enabled = se genera y se conserva
   sessionSecret: ""              # firma de la cookie de sesión; vacío = se genera y se conserva
   databaseUrl: ""               # solo con postgres.enabled=false (base externa, p. ej. Cloud SQL)
 

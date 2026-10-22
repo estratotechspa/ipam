@@ -1,0 +1,31 @@
+{
+  "displayName": "IPAM · más de 5 % de errores 5xx",
+  "documentation": {
+    "content": "Errores internos. Busca el `request_id` de una respuesta 500 en los logs. Ver `docs/ops/RUNBOOK.md`.\n\nMétrica de origen: expresión PromQL `sum(rate(ipam_http_requests_total{codigo=~\"5..\"}[5m])) / sum(rate(ipam_http_requests_total[5m])) > 0.05 and sum(rate(ipam_http_requests_total[5m])) > 0.05`.",
+    "mimeType": "text/markdown"
+  },
+  "userLabels": {
+    "servicio": "ipam",
+    "severidad": "critical"
+  },
+  "conditions": [
+    {
+      "displayName": "IPAM · más de 5 % de errores 5xx",
+      "conditionPrometheusQueryLanguage": {
+        "query": "sum(rate(ipam_http_requests_total{codigo=~\"5..\"}[5m])) / sum(rate(ipam_http_requests_total[5m])) > 0.05 and sum(rate(ipam_http_requests_total[5m])) > 0.05",
+        "duration": "300s",
+        "evaluationInterval": "60s",
+        "alertRule": "IpamTasaDe5xx",
+        "labels": {
+          "severidad": "critical"
+        }
+      }
+    }
+  ],
+  "combiner": "OR",
+  "enabled": true,
+  "alertStrategy": {
+    "autoClose": "1800s"
+  },
+  "notificationChannels": []
+}

@@ -7,10 +7,11 @@ const { config } = require('./config');
 const { migrar } = require('./adaptadores/persistencia/postgres/migraciones');
 const { crearPlanificador } = require('./adaptadores/planificador/barredor');
 const sistema = require('./adaptadores/http/rutas/sistema');
+const metricasRutas = require('./adaptadores/http/rutas/metricas');
 
 /** @param {ReturnType<typeof import('./server')['compuesto']>} c */
 async function iniciar(c) {
-  const { app, db, casos, log, estado, avisos, trazas } = c;
+  const { app, db, casos, log, estado, avisos, trazas, metricas } = c;
   for (const a of avisos) log.warn(a);
 
   if (config.bd.migrarAlArrancar) {
@@ -26,6 +27,7 @@ async function iniciar(c) {
     const mini = express();
     mini.disable('x-powered-by');
     sistema.montar(mini, { db, estado, log });
+    metricasRutas.montar(mini, { metricas });
     servidor = http.createServer(mini);
   } else {
     servidor = http.createServer(app);
