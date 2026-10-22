@@ -6,6 +6,9 @@ metadata:
 data:
   PORT: {{ .Values.config.port | quote }}
   {{- $o := .Values.auth.oidc }}
+  {{- if not (or $o.issuer .Values.secrets.appUser .Values.secrets.existingSecret .Values.auth.allowAnonymous) }}
+  {{- fail "Sin autenticación configurada: define auth.oidc.issuer, secrets.appUser (modo Basic), secrets.existingSecret o, SOLO para demos, auth.allowAnonymous=true" }}
+  {{- end }}
   {{- $pub := .Values.config.publicUrl }}
   {{- if and (not $pub) .Values.ingress.enabled }}{{ $pub = printf "%s://%s" (ternary "https" "http" (gt (len .Values.ingress.tls) 0)) .Values.ingress.host }}{{ end }}
   {{- if and $o.issuer (not $pub) }}{{ fail "Con auth.oidc.issuer debes indicar config.publicUrl (o activar el ingress con host)" }}{{ end }}
@@ -20,6 +23,11 @@ data:
   ROL: {{ .Values.config.role | quote }}
   DATABASE_SCHEMA: {{ .Values.config.databaseSchema | quote }}
   MIGRAR_AL_ARRANCAR: {{ .Values.config.migrarAlArrancar | quote }}
+  ALLOW_ANONYMOUS: {{ .Values.auth.allowAnonymous | quote }}
+  RESERVA_TTL_HORAS: {{ .Values.config.reservaTtlHoras | quote }}
+  RESERVA_TTL_MAX_HORAS: {{ .Values.config.reservaTtlMaxHoras | quote }}
+  CONFIRMACION_EXIGE_APROBADOR: {{ .Values.config.confirmacionExigeAprobador | quote }}
+  BARREDOR_INTERVALO_SEGUNDOS: {{ .Values.config.barredorIntervaloSegundos | quote }}
   {{- range $k, $val := dict "BRAND_NAME" .Values.branding.name "BRAND_SUBTITLE" .Values.branding.subtitle "BRAND_FOOTER" .Values.branding.footer "BRAND_COLOR" .Values.branding.color "BRAND_COLOR_TOP" .Values.branding.colorTop "BRAND_COLOR_ACCENT" .Values.branding.colorAccent }}
   {{- if $val }}
   {{ $k }}: {{ $val | quote }}

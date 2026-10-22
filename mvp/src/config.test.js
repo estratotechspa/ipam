@@ -120,3 +120,10 @@ test('catálogo: cada variable está documentada y las secretas no tienen valor 
     if (v.secreta) assert.ok(v.defecto === '' || v.defecto === undefined, `${v.nombre} es secreta y trae un valor por defecto`);
   }
 });
+
+test('aviso: con OIDC en producción y PUBLIC_URL sin https la cookie de sesión no llevará Secure', () => {
+  const base = { ...LIMPIO, NODE_ENV: 'production', DATABASE_URL: 'postgres://u:p@h/d', OIDC_ISSUER: 'https://idp.example', OIDC_CLIENT_ID: 'a', OIDC_CLIENT_SECRET: 'b', SESSION_SECRET: 'x'.repeat(40) };
+  conEntorno({ ...base, PUBLIC_URL: 'http://ipam.interno' }, () => assert.ok(validar().avisos.some((a) => /Secure/.test(a))));
+  conEntorno({ ...base, PUBLIC_URL: 'https://ipam.interno' }, () => assert.ok(!validar().avisos.some((a) => /Secure/.test(a))));
+  conEntorno({ ...base, PUBLIC_URL: 'http://ipam.interno', COOKIE_SECURE: 'true' }, () => assert.ok(!validar().avisos.some((a) => /Secure/.test(a))));
+});

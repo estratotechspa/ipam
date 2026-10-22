@@ -300,6 +300,9 @@ function validar() {
   const a = intenta(() => config.auth);
   if (a) {
     if (a.modo === 'oidc') {
+      if (config.produccion && config.http.publicUrl && !config.http.publicUrl.startsWith('https://') && a.cookieSecure !== 'true') {
+        avisos.push('PUBLIC_URL no es https: la cookie de sesión no llevará el atributo Secure (a menos que la petición llegue por HTTPS con TRUST_PROXY). En producción usa https o COOKIE_SECURE=true.');
+      }
       const falta = [['OIDC_CLIENT_ID', a.oidc.clientId], ['OIDC_CLIENT_SECRET', a.oidc.clientSecret], ['PUBLIC_URL', config.http.publicUrl], ['SESSION_SECRET', a.sesionSecreto]]
         .filter(([, v]) => !v).map(([k]) => k);
       if (falta.length) errores.push(`Modo OIDC: faltan variables ${falta.join(', ')}.`);

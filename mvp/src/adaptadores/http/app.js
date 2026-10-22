@@ -45,6 +45,9 @@ function crearApp(deps) {
     hsts: config.http.hsts,
   }));
 
+  // Las respuestas de la API nunca se guardan en cachés intermedias ni del navegador (pueden traer datos sensibles, p. ej. un token recién creado).
+  app.use((req, res, next) => { if (req.path.startsWith('/api/')) res.set('Cache-Control', 'no-store'); next(); });
+
   // Cuerpo JSON: límite pequeño por defecto; solo la importación de respaldos admite uno grande. `raw` sirve para verificar firmas.
   const guardarRaw = (req, _res, buf) => { req.raw = buf; };
   const jsonNormal = express.json({ limit: config.http.jsonLimite, verify: guardarRaw });

@@ -26,6 +26,11 @@ config:
   role: todos                   # api | worker | todos: qué hace cada réplica (api = solo HTTP, worker = solo barredor)
   databaseSchema: public        # esquema de PostgreSQL donde viven las tablas (el POC usa «ipam»)
   migrarAlArrancar: false       # EXCEPCIÓN: aplicar el esquema al arrancar la app. Lo normal es el Job de esquema de este chart.
+  # Reservas tentativas (agentes): una reserva sin confirmar expira sola.
+  reservaTtlHoras: 24           # vigencia por defecto
+  reservaTtlMaxHoras: 72        # máximo que se puede pedir
+  confirmacionExigeAprobador: true   # un token debe declarar quién aprobó (aprobado_por) y la referencia al confirmar (human-in-the-loop)
+  barredorIntervaloSegundos: 60
 
 # Marca: todo opcional y sin reconstruir la imagen.
 branding:
@@ -42,6 +47,9 @@ branding:
 # Con issuer vacío el panel usa Basic Auth (secrets.appUser/appPass) o queda abierto (solo demos).
 # URL de retorno a registrar en el proveedor:  <publicUrl>/auth/callback
 auth:
+  # SOLO PARA DEMOS: permite entrar sin credenciales (todos como admin). Por defecto NO: sin OIDC, Basic (secrets.appUser) ni
+  # existingSecret, el chart se niega a renderizar, y la app se niega a arrancar en producción sin autenticación.
+  allowAnonymous: false
   oidc:
     issuer: ""                  # Google: https://accounts.google.com · Entra: https://login.microsoftonline.com/<tenant>/v2.0
     clientId: ""
