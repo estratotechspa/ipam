@@ -16,6 +16,9 @@ const administracionRutas = require('./rutas/administracion');
 const jiraRutas = require('./rutas/jira');
 const reservasRutas = require('./rutas/reservas');
 const tokensRutas = require('./rutas/tokens');
+const contratoRutas = require('./rutas/contrato');
+const { construirOpenApi } = require('../../openapi');
+const { crearValidador } = require('./validacion');
 
 const RUTAS_IMPORTAR = new Set(['/api/importar', '/api/v1/importar']);
 
@@ -58,12 +61,15 @@ function crearApp(deps) {
 
   const audita = (req, accion, detalle) => auditar(accion, req.usuario || 'sistema', req.rol || null, detalle, req.ip);
   sistema.montarSesion(app);
-  const dep = { casos, audita, tickets, publicador, config };
+  const contrato = construirOpenApi({ servidor: config.http.publicUrl || '/' });
+  const validacion = crearValidador(contrato);
+  const dep = { casos, audita, tickets, publicador, config, contrato, validacion };
   asignacionesRutas.montar(app, dep);
   administracionRutas.montar(app, dep);
   jiraRutas.montar(app, dep);
   reservasRutas.montar(app, dep);
   tokensRutas.montar(app, dep);
+  contratoRutas.montar(app, dep);
 
   app.use(express.static(path.join(__dirname, '..', '..', '..', 'public')));
   app.use(noEncontrada);

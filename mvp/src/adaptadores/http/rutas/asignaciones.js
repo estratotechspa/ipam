@@ -7,7 +7,7 @@ const { construirLibro } = require('../excel');
 const marca = require('../marca');
 
 /** @param {import('express').Express} app @param {{casos: any, audita: Function}} deps */
-function montar(app, { casos, audita }) {
+function montar(app, { casos, audita, validacion }) {
   const { admin, asignaciones, respaldo } = casos;
 
   api(app, 'get', '/pools', async (req, res) => {
@@ -22,7 +22,7 @@ function montar(app, { casos, audita }) {
     return r.ok ? res.json(r.libres) : enviarFallo(res, { ...r, error: r.error }, { legado: false });
   });
 
-  api(app, 'post', '/solicitudes', requiere('solicitante'), async (req, res) => {
+  api(app, 'post', '/solicitudes', requiere('solicitante'), validacion.cuerpo('Solicitud'), async (req, res) => {
     const { pool, vpc, cidr, mascara } = req.body || {};
     const r = await asignaciones.asignar({ pool, vpc, cidr, mascara, solicitante: req.usuario || 'panel', origen: 'panel' });
     if (!r.ok) return enviarFallo(res, r, { legado: true });
@@ -58,7 +58,7 @@ function montar(app, { casos, audita }) {
   });
 
   // Importa un respaldo de /api/exportar.json. Todo o nada; los pools existentes se conservan y las asignaciones repetidas se omiten.
-  api(app, 'post', '/importar', requiere('admin'), async (req, res) => {
+  api(app, 'post', '/importar', requiere('admin'), validacion.cuerpo('Respaldo'), async (req, res) => {
     const r = await respaldo.importar(req.body);
     if (!r.ok) return enviarFallo(res, r, { legado: false });
     await audita(req, 'importar', r.resultado);

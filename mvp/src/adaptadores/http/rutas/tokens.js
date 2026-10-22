@@ -5,10 +5,10 @@ const { requiere } = require('../../auth/acceso');
 const { enviarFallo } = require('../errores');
 
 /** @param {import('express').Express} app @param {{casos: any, audita: Function}} deps */
-function montar(app, { casos, audita }) {
+function montar(app, { casos, audita, validacion }) {
   const { tokens } = casos;
 
-  api(app, 'post', '/tokens', requiere('admin'), async (req, res) => {
+  api(app, 'post', '/tokens', requiere('admin'), validacion.cuerpo('TokenCrear'), async (req, res) => {
     const r = await tokens.crear(req.actor, req.body || {});
     if (!r.ok) return enviarFallo(res, r);
     await audita(req, 'crear_token', { token: r.meta.nombre, id: r.meta.id, rol: r.meta.rol, expira_en: r.meta.expira_en }); // nunca el token

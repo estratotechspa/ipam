@@ -129,7 +129,9 @@ test('pool ambiguo → 422 con las opciones; mascara y cidr inconsistentes y TTL
   assert.equal((await json(await reservar({ mascara: 22, cidr: '10.20.8.0/24' }))).cuerpo.error, 'mascara_no_coincide');
   assert.equal((await json(await reservar({ pool: 'nope', ambiente: undefined, tipo: undefined }))).estado, 404);
   assert.equal((await json(await llamar('POST', '/api/reservas/no-es-uuid/confirmar', {}))).estado, 404);
-  assert.equal((await json(await llamar('POST', '/api/reservas', { vpc: 5 }))).cuerpo.error, 'vpc_invalido');
+  const forma = await json(await llamar('POST', '/api/reservas', { vpc: 5 }));
+  assert.deepEqual({ e: forma.estado, c: forma.cuerpo.error, campo: forma.cuerpo.detalles[0].campo }, { e: 400, c: 'validacion', campo: '/vpc' }, 'la forma la valida el contrato');
+  assert.equal((await json(await llamar('POST', '/api/reservas', { vpc: '   ', ambiente: 'qa', tipo: 'Nodos', mascara: 24 }))).cuerpo.error, 'vpc_invalido', 'las reglas de negocio las valida el dominio');
   await b.sql("update reservas set estado = 'liberada' where estado = 'reservada'");
 });
 

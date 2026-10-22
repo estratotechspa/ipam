@@ -5,11 +5,11 @@ const { requiere } = require('../../auth/acceso');
 const { enviarFallo } = require('../errores');
 
 /** @param {import('express').Express} app @param {{casos: any, audita: Function}} deps */
-function montar(app, { casos, audita }) {
+function montar(app, { casos, audita, validacion }) {
   const { admin } = casos;
   // Usuarios y auditoría (solo admin). El rol asignado rige desde el próximo inicio de sesión del usuario.
   api(app, 'get', '/usuarios', requiere('admin'), async (_q, res) => res.json(await admin.usuarios()));
-  api(app, 'put', '/usuarios/:email', requiere('admin'), async (req, res) => {
+  api(app, 'put', '/usuarios/:email', requiere('admin'), validacion.cuerpo('UsuarioRol'), async (req, res) => {
     const rol = req.body && req.body.rol === null ? null : String((req.body || {}).rol || '');
     const r = await admin.cambiarRol(req.params.email, rol);
     if (!r.ok) return enviarFallo(res, r, { legado: false });

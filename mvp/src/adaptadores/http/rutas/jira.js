@@ -10,7 +10,7 @@ const firmar = (buf) => 'sha256=' + crypto.createHmac('sha256', config.webhookJi
 const igual = (a, b) => a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
 
 /** @param {import('express').Express} app @param {{casos: any, tickets: any, publicador: any}} deps */
-function montar(app, { casos, tickets, publicador }) {
+function montar(app, { casos, tickets, publicador, validacion }) {
   api(app, 'get', '/jira/estado', (_q, res) => res.json({ activa: tickets.activo(), faltantes: tickets.activo() ? tickets.faltantes() : [] }));
 
   // Cuerpo esperado: { ticket, ambiente, tipo, mascara, vpc }. Firma: x-hub-signature-256 = sha256=HMAC(body, secreto).
@@ -21,15 +21,16 @@ function montar(app, { casos, tickets, publicador }) {
       await publicador.publicar('jira_firma_invalida', {});
       return res.status(401).json({ error: 'firma inválida' });
     }
-    const b = req.body || {};
-    if (!b.ticket || !b.ambiente || !b.tipo || !b.mascara || !b.vpc) return res.status(400).json({ error: 'faltan campos' });
+    const forma = validacion.validar('JiraTicket', req.body || {});
+    if (!forma.ok) return res.status(400).json({ error: 'faltan campos', detalles: forma.errores });
+    const b = req.body;
     const r = await casos.jira.procesarTicket(b);
     if (!r.ok) return res.status(r.tipo === 'ambiguo' ? 422 : r.tipo === 'conflicto' ? 409 : r.tipo === 'no_encontrado' ? 404 : 400).json({ ticket: b.ticket, error: r.error });
     res.json({ ticket: r.ticket, pool: r.pool, cidr: r.cidr });
   });
 
   // Simulador para la demo: arma un ticket de Jira, lo firma y lo procesa por el mismo camino del webhook.
-  api(app, 'post', '/jira/simular', requiere('solicitante'), async (req, res) => {
+  api(app, 'post', '/jira/simular', requiere('solicitante'), validacion.cuerpo('JiraSimular'), async (req, res) => {
     const { ambiente, tipo, mascara, vpc } = req.body || {};
     const cuerpo = Buffer.from(JSON.stringify({ ambiente, tipo, mascara, vpc }));
     const r = await casos.jira.simular({ ambiente, tipo, mascara, vpc }, firmar(cuerpo).slice(0, 23) + '…');

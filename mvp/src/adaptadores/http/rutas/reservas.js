@@ -7,10 +7,10 @@ const { enviarFallo } = require('../errores');
 const texto = (v) => (typeof v === 'string' && v ? v : undefined); // ignora repeticiones de parámetros (?a=1&a=2)
 
 /** @param {import('express').Express} app @param {{casos: any, audita: Function}} deps */
-function montar(app, { casos, audita }) {
+function montar(app, { casos, audita, validacion }) {
   const { reservas } = casos;
 
-  api(app, 'post', '/reservas', requiere('agente'), async (req, res) => {
+  api(app, 'post', '/reservas', requiere('agente'), validacion.cuerpo('ReservaCrear'), async (req, res) => {
     const r = await reservas.reservar(req.actor, req.body || {}, req.get('idempotency-key'));
     if (!r.ok) return enviarFallo(res, r);
     if (!r.repetida) await audita(req, 'reservar', { reserva: r.reserva.id, cidr: r.reserva.cidr, pool: r.reserva.pool_id, vpc: r.reserva.vpc, ticket: r.reserva.ticket });
@@ -27,7 +27,7 @@ function montar(app, { casos, audita }) {
     return r.ok ? res.json(r.reserva) : enviarFallo(res, r);
   });
 
-  api(app, 'post', '/reservas/:id/confirmar', requiere('agente'), async (req, res) => {
+  api(app, 'post', '/reservas/:id/confirmar', requiere('agente'), validacion.cuerpo('ReservaConfirmar', { opcional: true }), async (req, res) => {
     const r = await reservas.confirmar(req.actor, req.params.id, req.body || {});
     if (!r.ok) return enviarFallo(res, r);
     if (!r.repetida) await audita(req, 'confirmar_reserva', { reserva: r.reserva.id, cidr: r.reserva.cidr, pool: r.reserva.pool_id, ticket: r.reserva.ticket, ...r.aprobacion });

@@ -47,10 +47,9 @@ test('servicio con OTEL_TRACES_EXPORTER=otlp: exporta a un colector OTLP/HTTP y 
   const s = await lanzarServicio({ DATABASE_URL: b.url, OTEL_TRACES_EXPORTER: 'otlp', OTEL_EXPORTER_OTLP_ENDPOINT: `http://127.0.0.1:${colector.address().port}`, OTEL_SERVICE_NAME: 'ipam-prueba' });
   try {
     await fetch(`${s.url}/api/pools`, { headers: { traceparent: '00-11111111111111111111111111111111-2222222222222222-01' } });
-    await dormir(100);
-    assert.ok(s.logs().some((l) => l.mensaje === 'petición' && l.trace_id === '11111111111111111111111111111111'), 'el log lleva el trace_id');
+    const esperar = async (cond, ms = 8000) => { const fin = Date.now() + ms; while (Date.now() < fin && !cond()) await dormir(50); return cond(); };
+    assert.ok(await esperar(() => s.logs().some((l) => l.mensaje === 'petición' && l.trace_id === '11111111111111111111111111111111')), 'el log lleva el trace_id');
     await s.parar(); // al apagarse vacía la cola de trazas
-    await dormir(200);
-    assert.ok(recibidas.some((r) => r.url === '/v1/traces' && r.bytes > 0), `el colector no recibió trazas: ${JSON.stringify(recibidas)}`);
+    assert.ok(await esperar(() => recibidas.some((r) => r.url === '/v1/traces' && r.bytes > 0)), `el colector no recibió trazas: ${JSON.stringify(recibidas)}`);
   } finally { await s.parar('SIGKILL'); await b.borrar(); colector.close(); }
 });
