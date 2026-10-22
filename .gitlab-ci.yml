@@ -1,7 +1,7 @@
 # CI de GitLab: un envoltorio FINO. La lógica vive en el Makefile y en scripts/ci/ (los mismos que usa .github/workflows/ci.yml y tu computador).
 # Mismos trabajos y mismo orden que GitHub: validar → probar → escanear → construir → liberar. Imágenes fijadas por digest (las actualiza Renovate).
 # La rama por defecto NO se escribe a fuego: sale de $CI_DEFAULT_BRANCH (scripts/ci/entorno.sh la traduce a IPAM_RAMA_POR_DEFECTO).
-stages: [validar, probar, escanear, construir, liberar]
+stages: [validar, probar, escanear, construir, liberar, poc]
 
 workflow:
   rules:
@@ -206,3 +206,29 @@ dast:
   artifacts:
     when: always
     paths: [dast-informe.html]
+
+# ---------------------------------------------------------------- poc (Render + Supabase)
+# Migrar el POC: SOLO manual. El secreto DATABASE_URL_MIGRACION va como variable del CI (enmascarada y protegida).
+poc:migrar:
+  stage: poc
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+  environment: {name: poc}
+  resource_group: migrar-poc
+  interruptible: false
+  variables: {DATABASE_SCHEMA: ipam}
+  script:
+    - scripts/ci/migrar.sh
+
+# Keepalive: crea una programación (Build → Pipeline schedules) con la variable IPAM_TAREA=keepalive y la variable IPAM_URL.
+poc:keepalive:
+  stage: poc
+  image: curlimages/curl:8.11.1@sha256:c1fe1679c34d9784c1b0d1e5f62ac0a79fca01fb6377cdd33e90473c6f9f9a69
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $IPAM_TAREA == "keepalive"
+  needs: []
+  script:
+    - sh scripts/ci/keepalive.sh
