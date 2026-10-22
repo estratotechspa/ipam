@@ -13,12 +13,12 @@ async function api(url,opt){
   return {ok:r.ok,status:r.status,data:j};
 }
 let YO={modo:'none',rol:'admin',usuario:'',nombre:''};
-const NIVEL={lector:0,solicitante:1,admin:2};
+const NIVEL={lector:0,agente:1,solicitante:2,admin:3};
 const puede=min=>NIVEL[YO.rol]>=NIVEL[min];
 const get=async u=>{const r=await api(u);if(!r.ok)throw new Error('Error '+r.status);return r.data};
 
-function show(t){if(!$(t)||$('nav').querySelector('[data-t="'+t+'"]').hidden)t='pools';document.querySelectorAll('.wrap').forEach(w=>w.classList.toggle('hide',w.id!==t));
-  document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));render(t)}
+function show(t){if(!$(t)||$('nav').querySelector('[data-t="'+t+'"]').hidden)t='pools';clearInterval(RES.timer);document.querySelectorAll('.wrap').forEach(w=>w.classList.toggle('hide',w.id!==t));
+  document.querySelectorAll('#nav button').forEach(b=>{b.classList.toggle('on',b.dataset.t===t);if(b.dataset.t===t)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});render(t)}
 $('nav').onclick=e=>{if(e.target.dataset.t)show(e.target.dataset.t)};
 const fail=(id,e)=>$(id).innerHTML=`<div class="alert">No se pudo cargar: ${esc(e.message)}</div>`;
 
@@ -96,7 +96,125 @@ async function renderAudit(){
   $('audit').innerHTML=`<h2>Auditoría</h2><div class="card tablewrap"><table><tr><th>Fecha</th><th>Usuario</th><th>Rol</th><th>Acción</th><th>Detalle</th></tr>
   ${a.map(x=>`<tr><td>${new Date(x.ts).toLocaleString('es-CL')}</td><td>${esc(x.usuario)}</td><td>${esc(x.rol||'—')}</td><td>${esc(x.accion)}</td><td><code>${esc(JSON.stringify(x.detalle))}</code></td></tr>`).join('')}</table></div>`}catch(e){fail('audit',e)}}
 
-function render(t){({pools:renderPools,asig:renderAsig,sol:renderSol,jira:renderJira,usuarios:renderUsuarios,audit:renderAudit})[t]()}
+
+/* ===== Ayudante para construir DOM sin innerHTML: todo texto entra como nodo de texto (nada de lo que escriba un usuario se interpreta como HTML) ===== */
+const h=(tag,attrs,...hijos)=>{const e=document.createElement(tag);for(const [k,v] of Object.entries(attrs||{})){if(v===false||v==null)continue;
+  if(k==='class')e.className=v;else if(k==='text')e.textContent=v;else if(k.startsWith('on'))e.addEventListener(k.slice(2),v);else e.setAttribute(k,v===true?'':v)}
+  for(const c of hijos.flat()){if(c==null||c===false)continue;e.append(c.nodeType?c:document.createTextNode(String(c)))}return e};
+const fechaHora=s=>s?new Date(s).toLocaleString('es-CL'):'—';
+const msg=(el,texto,tipo)=>{el.replaceChildren(texto?h('div',{class:tipo==='ok'?'ok':'alert',role:tipo==='ok'?'status':'alert'},texto):'')};
+const errorApi=r=>(r.data&&(r.data.mensaje||r.data.error))||('Error '+r.status);
+function tabla(titulo,cabeceras,filas,vacio){
+  if(!filas.length)return h('div',{class:'card vacio'},vacio);
+  return h('div',{class:'card tablewrap'},h('table',null,h('caption',{class:'sr-only'},titulo),h('thead',null,h('tr',null,cabeceras.map(c=>h('th',{scope:'col'},c)))),h('tbody',null,filas)))}
+
+/* ===== Reservas (todos los roles; opera según permisos: dueño o admin) ===== */
+const RES={filtro:{estado:'',pool:'',solicitante:''},timer:null};
+function restante(seg){const d=Math.floor(seg/86400),hh=Math.floor(seg%86400/3600),m=Math.floor(seg%3600/60),s=seg%60;
+  return d?`${d} d ${hh} h`:hh?`${hh} h ${m} min`:m?`${m} min ${s} s`:`${s} s`}
+function celdaRestante(r){
+  if(r.estado!=='reservada')return h('td',null,'—');
+  const fin=Date.now()+r.segundos_restantes*1000,t=h('time',{class:'restante',datetime:r.expira_en,title:'Vence '+fechaHora(r.expira_en)});
+  t.dataset.fin=fin;return h('td',null,t)}
+function tictac(){document.querySelectorAll('#reservas time[data-fin]').forEach(t=>{const seg=Math.max(0,Math.round((Number(t.dataset.fin)-Date.now())/1000));
+  t.textContent=seg?restante(seg):'vencida';t.classList.toggle('poco',seg>0&&seg<3600)})}
+async function renderReservas(){
+  const raiz=$('reservas'),puedeOperar=r=>puede('agente')&&(YO.rol==='admin'||r.solicitante===YO.usuario);
+  try{
+    const f=RES.filtro,qs=new URLSearchParams();if(f.estado)qs.set('estado',f.estado);if(f.pool)qs.set('pool',f.pool);
+    const [pools,todas]=await Promise.all([get('/api/v1/pools'),get('/api/v1/reservas'+(String(qs)?'?'+qs:''))]);
+    const lista=todas.filter(r=>!f.solicitante||r.solicitante.toLowerCase().includes(f.solicitante.toLowerCase()));
+    const estado=h('div',{id:'res-msg','aria-live':'polite'});
+    const filtros=h('form',{class:'filtros',role:'search','aria-label':'Filtrar reservas',onsubmit:e=>e.preventDefault()},
+      h('label',null,'Estado',h('select',{id:'res-f-estado',onchange:e=>{f.estado=e.target.value;RES.foco='res-f-estado';renderReservas()}},
+        [['','Todos'],['reservada','Reservada'],['confirmada','Confirmada'],['liberada','Liberada'],['expirada','Expirada']].map(([v,t])=>h('option',{value:v,selected:f.estado===v},t)))),
+      h('label',null,'Pool',h('select',{id:'res-f-pool',onchange:e=>{f.pool=e.target.value;RES.foco='res-f-pool';renderReservas()}},[h('option',{value:''},'Todos'),...pools.map(p=>h('option',{value:p.id,selected:f.pool===p.id},p.id))])),
+      h('label',null,'Solicitante',h('input',{id:'res-f-sol',type:'search',value:f.solicitante,placeholder:'svc:agente-redes',oninput:e=>{f.solicitante=e.target.value;clearTimeout(RES.deb);RES.deb=setTimeout(()=>{RES.foco='res-f-sol';renderReservas()},300)}})));
+    const filas=lista.map(r=>h('tr',null,
+      h('td',null,h('code',null,r.cidr)),h('td',null,r.pool_id),h('td',null,r.vpc),h('td',null,r.solicitante),h('td',null,r.ticket),
+      h('td',null,h('span',{class:'tag '+r.estado},r.estado)),h('td',null,fechaHora(r.creado_en)),celdaRestante(r),
+      h('td',null,h('div',{class:'acciones'},
+        r.estado==='reservada'&&puedeOperar(r)&&h('button',{class:'btn',type:'button','aria-label':'Confirmar la reserva '+r.cidr,onclick:()=>accionReserva(r,'confirmar',estado)},'Confirmar'),
+        (r.estado==='reservada'||r.estado==='confirmada')&&puedeOperar(r)&&h('button',{class:'btn sec',type:'button','aria-label':'Liberar la reserva '+r.cidr,onclick:()=>accionReserva(r,'liberar',estado)},'Liberar')))));
+    raiz.replaceChildren(
+      h('h2',{id:'res-titulo',tabindex:'-1'},'Reservas'),
+      h('p',{class:'muted'},'Una reserva aparta un rango por un tiempo. ',h('b',null,'No es definitiva'),': se vuelve asignación solo al confirmarla (tras la aprobación de una persona) y, si no se confirma, expira sola.'),
+      filtros,estado,
+      tabla('Reservas de rangos IP',['Segmento','Pool','Proyecto / VPC','Solicitante','Ticket','Estado','Creada','Vence en','Acciones'],filas,'No hay reservas con estos filtros.'));
+    clearInterval(RES.timer);tictac();RES.timer=setInterval(tictac,1000);
+    if(RES.foco){const el=$(RES.foco);RES.foco=null;if(el){el.focus();if(el.setSelectionRange&&el.value)el.setSelectionRange(el.value.length,el.value.length)}}
+  }catch(e){fail('reservas',e)}}
+async function accionReserva(r,que,zona){
+  const confirmando=que==='confirmar';
+  const texto=confirmando?`¿Confirmar la reserva ${r.cidr} (${r.vpc})? Pasará a asignación definitiva.`
+    :`¿Liberar ${r.cidr}?${r.estado==='confirmada'?' Como ya está confirmada, se borrará también la asignación definitiva.':''}`;
+  if(!confirm(texto))return;
+  const x=confirmando?await api(`/api/v1/reservas/${r.id}/confirmar`,{body:{}}):await api(`/api/v1/reservas/${r.id}`,{method:'DELETE',body:{}});
+  await renderReservas();
+  $('res-titulo').focus();
+  msg($('res-msg'),x.ok?(confirmando?`Reserva ${r.cidr} confirmada: ahora es una asignación definitiva.`:`Reserva ${r.cidr} liberada.`):errorApi(x),x.ok?'ok':'error')}
+
+/* ===== Tokens (solo admin) ===== */
+const diasPara=s=>Math.max(0,Math.ceil((new Date(s)-Date.now())/86400000));
+async function renderTokens(){
+  const raiz=$('tokens');
+  try{
+    const lista=await get('/api/v1/tokens');
+    const estado=h('div',{id:'tk-msg','aria-live':'polite'});
+    const filas=lista.map(t=>h('tr',null,
+      h('td',null,t.nombre),h('td',null,h('code',null,t.prefijo+'…')),h('td',null,t.rol),
+      h('td',null,fecha(t.expira_en),' ',t.por_vencer&&h('span',{class:'tag pronto'},'vence en '+diasPara(t.expira_en)+' d')),
+      h('td',null,t.ultimo_uso?fechaHora(t.ultimo_uso):'nunca'),
+      h('td',null,h('span',{class:'tag '+t.estado},t.estado)),
+      h('td',null,t.estado==='activo'?h('button',{class:'btn peligro',type:'button','aria-label':'Revocar el token '+t.nombre,onclick:()=>revocarToken(t,estado)},'Revocar'):null)));
+    raiz.replaceChildren(
+      h('div',{style:'display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px'},h('h2',{id:'tk-titulo',tabindex:'-1'},'Tokens de servicio'),h('button',{class:'btn',type:'button',id:'tk-nuevo',onclick:()=>dialogoToken(estado)},'Crear token')),
+      h('p',{class:'muted'},'Credenciales para agentes y sistemas (no para personas). El token se muestra una sola vez al crearlo; aquí solo queda su prefijo. Rotar: crea uno nuevo, actualiza el agente y revoca el anterior.'),
+      estado,
+      tabla('Tokens de servicio',['Nombre','Prefijo','Rol','Vence','Último uso','Estado','Acciones'],filas,'Todavía no hay tokens.'));
+  }catch(e){fail('tokens',e)}}
+async function revocarToken(t,zona){
+  if(!confirm(`¿Revocar el token «${t.nombre}»? Los agentes que lo usen dejarán de funcionar de inmediato.`))return;
+  const r=await api('/api/v1/tokens/'+t.id,{method:'DELETE',body:{}});
+  await renderTokens();$('tk-titulo').focus();msg($('tk-msg'),r.ok?`Token «${t.nombre}» revocado.`:errorApi(r),r.ok?'ok':'error')}
+function dialogoToken(zona){
+  const abre=document.activeElement;
+  const dlg=h('dialog',{id:'tk-dlg','aria-labelledby':'tk-dlg-t'});
+  const cierre=()=>{const v=dlg.querySelector('#tk-valor');if(v)v.value='';dlg.close()};
+  dlg.addEventListener('close',async()=>{dlg.remove();await renderTokens();const b=$('tk-nuevo');if(b)b.focus()});
+  const error=h('div',{id:'tk-err','aria-live':'assertive'});
+  const nombre=h('input',{id:'tk-nombre',name:'nombre',required:true,pattern:'[a-z0-9][a-z0-9\\-]{1,40}',autocomplete:'off',spellcheck:'false','aria-describedby':'tk-nombre-ayuda'});
+  const rol=h('select',{id:'tk-rol',name:'rol'},h('option',{value:'agente',selected:true},'agente (reserva, confirma y libera las suyas)'),h('option',{value:'lector'},'lector (solo consulta)'));
+  const dias=h('input',{id:'tk-dias',name:'expira_dias',type:'number',min:'1',max:'365',value:'90',required:true});
+  const cuota=h('input',{id:'tk-cuota',name:'cuota_reservas',type:'number',min:'1',placeholder:'(la general)'});
+  const enviar=h('button',{class:'btn',type:'submit',id:'tk-crear'},'Crear token');
+  const form=h('form',{onsubmit:async e=>{e.preventDefault();enviar.disabled=true;
+    const body={nombre:nombre.value.trim(),rol:rol.value,expira_dias:Number(dias.value)};if(cuota.value)body.cuota_reservas=Number(cuota.value);
+    const r=await api('/api/v1/tokens',{body});enviar.disabled=false;
+    if(!r.ok){msg(error,errorApi(r),'error');return}
+    mostrarToken(dlg,r.data,cierre)}},
+    h('h3',{id:'tk-dlg-t'},'Crear token de servicio'),
+    h('label',{for:'tk-nombre'},'Nombre'),nombre,h('p',{class:'ayuda',id:'tk-nombre-ayuda'},'Minúsculas, números y guiones (p. ej. agente-redes). Debe ser único.'),
+    h('label',{for:'tk-rol'},'Rol'),rol,
+    h('label',{for:'tk-dias'},'Vigencia (días, 1 a 365)'),dias,
+    h('label',{for:'tk-cuota'},'Cuota de reservas vigentes (opcional)'),cuota,
+    error,h('div',{class:'fila-botones'},h('button',{class:'btn sec',type:'button',onclick:cierre},'Cancelar'),enviar));
+  dlg.append(form);document.body.append(dlg);dlg.showModal();nombre.focus()}
+function mostrarToken(dlg,t,cierre){
+  const estado=h('div',{id:'tk-copia','aria-live':'polite'});
+  const valor=h('input',{id:'tk-valor',class:'token-valor',readonly:true,'aria-label':'Token de servicio',onfocus:e=>e.target.select()});valor.value=t.token;
+  const copiar=h('button',{class:'btn',type:'button',id:'tk-copiar',onclick:async()=>{
+    try{await navigator.clipboard.writeText(valor.value);msg(estado,'Copiado al portapapeles.','ok')}
+    catch{valor.focus();valor.select();msg(estado,'No se pudo copiar solo: el texto quedó seleccionado, copia con Ctrl+C.','error')}}},'Copiar');
+  dlg.replaceChildren(h('div',null,
+    h('h3',{id:'tk-dlg-t'},'Token creado: '+t.nombre),
+    h('div',{class:'aviso',role:'alert'},h('b',null,'Cópialo ahora. '),'No se podrá ver de nuevo: si lo pierdes, tendrás que crear otro y revocar este.'),
+    h('label',{for:'tk-valor'},'Token'),valor,estado,
+    h('p',{class:'ayuda'},`Rol ${t.rol} · vence ${fecha(t.expira_en)}. Úsalo así:  Authorization: Bearer <token>`),
+    h('div',{class:'fila-botones'},copiar,h('button',{class:'btn sec',type:'button',id:'tk-cerrar',onclick:cierre},'Cerrar'))));
+  copiar.focus()}
+
+function render(t){({pools:renderPools,asig:renderAsig,reservas:renderReservas,sol:renderSol,jira:renderJira,tokens:renderTokens,usuarios:renderUsuarios,audit:renderAudit})[t]()}
 
 async function marca(){
   try{const m=await (await fetch('/api/config')).json();
@@ -110,6 +228,7 @@ async function iniciar(){
   YO=await r.json();
   const nav=$('nav');
   nav.querySelector('[data-t="sol"]').hidden=!puede('solicitante');
+  nav.querySelector('[data-t="tokens"]').hidden=!puede('admin');
   nav.querySelector('[data-t="usuarios"]').hidden=!(puede('admin')&&YO.modo==='oidc');
   nav.querySelector('[data-t="audit"]').hidden=!puede('admin');
   $('yo').innerHTML=YO.modo==='oidc'?`${esc(YO.nombre)} · <b>${esc(YO.rol)}</b> <button id="salir">Salir</button>`:(YO.modo==='none'?'<span class="tag qa">Sin autenticación (demo)</span>':`${esc(YO.usuario)}`);
