@@ -123,7 +123,7 @@ test('ficha de un pool: uso asignado + reservado, segmentos e historial, accesib
   const ficha = page.getByRole('dialog');
   await expect(ficha.getByRole('heading', { level: 2 })).toHaveText('10.20.0.0/16');
   await expect(ficha).toContainText('Bloque libre más grande');
-  await expect(ficha).toContainText('Asignado');
+  await expect(ficha).toContainText('ocupado (asignado');
   const axe = await new AxeBuilder({ page }).include('dialog').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
   expect(axe.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(' | ')}`)).toEqual([]);
   await ficha.getByRole('tab', { name: 'Segmentos' }).click();
