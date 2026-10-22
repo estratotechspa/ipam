@@ -15,6 +15,7 @@ const asignacionesRutas = require('./rutas/asignaciones');
 const administracionRutas = require('./rutas/administracion');
 const jiraRutas = require('./rutas/jira');
 const reservasRutas = require('./rutas/reservas');
+const tokensRutas = require('./rutas/tokens');
 
 const RUTAS_IMPORTAR = new Set(['/api/importar', '/api/v1/importar']);
 
@@ -52,7 +53,7 @@ function crearApp(deps) {
   marca.montar(app);
   montarOidc(app, { repo, auditar, ruta });
 
-  app.use(crearAcceso({ rechazo: (motivo) => metricas.authRechazo(motivo) }));
+  app.use(crearAcceso({ rechazo: (motivo) => metricas.authRechazo(motivo), autenticarToken: (t) => casos.tokens.autenticar(t), auditar }));
   app.use((req, _res, next) => { if (req.actor) require('./contexto').actual().actor = req.actor.nombre; next(); });
 
   const audita = (req, accion, detalle) => auditar(accion, req.usuario || 'sistema', req.rol || null, detalle, req.ip);
@@ -62,6 +63,7 @@ function crearApp(deps) {
   administracionRutas.montar(app, dep);
   jiraRutas.montar(app, dep);
   reservasRutas.montar(app, dep);
+  tokensRutas.montar(app, dep);
 
   app.use(express.static(path.join(__dirname, '..', '..', '..', 'public')));
   app.use(noEncontrada);

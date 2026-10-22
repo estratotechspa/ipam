@@ -7,9 +7,10 @@ const { crearJira } = require('./jira');
 const { crearAdministracion } = require('./administracion');
 const { crearBarrido } = require('./barrido');
 const { crearReservas } = require('./reservas');
+const { crearTokens } = require('./tokens');
 
 /** Une todos los casos de uso con sus puertos. @param {any} deps */
-function crearCasos({ repo, eventos, auditor, tickets, reloj, config, instancia }) {
+function crearCasos({ repo, eventos, auditor, tickets, reloj, config, instancia, generadorToken }) {
   const asignaciones = crearAsignaciones({ repo, eventos, tickets });
   return {
     asignaciones,
@@ -17,6 +18,7 @@ function crearCasos({ repo, eventos, auditor, tickets, reloj, config, instancia 
     jira: crearJira({ repo, eventos, auditor, tickets, asignaciones }),
     admin: crearAdministracion({ repo, rolesUsuario: ROLES_USUARIO }),
     reservas: crearReservas({ repo, eventos, config }),
+    tokens: crearTokens({ repo, generador: generadorToken, config }),
     barrido: crearBarrido({ repo, eventos, intervaloMs: config.reservas.barredorIntervaloSeg * 1000, instancia }),
   };
 }

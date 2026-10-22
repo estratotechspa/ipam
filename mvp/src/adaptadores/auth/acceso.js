@@ -4,6 +4,7 @@
 const { config } = require('../../config');
 const { tiene } = require('../../dominio/roles');
 const S = require('./sesion');
+const contexto = require('../http/contexto');
 const { igualConstante, verificar } = require('./contrasena');
 
 // Rutas que no exigen sesión: salud, webhook (va firmado), /auth y la marca.
@@ -31,14 +32,28 @@ async function basicValido(cabecera) {
 }
 
 /**
- * @param {{rechazo?: (motivo: string, req: any) => unknown}} [deps]
+ * @param {{rechazo?: (motivo: string, req: any) => unknown, autenticarToken?: (token: string) => Promise<any>, auditar?: Function}} [deps]
  * @returns {import('express').RequestHandler}
  */
-function crearAcceso({ rechazo = () => {} } = {}) {
+function crearAcceso({ rechazo = () => {}, autenticarToken, auditar = async () => {} } = {}) {
   return async (req, res, next) => {
     if (esPublica(req.path)) return next();
     const modo = config.auth.modo;
-    const fijar = (nombre, rol, tipo, mostrar) => { req.actor = { nombre, rol, tipo }; req.usuario = nombre; req.rol = rol; req.nombre = mostrar || nombre; };
+    const fijar = (nombre, rol, tipo, mostrar, extra = {}) => { req.actor = { nombre, rol, tipo, ...extra }; req.usuario = nombre; req.rol = rol; req.nombre = mostrar || nombre; };
+
+    // 1) Token de servicio: se evalúa PRIMERO, en cualquier modo (oidc, basic o abierto). Un token inválido es 401 aunque el modo sea abierto.
+    //    Sin cookie no hay CSRF: no se exige X-Requested-With.
+    const cab = String(req.headers.authorization || '');
+    if (autenticarToken && /^Bearer\s/i.test(cab)) {
+      const r = await autenticarToken(cab.replace(/^Bearer\s+/i, '').trim());
+      if (!r.ok) {
+        rechazo(`token_${r.motivo}`, req);
+        await auditar('token_rechazado', r.nombre ? `svc:${r.nombre}` : 'desconocido', null, { motivo: r.motivo }, req.ip); // nunca el token presentado
+        return res.set('WWW-Authenticate', 'Bearer realm="IPAM"').status(401).json({ error: 'token_invalido', mensaje: 'Token inválido, vencido o revocado.', request_id: contexto.actual().request_id });
+      }
+      fijar(r.actor.nombre, r.actor.rol, 'token', r.actor.nombre, { tokenId: r.actor.tokenId, cuota: r.actor.cuota });
+      return next();
+    }
     if (modo === 'none') fijar('anonimo', 'admin', 'anonimo');
     else if (modo === 'basic') {
       const u = await basicValido(req.headers.authorization);

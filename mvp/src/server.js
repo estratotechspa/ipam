@@ -10,6 +10,7 @@ const { crearPool } = require('./adaptadores/persistencia/postgres/pool');
 const { crearRepositorio } = require('./adaptadores/persistencia/postgres/repositorio');
 const { crearPublicador } = require('./adaptadores/eventos');
 const tickets = require('./adaptadores/tickets/jira');
+const generadorToken = require('./adaptadores/auth/token');
 const { crearCasos } = require('./aplicacion');
 const { crearApp } = require('./adaptadores/http/app');
 const metricas = require('./adaptadores/metricas/nula');
@@ -35,7 +36,7 @@ function construir() {
       repo.registrarAuditoria({ usuario, rol, accion, detalle, ip, requestId: contexto.actual().request_id }).catch((e) => log.error('auditoría', e)),
   };
   const auditar = (accion, usuario, rol, detalle = {}, ip = null) => auditor.registrar({ accion, usuario, rol, detalle, ip });
-  const casos = crearCasos({ repo, eventos: publicador, auditor, tickets, reloj, config, instancia });
+  const casos = crearCasos({ repo, eventos: publicador, auditor, tickets, reloj, config, instancia, generadorToken });
   const estado = { apagando: false };
   const app = crearApp({ config, log, db, repo, casos, auditar, publicador, tickets, estado, metricas, trazas });
   return { app, db, repo, casos, log, estado, avisos, instancia, metricas, trazas };

@@ -167,3 +167,24 @@ create trigger trg_asignacion_respeta_reservas before insert on asignaciones
 
 insert into esquema_version (version, descripcion) values (3, 'fase 1: reservas tentativas y origen agente')
   on conflict (version) do nothing;
+
+-- ============================================================================
+-- Fase 2 · tokens de servicio (credenciales para agentes; el token en claro NUNCA se guarda)
+-- ============================================================================
+create table if not exists tokens_servicio (
+  id             uuid primary key default gen_random_uuid(),
+  nombre         text not null unique check (nombre ~ '^[a-z0-9][a-z0-9-]{1,40}$'),
+  prefijo        text not null,                       -- «ipam_» + 4 caracteres: reconoce el token en una lista sin revelarlo
+  hash           text not null unique,                -- SHA-256 (hex) del token completo
+  rol            text not null check (rol in ('lector','agente')),
+  cuota_reservas int check (cuota_reservas is null or cuota_reservas > 0),   -- tope propio de reservas vigentes (nulo = el general)
+  creado_por     text not null,
+  creado_en      timestamptz not null default now(),
+  expira_en      timestamptz not null,
+  ultimo_uso     timestamptz,
+  revocado_en    timestamptz
+);
+create index if not exists tokens_servicio_expira_idx on tokens_servicio (expira_en) where revocado_en is null;
+
+insert into esquema_version (version, descripcion) values (4, 'fase 2: tokens de servicio con rol agente')
+  on conflict (version) do nothing;

@@ -15,6 +15,11 @@ const COLUMNAS_RESERVA = `id, pool_id, cidr::text, vpc, solicitante, ticket, cre
   case when estado = 'reservada' and expira_en > now() then floor(extract(epoch from (expira_en - now())))::int else 0 end as segundos_restantes`;
 const RESERVA_VIGENTE = `estado = 'reservada' and expira_en > now()`;
 
+// Tokens de servicio (nunca se devuelve el hash). El estado y el «por vencer» se calculan con el reloj de la base.
+const COLUMNAS_TOKEN = `id, nombre, prefijo, rol, cuota_reservas, creado_por, creado_en, expira_en, ultimo_uso, revocado_en,
+  case when revocado_en is not null then 'revocado' when expira_en <= now() then 'vencido' else 'activo' end as estado,
+  (revocado_en is null and expira_en > now() and expira_en < now() + interval '7 days') as por_vencer`;
+
 /** Traduce los errores de restricción de PostgreSQL a un error de negocio. */
 function traducir(e) {
   if (e && (e.code === '23P01' || e.code === '23514' || e.code === '23503' || e.code === '23505')) return new ConflictoDeDatos(e.message, e.code);
@@ -244,6 +249,28 @@ function crearRepositorio(db) {
     },
     async registrarAuditoria({ usuario, rol, accion, detalle, ip, requestId }) {
       await db.query('insert into auditoria (usuario, rol, accion, detalle, ip, request_id) values ($1,$2,$3,$4,$5,$6)', [usuario, rol, accion, detalle, ip, requestId || null]);
+    },
+    // ---------- Tokens de servicio ----------
+    async insertarToken({ nombre, prefijo, hash, rol, cuota, creadoPor, dias }) {
+      return (await db.query(
+        `with t as (
+           insert into tokens_servicio (nombre, prefijo, hash, rol, cuota_reservas, creado_por, expira_en)
+           values ($1,$2,$3,$4,$5,$6, now() + make_interval(days => $7::int)) returning *)
+         select ${COLUMNAS_TOKEN} from t`, [nombre, prefijo, hash, rol, cuota, creadoPor, dias]).catch((e) => { throw traducir(e); })).rows[0];
+    },
+    async listarTokens() {
+      return (await db.query(`select ${COLUMNAS_TOKEN} from tokens_servicio order by creado_en desc, nombre`)).rows;
+    },
+    async tokenPorHash(hash) {
+      return (await db.query(`select ${COLUMNAS_TOKEN} from tokens_servicio where hash = $1`, [hash])).rows[0] || null;
+    },
+    async revocarToken(id) {
+      return (await db.query(
+        `with t as (update tokens_servicio set revocado_en = coalesce(revocado_en, now()) where id = $1 returning *) select ${COLUMNAS_TOKEN} from t`, [id])).rows[0] || null;
+    },
+    /** Como máximo una vez por minuto (lo decide la base con una sola sentencia atómica). */
+    async tocarUltimoUso(id) {
+      await db.query("update tokens_servicio set ultimo_uso = now() where id = $1 and (ultimo_uso is null or ultimo_uso < now() - interval '1 minute')", [id]);
     },
     async listarEventos() {
       return (await db.query('select id, ts, tipo, detalle from eventos order by id desc limit 50')).rows;

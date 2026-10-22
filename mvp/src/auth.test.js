@@ -179,3 +179,17 @@ test('el parámetro next no permite redirigir a otros sitios', opts, async () =>
   assert.equal(cb.headers.get('location'), '/');
   void n;
 });
+
+test('modo OIDC: un token de servicio entra por Bearer sin cookie ni X-Requested-With; uno inválido es 401 JSON (no redirige al login)', opts, async () => {
+  const root = new Navegador();
+  await root.entrar('root@empresa.cl');
+  const nombre = `oidc-${Date.now().toString(36)}`;
+  const creado = await (await root.api('/api/tokens', { method: 'POST', body: JSON.stringify({ nombre, rol: 'lector' }) })).json();
+  assert.match(creado.token, /^ipam_/);
+  const me = await fetch(base + '/api/me', { headers: { Authorization: `Bearer ${creado.token}` } });
+  assert.deepEqual(await me.json(), { modo: 'token', usuario: `svc:${nombre}`, nombre: `svc:${nombre}`, rol: 'lector' });
+  const malo = await fetch(base + '/api/pools', { headers: { Authorization: `Bearer ipam_${'C'.repeat(43)}` }, redirect: 'manual' });
+  assert.equal(malo.status, 401);
+  assert.equal((await malo.json()).error, 'token_invalido');
+  assert.equal((await root.api(`/api/tokens/${creado.id}`, { method: 'DELETE' })).status, 200);
+});

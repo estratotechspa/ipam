@@ -8,7 +8,7 @@ const { ConflictoDeDatos } = require('../../../aplicacion/resultado');
 
 /** @param {{reloj?: {ahora: () => Date}, pools?: any[]}} [o] */
 function crearRepositorioMemoria({ reloj = { ahora: () => new Date() }, pools = [] } = {}) {
-  const datos = { pools: new Map(pools.map((p) => [p.id, p])), asignaciones: [], reservas: [], ticket: 142, idAsignacion: 0, barredor: null };
+  const datos = { pools: new Map(pools.map((p) => [p.id, p])), asignaciones: [], reservas: [], tokens: [], ticket: 142, idAsignacion: 0, barredor: null };
   const ahora = () => reloj.ahora();
   const efectivo = (r) => (r.estado === 'reservada' && r.expira_en.getTime() <= ahora().getTime() ? 'expirada' : r.estado);
   const vigente = (r) => r.estado === 'reservada' && r.expira_en.getTime() > ahora().getTime();
@@ -69,8 +69,23 @@ function crearRepositorioMemoria({ reloj = { ahora: () => new Date() }, pools = 
     async insertarAsignacionDeReserva(r) { return metodos.insertarAsignacion({ pool: r.pool_id, cidr: r.cidr, vpc: r.vpc, solicitante: r.solicitante, ticket: r.ticket, origen: 'agente' }); },
     async purgarLimite() { return 0; },
   };
+  const estadoToken = (t) => (t.revocado_en ? 'revocado' : t.expira_en.getTime() <= ahora().getTime() ? 'vencido' : 'activo');
+  const vistaToken = (t) => t && ({ ...t, hash: undefined, estado: estadoToken(t), por_vencer: estadoToken(t) === 'activo' && t.expira_en.getTime() - ahora().getTime() < 7 * 86400_000 });
+  const tokens = {
+    async insertarToken({ nombre, prefijo, hash, rol, cuota, creadoPor, dias }) {
+      if (datos.tokens.some((t) => t.nombre === nombre || t.hash === hash)) throw new ConflictoDeDatos('nombre repetido', '23505');
+      const t = { id: crypto.randomUUID(), nombre, prefijo, hash, rol, cuota_reservas: cuota, creado_por: creadoPor, creado_en: ahora(), expira_en: new Date(ahora().getTime() + dias * 86400_000), ultimo_uso: null, revocado_en: null };
+      datos.tokens.push(t);
+      return vistaToken(t);
+    },
+    async listarTokens() { return [...datos.tokens].reverse().map(vistaToken); },
+    async tokenPorHash(hash) { return vistaToken(datos.tokens.find((t) => t.hash === hash)) || null; },
+    async revocarToken(id) { const t = datos.tokens.find((x) => x.id === id); if (!t) return null; t.revocado_en = t.revocado_en || ahora(); return vistaToken(t); },
+    async tocarUltimoUso(id) { const t = datos.tokens.find((x) => x.id === id); if (t && (!t.ultimo_uso || ahora().getTime() - t.ultimo_uso.getTime() > 60_000)) t.ultimo_uso = ahora(); },
+  };
   return {
     ...metodos,
+    ...tokens,
     datos,
     async transaccion(fn) { return fn(metodos); },
     async conBarredor({ minimoMs }, fn) {
