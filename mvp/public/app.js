@@ -21,6 +21,8 @@ async function api(url, opt) {
   } catch (e) {}
   return { ok: r.ok, status: r.status, data: j };
 }
+// Todas las máscaras que acepta la API (de /8 a /32).
+const MASCARAS = Array.from({ length: 25 }, (_, i) => i + 8);
 let YO = { modo: 'none', rol: 'admin', usuario: '', nombre: '' };
 const NIVEL = { lector: 0, agente: 1, solicitante: 2, admin: 3 };
 const puede = (min) => NIVEL[YO.rol] >= NIVEL[min];
@@ -105,12 +107,12 @@ async function renderSol() {
     return fail('sol', e);
   }
   $('sol').innerHTML = `<h2>Solicitar segmento</h2><div class="row"><div class="card" style="max-width:420px;flex:none;width:100%">
-  <label>Pool</label><select id="s-pool">${pools.map((p) => `<option value="${esc(p.id)}" ${p.id === 'gke-pods-prod' ? 'selected' : ''}>${esc(p.id)} (${esc(p.cidr)})</option>`).join('')}</select>
-  <label>Proyecto / VPC</label><input id="s-vpc" value="vpc-pagos">
-  <label>CIDR manual (opcional; vacío = asignar el primer libre)</label><input id="s-cidr" value="10.64.8.0/22" placeholder="10.64.16.0/22">
-  <label>Máscara (si no hay CIDR manual)</label><select id="s-len">${[16, 18, 19, 20, 21, 22, 23, 24, 26, 28].map((n) => `<option ${n === 22 ? 'selected' : ''} value="${n}">/${n}</option>`).join('')}</select>
+  <label>Pool</label><select id="s-pool">${pools.map((p) => `<option value="${esc(p.id)}" >${esc(p.id)} (${esc(p.cidr)})</option>`).join('')}</select>
+  <label>Proyecto / VPC</label><input id="s-vpc" value="" placeholder="vpc-mi-proyecto">
+  <label>CIDR manual (opcional; vacío = asignar el primer libre)</label><input id="s-cidr" value="" placeholder="ej. 10.210.48.0/22 (debe caer dentro del pool)">
+  <label>Máscara (si no hay CIDR manual)</label><select id="s-len">${MASCARAS.map((n) => `<option ${n === 22 ? 'selected' : ''} value="${n}">/${n}</option>`).join('')}</select>
   <p><button class="btn" id="s-go">Solicitar</button></p></div>
-  <div class="card" id="s-res"><p class="muted">Prueba un CIDR que choque con uno existente (ej. 10.64.8.0/22 en gke-pods-prod): la base de datos lo rechaza y se sugieren segmentos libres.</p></div></div>`;
+  <div class="card" id="s-res"><p class="muted">Si pides un CIDR que choque con uno existente, la base de datos lo rechaza y se sugieren segmentos libres. Con el CIDR vacío se asigna el primer segmento libre del tamaño elegido.</p></div></div>`;
   $('s-go').onclick = solicitar;
 }
 
@@ -162,7 +164,7 @@ async function renderJira() {
   <div class="row"><div style="flex:1;min-width:240px"><b>Simular ticket entrante</b>
    <label>Ambiente</label><select id="j-amb"><option>prod</option><option>qa</option><option>dev</option></select>
    <label>Tipo</label><select id="j-tipo"><option>Nodos</option><option selected>Pods</option><option>Servicios</option><option>Control plane</option></select>
-   <label>Máscara</label><select id="j-len">${[16, 20, 22, 24, 28].map((n) => `<option ${n === 22 ? 'selected' : ''} value="${n}">/${n}</option>`).join('')}</select>
+   <label>Máscara</label><select id="j-len">${MASCARAS.map((n) => `<option ${n === 22 ? 'selected' : ''} value="${n}">/${n}</option>`).join('')}</select>
    <label>VPC</label><input id="j-vpc" value="vpc-nueva"><p><button class="btn" id="j-go">Enviar webhook</button></p></div>
   <div style="flex:2;min-width:260px"><b>Registro de eventos</b><div class="log">${esc(ev.map(linea).join('\n')) || '(sin eventos)'}</div></div></div></div>`;
   $('j-go').onclick = async () => {

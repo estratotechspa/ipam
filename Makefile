@@ -3,7 +3,7 @@
 SHELL := /bin/sh
 PG ?= 16
 .DEFAULT_GOAL := ayuda
-.PHONY: ayuda deps lint formato portabilidad test cobertura matriz-pg esquema test-e2e scan auditar build build-multiarch helm-check compose-check sbom alertas pines ci
+.PHONY: ayuda deps lint docs formato portabilidad test cobertura matriz-pg esquema test-e2e scan auditar build build-multiarch helm-check compose-check sbom alertas pines ci
 
 ayuda: ## Lista los objetivos
 	@grep -E "^[a-z0-9-]+:.*## " $(MAKEFILE_LIST) | sed -E "s/:.*## /\t/" | column -t -s "$$(printf '\t')"
@@ -12,7 +12,10 @@ deps: ## Instala dependencias (npm ci)
 	cd mvp && npm ci
 
 lint: ## ESLint, formato y tipos (tsc --checkJs)
-	cd mvp && npm run -s lint && npm run -s formato:verificar && npm run -s tipos
+	cd mvp && npm run -s lint && npm run -s formato:verificar && npm run -s tipos && npm run -s doc:config:verificar
+
+docs: ## Verifica enlaces relativos y la sintaxis de los diagramas Mermaid de la documentación
+	node scripts/ci/verificar-docs.js
 
 formato: ## Aplica el formato (Prettier)
 	cd mvp && npm run -s formato
@@ -63,5 +66,5 @@ alertas: ## Valida alertas y dashboard (jq, promtool, tofu validate)
 pines: ## Verifica que los digests y commits fijados existen
 	node scripts/ci/verificar-pines.js
 
-ci: portabilidad lint cobertura test esquema helm-check alertas scan sbom build compose-check test-e2e ## TODO lo anterior (lo que corre el CI)
+ci: portabilidad lint docs cobertura test esquema helm-check alertas scan sbom build compose-check test-e2e ## TODO lo anterior (lo que corre el CI)
 	@echo "make ci: todo en verde"

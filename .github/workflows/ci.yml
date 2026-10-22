@@ -26,6 +26,7 @@ jobs:
         with: {node-version: 22, cache: npm, cache-dependency-path: mvp/package-lock.json}
       - run: make deps
       - run: make portabilidad
+      - run: make docs
       - run: make lint
       - run: make helm-check
       - run: make alertas

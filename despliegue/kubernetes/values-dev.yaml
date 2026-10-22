@@ -1,0 +1,15 @@
+# Ambiente DEV (ejemplo). Se combina con el ajuste de tu nube:  helm upgrade --install ipam ../../mvp/chart/ipam -n ipam-dev -f values-gke.yaml -f values-dev.yaml
+# Valores ficticios: reemplaza hosts y dominios. Sin secretos aquí: viven en el Secret `ipam-secrets` (ver docs/ops/DESPLIEGUE.md).
+replicaCount: 1
+config:
+  publicUrl: https://ipam-dev.ejemplo.interno
+  logLevel: debug
+  reservaTtlHoras: 24
+secrets:
+  existingSecret: ipam-secrets
+limites:
+  porMinuto: 240
+  escrituraPorMinuto: 60
+auth:
+  oidc:
+    defaultRole: lector

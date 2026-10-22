@@ -38,6 +38,7 @@ validar:
   script:
     - make deps
     - make portabilidad
+    - make docs
     - make lint
     - make helm-check
     - make alertas        # sin Docker en este trabajo se omiten promtool y tofu validate (el generador y el JSON sí se validan)

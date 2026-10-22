@@ -29,6 +29,7 @@ test('un CIDR solapado muestra la alerta y sugiere segmentos libres', async ({ p
   await page.goto('/');
   await page.getByRole('button', { name: 'Solicitar', exact: true }).click();
   await page.selectOption('#s-pool', 'gke-pods-prod');
+  await page.fill('#s-vpc', 'vpc-e2e-solapado');
   await page.fill('#s-cidr', '10.64.8.0/22');
   await page.click('#s-go');
   await expect(page.locator('#s-res .alert')).toContainText('Solapamiento detectado');

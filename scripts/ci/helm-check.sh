@@ -16,6 +16,7 @@ helm template ipam "$CHART" --set auth.oidc.issuer=https://accounts.google.com -
   --set config.publicUrl=https://ipam.ejemplo.interno --set metrics.enabled=true --set ingress.enabled=true > "$T/oidc.yaml" && ok "escenario 3: renderiza con OIDC y métricas"
 helm template ipam "$CHART" --set secrets.existingSecret=x --set postgres.backup.enabled=true --set postgres.backup.repo.gcs.bucket=b >/dev/null && ok "respaldos activados"
 for nube in gke eks aks; do helm template ipam "$CHART" -f "$RAIZ/despliegue/kubernetes/values-$nube.yaml" >/dev/null && ok "ajustes de $nube"; done
+for amb in dev qa prod; do helm template ipam "$CHART" -f "$RAIZ/despliegue/kubernetes/values-gke.yaml" -f "$RAIZ/despliegue/kubernetes/values-$amb.yaml" >/dev/null && ok "ambiente $amb (sobre gke)"; done
 cmp -s "$RAIZ/mvp/db/schema.sql" "$CHART/files/schema.sql" && cmp -s "$RAIZ/mvp/db/seed.sql" "$CHART/files/seed.sql" && ok "esquema y semilla del chart idénticos a db/"
 if command -v kube-linter >/dev/null 2>&1 || "$RAIZ/scripts/ci/instalar-herramientas.sh" kube-linter >/dev/null 2>&1; then
   kube-linter lint --config "$RAIZ/.kube-linter.yaml" "$T/oidc.yaml" >/dev/null && ok "kube-linter (OIDC + métricas + ingress)"

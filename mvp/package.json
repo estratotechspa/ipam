@@ -16,7 +16,9 @@
     "cobertura": "node --test --test-concurrency=1 --experimental-test-coverage --test-coverage-include=\"src/dominio/**/*.js\" --test-coverage-include=\"src/aplicacion/**/*.js\" --test-coverage-exclude=\"**/*.test.js\" --test-coverage-lines=80 --test-coverage-functions=80 --test-coverage-branches=80 \"src/dominio/*.test.js\" \"src/aplicacion/*.test.js\"",
     "auditar": "npm audit --omit=dev --audit-level=high",
     "licencias": "license-checker-rseidelsohn --production --summary --excludePrivatePackages --excludePackages 'buffers@0.1.1' --onlyAllow 'MIT;ISC;Apache-2.0;BSD-2-Clause;BSD-3-Clause;0BSD;BlueOak-1.0.0;Python-2.0;CC0-1.0;CC-BY-4.0;Unlicense'",
-    "sbom": "cyclonedx-npm --omit dev --ignore-npm-errors --spec-version 1.5 --output-format JSON --output-file ../sbom/ipam.cdx.json"
+    "sbom": "cyclonedx-npm --omit dev --ignore-npm-errors --spec-version 1.5 --output-format JSON --output-file ../sbom/ipam.cdx.json",
+    "doc:config": "node scripts/generar-config-doc.js",
+    "doc:config:verificar": "node scripts/generar-config-doc.js --verificar"
   },
   "engines": {
     "node": ">=22"

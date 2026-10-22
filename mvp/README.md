@@ -1,8 +1,30 @@
 # IPAM · MVP
 
+## Lee esto si quieres…
+| Quiero… | Documento |
+|---|---|
+| Entender los términos | [GLOSARIO](../docs/GLOSARIO.md) |
+| **Usar el IPAM** (cada pestaña explicada) | [MANUAL-DE-USO](../docs/MANUAL-DE-USO.md) |
+| Entender cómo está construido y por qué | [ARQUITECTURA](../docs/ARQUITECTURA.md) y los [ADR](../docs/adr/) |
+| Llamar a la API o integrar un agente | [API-Y-AGENTES](../docs/API-Y-AGENTES.md) y `/api/v1/openapi.json` |
+| Entender el YAML de redes del MVP | [CONTRATO-YAML-REDES](../docs/CONTRATO-YAML-REDES.md) |
+| Configurar roles, tokens y seguridad | [ACCESO-Y-SEGURIDAD](../docs/ACCESO-Y-SEGURIDAD.md) |
+| Ver todas las variables | [CONFIGURACION](../docs/CONFIGURACION.md) |
+| Desplegarlo (Docker, Kubernetes, nubes) | [DESPLIEGUE](../docs/ops/DESPLIEGUE.md) y [PORTABILIDAD](../docs/PORTABILIDAD.md) |
+| Levantar el POC en Render + Supabase | [POC-RENDER-SUPABASE](../docs/ops/POC-RENDER-SUPABASE.md) |
+| Operarlo y resolver fallas | [RUNBOOK](../docs/ops/RUNBOOK.md) y [OBSERVABILIDAD](../docs/ops/OBSERVABILIDAD.md) |
+| Respaldar y recuperar | [RESPALDO-Y-RECUPERACION](../docs/ops/RESPALDO-Y-RECUPERACION.md) y [OPERACION](../docs/OPERACION.md) |
+| Cambiar de hosting o de nube | [MIGRACION](../docs/ops/MIGRACION.md) |
+| Pasar de GitHub a GitLab / pipelines | [MIGRAR-A-GITLAB](../docs/ops/MIGRAR-A-GITLAB.md) y [ops/gitlab](../docs/ops/gitlab/README.md) |
+| Aplicar buenas prácticas (human-in-the-loop) | [BUENAS-PRACTICAS](../docs/BUENAS-PRACTICAS.md) |
+| Saber qué no hace | [LIMITACIONES](../docs/LIMITACIONES.md) |
+| Revisar la seguridad del código | [MODELO-DE-AMENAZAS](../docs/MODELO-DE-AMENAZAS.md) y [CALIDAD-Y-SEGURIDAD-DEL-CODIGO](../docs/CALIDAD-Y-SEGURIDAD-DEL-CODIGO.md) |
+| Contribuir (incluye «cómo agregar un adaptador») | [CONTRIBUIR](../docs/CONTRIBUIR.md) |
+| Ver los cambios por versión | [CHANGELOG](../CHANGELOG.md) |
+
 Gestión de segmentos de red (IPv4): pools, asignaciones sin solapamiento, sugerencia de segmentos libres e integración con Jira por webhook firmado.
 
-**Stack:** Node 20 + Express · PostgreSQL 16 · Docker Compose.
+**Stack:** Node 22 + Express 5 · PostgreSQL 14–17 · Docker.
 
 ## Levantar en local
 ```bash

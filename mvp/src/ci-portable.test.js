@@ -145,15 +145,25 @@ test('los pipelines son envoltorios finos: llaman a make o a scripts/ci y mantie
     ['ci.yml', gh],
     ['.gitlab-ci.yml', gl],
   ]) {
-    for (const objetivo of ['make portabilidad', 'make lint', 'make helm-check', 'make alertas', 'make test', 'make esquema', 'make cobertura', 'make sbom'])
+    for (const objetivo of [
+      'make portabilidad',
+      'make lint',
+      'make helm-check',
+      'make alertas',
+      'make test',
+      'make esquema',
+      'make cobertura',
+      'make sbom',
+      'make docs',
+    ])
       assert.match(txt, new RegExp(objetivo), `${nombre} no llama a «${objetivo}»`);
     assert.match(txt, /compose-check/, nombre);
     assert.match(txt, /e2e/, nombre);
     assert.match(txt, /escanear|make scan/, nombre);
     assert.doesNotMatch(txt, /:latest\b/, `${nombre} usa la etiqueta latest`);
   }
-  // Orden de etapas / dependencias: validar → probar → escanear → construir → liberar.
-  assert.match(gl, /stages: \[validar, probar, escanear, construir, liberar\]/);
+  // Orden de etapas / dependencias: validar → probar → escanear → construir → liberar (+ «poc»: trabajos manuales o programados del POC).
+  assert.match(gl, /stages: \[validar, probar, escanear, construir, liberar, poc\]/);
   assert.match(gh, /needs: validar/);
   assert.match(gh, /needs: \[probar, escanear\]/);
   // La rama por defecto no está escrita a fuego en ninguno de los dos.
