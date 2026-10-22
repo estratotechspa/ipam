@@ -12,7 +12,7 @@ function hoja(wb, nombre, columnas, datos) {
   return ws;
 }
 
-function construirLibro({ filas, pools }, creador) {
+function construirLibro({ filas, pools, direcciones = [] }, creador) {
   const wb = new ExcelJS.Workbook();
   wb.creator = creador;
   hoja(
@@ -71,6 +71,34 @@ function construirLibro({ filas, pools }, creador) {
       { header: 'Uso', key: 'uso', width: 9, style: { numFmt: '0.0%' } },
     ],
     pools.map((p) => ({ id: p.id, tipo: p.tipo, amb: p.ambiente, prov: p.proveedor, cidr: p.cidr, n: p.asignaciones, uso: p.uso })),
+  );
+  hoja(
+    wb,
+    'Direcciones IP',
+    [
+      { header: 'IP', key: 'ip', width: 16 },
+      { header: 'Dispositivo', key: 'dispositivo', width: 20 },
+      { header: 'Interfaz', key: 'interfaz', width: 16 },
+      { header: 'Rol', key: 'rol', width: 11 },
+      { header: 'DNS', key: 'dns', width: 26 },
+      { header: 'Descripción', key: 'descripcion', width: 30 },
+      { header: 'Segmento', key: 'segmento', width: 20 },
+      { header: 'ID segmento', key: 'codigo', width: 13 },
+      { header: 'Pool', key: 'pool', width: 20 },
+      { header: 'Excepción (motivo)', key: 'excepcion', width: 28 },
+    ],
+    direcciones.map((d) => ({
+      ip: d.ip,
+      dispositivo: d.dispositivo || '',
+      interfaz: d.interfaz || '',
+      rol: d.rol,
+      dns: d.dns || '',
+      descripcion: d.descripcion || '',
+      segmento: d.segmento || '',
+      codigo: d.segmento_codigo || '',
+      pool: d.pool_id || '',
+      excepcion: d.excepcion || '',
+    })),
   );
   return wb;
 }

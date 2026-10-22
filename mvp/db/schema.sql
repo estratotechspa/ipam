@@ -250,6 +250,51 @@ insert into esquema_version (version, descripcion) values (9, 'vlan opcional por
   on conflict (version) do nothing;
 
 -- ============================================================================
+-- Direcciones IP fijas (interfaces de router, switch, firewall, gateways, VIP…). Normalmente dentro de un segmento
+-- asignado; por excepción (con motivo) pueden quedar fuera de un segmento, dentro de un pool o fuera de todo pool.
+-- ============================================================================
+create table if not exists direcciones_ip (
+  id            bigserial primary key,
+  ip            inet not null check (family(ip) = 4 and masklen(ip) = 32),
+  pool_id       text references pools(id),
+  asignacion_id bigint references asignaciones(id),
+  dispositivo   text check (char_length(dispositivo) <= 80),
+  interfaz      text check (char_length(interfaz) <= 80),
+  rol           text not null default 'interfaz' check (rol in ('interfaz','gateway','gestion','loopback','vip','servidor','otro')),
+  dns           text check (char_length(dns) <= 253),
+  descripcion   text check (char_length(descripcion) <= 200),
+  excepcion     text check (char_length(excepcion) <= 200),
+  creado_por    text not null,
+  creado_en     timestamptz not null default now(),
+  -- Dentro de un segmento, o una excepción con su motivo.
+  constraint direcciones_ip_segmento_o_excepcion check (asignacion_id is not null or excepcion is not null)
+);
+-- Una IP no se repite dentro de un mismo pool (ni entre las que no tienen pool).
+create unique index if not exists direcciones_ip_unica on direcciones_ip ((coalesce(pool_id, '')), ip);
+create index if not exists direcciones_ip_asignacion on direcciones_ip (asignacion_id);
+
+-- Coherencia: la IP cae dentro de su segmento (y hereda su pool) o, si es excepción con pool, dentro del pool.
+create or replace function direccion_ip_coherente() returns trigger language plpgsql as $$
+declare seg record;
+begin
+  if new.asignacion_id is not null then
+    select pool_id, cidr into seg from asignaciones where id = new.asignacion_id;
+    if not found or not (new.ip <<= seg.cidr) then
+      raise exception 'la IP % no está dentro del segmento %', new.ip, new.asignacion_id using errcode = '23514';
+    end if;
+    new.pool_id := seg.pool_id;
+  elsif new.pool_id is not null and not (new.ip <<= (select cidr from pools where id = new.pool_id)) then
+    raise exception 'la IP % no está dentro del pool %', new.ip, new.pool_id using errcode = '23514';
+  end if;
+  return new;
+end $$;
+drop trigger if exists direccion_ip_coherente on direcciones_ip;
+create trigger direccion_ip_coherente before insert or update on direcciones_ip for each row execute function direccion_ip_coherente();
+
+insert into esquema_version (version, descripcion) values (10, 'direcciones ip fijas por interfaz')
+  on conflict (version) do nothing;
+
+-- ============================================================================
 -- Permisos del rol de la aplicación (solo si existe `ipam_app`; ver db/roles.sql)
 -- ============================================================================
 -- Se ejecuta con el rol migrador (dueño de las tablas) y se repite en cada migración. Sin el rol, no hace nada (desarrollo local).

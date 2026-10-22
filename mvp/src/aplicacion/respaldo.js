@@ -3,6 +3,7 @@
 const { parse } = require('../dominio/cidr');
 const { ok, fallo, ConflictoDeDatos } = require('./resultado');
 const { validarVlan } = require('../dominio/vlan');
+const { validarDireccion } = require('../dominio/direccion');
 
 const AMBIENTES = ['dev', 'qa', 'pre', 'prod'];
 const ORIGENES_IMPORTABLES = ['panel', 'jira', 'semilla', 'agente', 'importado'];
@@ -16,7 +17,7 @@ function crearRespaldo({ repo, reloj, rolesUsuario }) {
     const d = await repo.exportarDatos();
     return ok({
       respaldo: { formato: 'ipam-respaldo', version: 1, generado: reloj.ahora().toISOString(), ...d },
-      resumen: { pools: d.pools.length, asignaciones: d.asignaciones.length },
+      resumen: { pools: d.pools.length, asignaciones: d.asignaciones.length, direcciones: (d.direcciones || []).length },
     });
   }
 
@@ -36,7 +37,12 @@ function crearRespaldo({ repo, reloj, rolesUsuario }) {
       const v = validarVlan(a);
       if (!v.ok) return fallo('validacion', `${v.mensaje} (${String(a.cidr).slice(0, 40)})`);
     }
-    const r = { pools: 0, asignaciones: 0, omitidas: 0, usuarios: 0 };
+    const direcciones = Array.isArray(d.direcciones) ? d.direcciones : [];
+    for (const x of direcciones) {
+      const v = validarDireccion(x);
+      if (!v.ok) return fallo('validacion', `Dirección IP inválida (${String(x.ip).slice(0, 40)}): ${v.mensaje}`);
+    }
+    const r = { pools: 0, asignaciones: 0, omitidas: 0, usuarios: 0, direcciones: 0 };
     try {
       await repo.transaccion(async (tx) => {
         await tx.bloquear('importar');
@@ -49,6 +55,7 @@ function crearRespaldo({ repo, reloj, rolesUsuario }) {
         for (const u of Array.isArray(d.usuarios) ? d.usuarios : []) {
           if (u.email && rolesUsuario.includes(u.rol)) r.usuarios += await tx.insertarUsuarioSiNoExiste(u);
         }
+        for (const x of direcciones) r.direcciones += await tx.insertarDireccionImportada({ ...x, ...validarDireccion(x).datos });
         await tx.ajustarSecuenciaTicket();
       });
     } catch (e) {

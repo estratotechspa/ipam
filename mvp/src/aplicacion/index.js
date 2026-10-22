@@ -10,6 +10,7 @@ const { crearReservas } = require('./reservas');
 const { crearTokens } = require('./tokens');
 const { crearImportacion } = require('./importacion');
 const { crearPools } = require('./pools');
+const { crearDirecciones } = require('./direcciones');
 
 /** Une todos los casos de uso con sus puertos. @param {any} deps */
 function crearCasos({ repo, eventos, auditor, tickets, reloj, config, instancia, generadorToken, contrasenas }) {
@@ -25,6 +26,7 @@ function crearCasos({ repo, eventos, auditor, tickets, reloj, config, instancia,
     reservas,
     importacion: crearImportacion({ repo, eventos }),
     pools: crearPools({ repo, eventos }),
+    direcciones: crearDirecciones({ repo, eventos }),
     tokens: crearTokens({ repo, generador: generadorToken, config }),
     barrido: crearBarrido({ repo, eventos, intervaloMs: config.reservas.barredorIntervaloSeg * 1000, instancia }),
   };

@@ -13,7 +13,7 @@ if (hayBase) {
   almacenes.postgres = async () => {
     const b = await crearBaseAislada({ semilla: false });
     const pool = new Pool({ connectionString: b.url, max: 10 });
-    pool.on('error', () => {}); // ver la nota más abajo: el borrado de la base corta conexiones inactivas
+    pool.on('error', () => {}); // el borrado de la base aislada corta las conexiones inactivas (ver la prueba de dos réplicas)
     return {
       almacen: crearAlmacenPostgres(pool),
       pool,
@@ -84,7 +84,7 @@ test(
   async () => {
     const b = await crearBaseAislada({ semilla: false });
     const pool = new Pool({ connectionString: b.url, max: 5 });
-    pool.on('error', () => {}); // ver la nota más abajo: el borrado de la base corta conexiones inactivas
+    pool.on('error', () => {}); // el borrado de la base aislada corta las conexiones inactivas (ver la prueba de dos réplicas)
     try {
       const almacen = crearAlmacenPostgres(pool);
       const actual = Number((await pool.query('select (extract(epoch from now())::bigint / 60) as v')).rows[0].v);

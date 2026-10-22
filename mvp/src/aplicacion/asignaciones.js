@@ -89,6 +89,11 @@ function crearAsignaciones({ repo, eventos, tickets }) {
   }
 
   async function liberar(id) {
+    const ips = repo.contarDireccionesDe ? await repo.contarDireccionesDe(id) : 0;
+    if (ips)
+      return fallo('conflicto', 'tiene_direcciones', {
+        mensaje: `El segmento tiene ${ips} direcciones IP registradas (interfaces, gateways…). Elimínalas o regístralas como excepción antes de liberarlo.`,
+      });
     const fila = await repo.liberarAsignacion(id);
     if (!fila) return fallo('no_encontrado', 'No existe');
     await eventos.publicar('liberacion', fila);

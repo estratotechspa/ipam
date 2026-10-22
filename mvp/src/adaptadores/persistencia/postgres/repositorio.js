@@ -174,6 +174,110 @@ function consultas(x) {
   };
 }
 
+const COLUMNAS_DIRECCION = `d.id, host(d.ip) as ip, d.pool_id, d.asignacion_id, d.dispositivo, d.interfaz, d.rol, d.dns, d.descripcion, d.excepcion,
+  d.creado_por, d.creado_en`;
+
+/** Direcciones IP fijas (interfaces, gateways, VIP…). `q` = pool o cliente de una transacción. */
+function consultasDeDirecciones(q) {
+  return {
+    async asignacionesQueContienen(ip) {
+      return (await q('select id, codigo, pool_id, cidr::text, vpc from asignaciones where cidr >>= $1::inet order by pool_id', [ip])).rows;
+    },
+    async poolsQueContienen(ip) {
+      return (await q('select id, cidr::text from pools where cidr >>= $1::inet order by masklen(cidr) desc, id', [ip])).rows;
+    },
+    async direccionEn(poolId, ip) {
+      return (
+        (await q(`select ${COLUMNAS_DIRECCION} from direcciones_ip d where coalesce(d.pool_id, '') = coalesce($1, '') and d.ip = $2::inet`, [poolId, ip]))
+          .rows[0] || null
+      );
+    },
+    async direccionPorId(id) {
+      return (await q(`select ${COLUMNAS_DIRECCION} from direcciones_ip d where d.id = $1`, [id])).rows[0] || null;
+    },
+    async insertarDireccion(d) {
+      return (
+        await q(
+          `with n as (insert into direcciones_ip (ip, pool_id, asignacion_id, dispositivo, interfaz, rol, dns, descripcion, excepcion, creado_por)
+             values ($1::inet, $2, $3, $4, $5, $6, $7, $8, $9, $10) returning *)
+           select ${COLUMNAS_DIRECCION} from n d`,
+          [d.ip, d.pool_id, d.asignacion_id, d.dispositivo, d.interfaz, d.rol, d.dns, d.descripcion, d.excepcion, d.creado_por],
+        )
+      ).rows[0];
+    },
+    async actualizarDireccion(id, d) {
+      return (
+        await q(
+          `with n as (update direcciones_ip set dispositivo=$2, interfaz=$3, rol=$4, dns=$5, descripcion=$6, excepcion=$7 where id=$1 returning *)
+           select ${COLUMNAS_DIRECCION} from n d`,
+          [id, d.dispositivo, d.interfaz, d.rol, d.dns, d.descripcion, d.excepcion],
+        )
+      ).rows[0];
+    },
+    async eliminarDireccion(id) {
+      return (await q(`with n as (delete from direcciones_ip where id=$1 returning *) select ${COLUMNAS_DIRECCION} from n d`, [id])).rows[0] || null;
+    },
+    /** Con filtros opcionales: segmento (`asignacion`), pool y texto libre (IP, equipo, interfaz, DNS, descripción). */
+    async listarDirecciones({ asignacion, pool, q: texto } = {}) {
+      return (
+        await q(
+          `select ${COLUMNAS_DIRECCION}, a.codigo as segmento_codigo, a.cidr::text as segmento
+             from direcciones_ip d left join asignaciones a on a.id = d.asignacion_id
+            where ($1::bigint is null or d.asignacion_id = $1)
+              and ($2::text is null or d.pool_id = $2)
+              and ($3::text is null or concat_ws(' ', host(d.ip), d.dispositivo, d.interfaz, d.dns, d.descripcion, d.excepcion, a.codigo) ilike '%' || $3 || '%')
+            order by d.pool_id nulls last, d.ip limit 2000`,
+          [asignacion || null, pool || null, texto || null],
+        )
+      ).rows;
+    },
+    /** Restaura una IP fija: la enlaza con su segmento por pool + CIDR. No duplica (índice único por pool e IP). */
+    async insertarDireccionImportada(d) {
+      const seg = d.segmento ? (await q('select id from asignaciones where pool_id = $1 and cidr = $2::cidr', [d.pool_id, d.segmento])).rows[0] : null;
+      if (d.segmento && !seg) return 0;
+      return (
+        await q(
+          `insert into direcciones_ip (ip, pool_id, asignacion_id, dispositivo, interfaz, rol, dns, descripcion, excepcion, creado_por, creado_en)
+           values ($1::inet, $2, $3, $4, $5, $6, $7, $8, $9, $10, coalesce($11::timestamptz, now())) on conflict do nothing`,
+          [
+            d.ip,
+            d.pool_id || null,
+            seg ? seg.id : null,
+            d.dispositivo,
+            d.interfaz,
+            d.rol,
+            d.dns,
+            d.descripcion,
+            seg ? null : d.excepcion || 'restaurada sin segmento',
+            d.creado_por || 'importado',
+            d.creado_en || null,
+          ],
+        )
+      ).rowCount;
+    },
+    async contarDireccionesDe(asignacionId) {
+      return (await q('select count(*)::int as n from direcciones_ip where asignacion_id = $1', [asignacionId])).rows[0].n;
+    },
+  };
+}
+
+/** Todo lo que va en el respaldo lógico (pools, asignaciones, roles e IPs fijas). */
+async function exportarDatos(db) {
+  const pools = (await db.query('select id, tipo, ambiente, proveedor, cidr::text from pools order by id')).rows;
+  const asignaciones = (
+    await db.query('select pool_id, cidr::text, vpc, vlan, vlan_nombre, solicitante, ticket, origen, creado_en from asignaciones order by pool_id, cidr')
+  ).rows;
+  const usuarios = (await db.query('select email, nombre, rol from usuarios where rol is not null order by email')).rows;
+  const direcciones = (
+    await db.query(
+      `select host(d.ip) as ip, d.pool_id, a.cidr::text as segmento, d.dispositivo, d.interfaz, d.rol, d.dns, d.descripcion, d.excepcion,
+                d.creado_por, d.creado_en
+           from direcciones_ip d left join asignaciones a on a.id = d.asignacion_id order by d.pool_id nulls last, d.ip`,
+    )
+  ).rows;
+  return { pools, asignaciones, usuarios, direcciones };
+}
+
 /** Edición y baja de pools (dentro de una transacción). */
 function consultasDePools(q) {
   return {
@@ -186,7 +290,7 @@ function consultasDePools(q) {
         await q(
           `select (select count(*) from asignaciones where pool_id=$1)::int as asignaciones,
                   (select count(*) from reservas where pool_id=$1 and ${RESERVA_VIGENTE})::int as reservas_vigentes,
-                  0 as direcciones`,
+                  (select count(*) from direcciones_ip where pool_id=$1)::int as direcciones`,
           [id],
         )
       ).rows[0];
@@ -390,6 +494,7 @@ function crearRepositorio(db) {
         await q('select pg_advisory_xact_lock(hashtext($1))', [clave]);
       },
       ...consultasDePools(q),
+      ...consultasDeDirecciones(q),
       async insertarPoolSiNoExiste(p) {
         return (
           await q('insert into pools (id,tipo,ambiente,proveedor,cidr) values ($1,$2,$3,$4,$5) on conflict (id) do nothing', [
@@ -459,6 +564,7 @@ function crearRepositorio(db) {
 
   return {
     ...base,
+    ...consultasDeDirecciones((texto, params) => db.query(texto, params)),
     transaccion,
     conBarredor,
     async actualizarTicketAsignacion(id, ticket) {
@@ -508,14 +614,7 @@ function crearRepositorio(db) {
       ).rows;
       return { filas, pools };
     },
-    async exportarDatos() {
-      const pools = (await db.query('select id, tipo, ambiente, proveedor, cidr::text from pools order by id')).rows;
-      const asignaciones = (
-        await db.query('select pool_id, cidr::text, vpc, vlan, vlan_nombre, solicitante, ticket, origen, creado_en from asignaciones order by pool_id, cidr')
-      ).rows;
-      const usuarios = (await db.query('select email, nombre, rol from usuarios where rol is not null order by email')).rows;
-      return { pools, asignaciones, usuarios };
-    },
+    exportarDatos: () => exportarDatos(db),
     ...consultasDeAdministracion(db),
   };
 }

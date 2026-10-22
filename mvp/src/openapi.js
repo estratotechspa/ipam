@@ -194,6 +194,74 @@ const schemas = {
       uso_reservado: 0.0039,
     },
   },
+  Direccion: {
+    type: 'object',
+    required: ['id', 'ip', 'rol', 'creado_por', 'creado_en'],
+    properties: {
+      id: { type: 'string', pattern: '^\\d+$' },
+      ip: { type: 'string', format: 'ipv4' },
+      pool_id: { type: ['string', 'null'], description: 'Pool que la contiene (null si es una excepción fuera de todo pool).' },
+      asignacion_id: { type: ['string', 'null'], description: 'Segmento que la contiene (null si es una excepción).' },
+      dispositivo: { type: ['string', 'null'], description: 'Equipo: rtr-core-01, sw-acceso-3, fw-borde…' },
+      interfaz: { type: ['string', 'null'], description: 'Interfaz del equipo: Gi0/1, xe-0/0/1.100, ethernet1/1…' },
+      rol: { $ref: '#/components/schemas/RolDireccion' },
+      dns: { type: ['string', 'null'] },
+      descripcion: { type: ['string', 'null'] },
+      excepcion: { type: ['string', 'null'], description: 'Motivo, solo si la IP está fuera de un segmento asignado.' },
+      creado_por: { type: 'string' },
+      creado_en: { type: 'string', format: 'date-time' },
+      segmento: { type: ['string', 'null'], description: 'CIDR del segmento (en listados y al crear).' },
+      segmento_codigo: { type: ['string', 'null'], description: 'ID legible del segmento (ASG-000123).' },
+      aviso: { type: ['string', 'null'], description: 'Solo al crear: p. ej. si es la dirección de red o de difusión del segmento.' },
+    },
+    example: {
+      id: '7',
+      ip: '10.220.16.1',
+      pool_id: 'gke-nodos-qa',
+      asignacion_id: '13',
+      dispositivo: 'rtr-core-01',
+      interfaz: 'Gi0/1',
+      rol: 'gateway',
+      dns: 'gw-qa.ejemplo.internal',
+      descripcion: 'Gateway del segmento de nodos',
+      excepcion: null,
+      creado_por: 'ana',
+      creado_en: AHORA,
+    },
+  },
+  RolDireccion: { enum: ['interfaz', 'gateway', 'gestion', 'loopback', 'vip', 'servidor', 'otro'], description: 'Para qué se usa la IP.' },
+  DireccionCrear: {
+    type: 'object',
+    required: ['ip'],
+    additionalProperties: false,
+    description:
+      'El IPAM ubica la IP en su segmento asignado. Si está fuera de todo segmento, es una **excepción** y `excepcion` (el motivo) es obligatorio. Si la IP existe en varios pools (rangos privados repetidos), responde 422 con `opciones`: repite indicando `pool`.',
+    properties: {
+      ip: { type: 'string', description: 'IPv4 (10.20.0.1 o 10.20.0.1/32).' },
+      pool: { type: 'string', description: 'Solo si la IP cae en varios pools.' },
+      dispositivo: { type: 'string', maxLength: 80 },
+      interfaz: { type: 'string', maxLength: 80 },
+      rol: { $ref: '#/components/schemas/RolDireccion' },
+      dns: { type: 'string', maxLength: 253 },
+      descripcion: { type: 'string', maxLength: 200 },
+      excepcion: { type: 'string', maxLength: 200, description: 'Motivo, obligatorio si la IP no está dentro de un segmento asignado.' },
+    },
+    example: { ip: '10.220.16.1', dispositivo: 'rtr-core-01', interfaz: 'Gi0/1', rol: 'gateway', descripcion: 'Gateway del segmento de nodos' },
+  },
+  DireccionEditar: {
+    type: 'object',
+    additionalProperties: false,
+    description: 'Lo que no venga se conserva. La IP no se cambia: elimina la dirección y registra otra.',
+    properties: {
+      dispositivo: { type: ['string', 'null'], maxLength: 80 },
+      interfaz: { type: ['string', 'null'], maxLength: 80 },
+      rol: { $ref: '#/components/schemas/RolDireccion' },
+      dns: { type: ['string', 'null'], maxLength: 253 },
+      descripcion: { type: ['string', 'null'], maxLength: 200 },
+      excepcion: { type: ['string', 'null'], maxLength: 200 },
+    },
+    example: { interfaz: 'Gi0/2', descripcion: 'Movido a la interfaz 2' },
+  },
   PoolCrear: {
     type: 'object',
     required: ['id', 'tipo', 'ambiente', 'proveedor', 'cidr'],
@@ -683,6 +751,27 @@ const schemas = {
         },
       },
       usuarios: { type: 'array', items: { type: 'object', properties: { email: { type: 'string' }, nombre: { type: 'string' }, rol: { type: 'string' } } } },
+      direcciones: {
+        type: 'array',
+        description: 'IPs fijas. Se enlazan con su segmento por `pool_id` + `segmento` (CIDR); sin segmento quedan como excepción.',
+        items: {
+          type: 'object',
+          required: ['ip'],
+          properties: {
+            ip: { type: 'string' },
+            pool_id: { type: ['string', 'null'] },
+            segmento: { type: ['string', 'null'] },
+            dispositivo: { type: ['string', 'null'] },
+            interfaz: { type: ['string', 'null'] },
+            rol: { type: 'string' },
+            dns: { type: ['string', 'null'] },
+            descripcion: { type: ['string', 'null'] },
+            excepcion: { type: ['string', 'null'] },
+            creado_por: { type: 'string' },
+            creado_en: { type: 'string', format: 'date-time' },
+          },
+        },
+      },
     },
     example: {
       formato: 'ipam-respaldo',
@@ -698,7 +787,13 @@ const schemas = {
   ImportarResultado: {
     type: 'object',
     required: ['pools', 'asignaciones', 'omitidas', 'usuarios'],
-    properties: { pools: { type: 'integer' }, asignaciones: { type: 'integer' }, omitidas: { type: 'integer' }, usuarios: { type: 'integer' } },
+    properties: {
+      pools: { type: 'integer' },
+      asignaciones: { type: 'integer' },
+      omitidas: { type: 'integer' },
+      usuarios: { type: 'integer' },
+      direcciones: { type: 'integer', description: 'Direcciones IP fijas restauradas.' },
+    },
     example: { pools: 0, asignaciones: 1, omitidas: 11, usuarios: 0 },
   },
 };
@@ -1144,6 +1239,52 @@ function rutasDeTokens(p) {
   };
 }
 
+/** Direcciones IP fijas (interfaces, gateways, VIP…). */
+function rutasDeDirecciones(p) {
+  const ID = param('id', 'path', 'Id de la dirección.');
+  p['/api/v1/direcciones'] = {
+    'x-alias-legado': '/api/direcciones',
+    get: op({
+      tag: 'Direcciones IP',
+      summary: 'Lista las direcciones IP fijas',
+      params: [
+        param('asignacion', 'query', 'Solo las de este segmento (id numérico).', { type: 'string' }, false),
+        param('pool', 'query', 'Solo las de este pool.', { type: 'string' }, false),
+        param('q', 'query', 'Busca en IP, equipo, interfaz, DNS, descripción y segmento.', { type: 'string' }, false),
+      ],
+      ok: { 200: respuesta('Direcciones.', { type: 'array', items: { $ref: '#/components/schemas/Direccion' } }) },
+      extra: e400,
+    }),
+    post: op({
+      tag: 'Direcciones IP',
+      summary: 'Registra una IP fija (rol agente o más)',
+      description:
+        'Se ubica sola en su segmento. Fuera de un segmento exige `excepcion`. 409 `ip_repetida` si ya está en ese pool; 422 `ip_ambigua` si cae en varios pools (repite con `pool`).',
+      body: cuerpo('DireccionCrear', schemas.DireccionCrear.example),
+      ok: { 201: respuesta('Registrada.', 'Direccion', schemas.Direccion.example) },
+      extra: { ...e400, ...e403, 409: respuesta('Ya registrada.', 'Error'), 422: respuesta('Cae en varios pools: indica `pool`.', 'Error') },
+    }),
+  };
+  p['/api/v1/direcciones/{id}'] = {
+    'x-alias-legado': '/api/direcciones/{id}',
+    patch: op({
+      tag: 'Direcciones IP',
+      summary: 'Edita los datos de una IP fija (rol agente o más)',
+      params: [ID],
+      body: cuerpo('DireccionEditar', schemas.DireccionEditar.example),
+      ok: { 200: respuesta('Editada.', 'Direccion') },
+      extra: { ...e400, ...e403, ...e404 },
+    }),
+    delete: op({
+      tag: 'Direcciones IP',
+      summary: 'Elimina una IP fija (solo admin)',
+      params: [ID],
+      ok: { 200: respuesta('Eliminada.', { type: 'object' }) },
+      extra: { ...e403, ...e404 },
+    }),
+  };
+}
+
 /** Alta, edición y baja de pools (solo admin). */
 function rutasDeEdicionDePools(p) {
   p['/api/v1/pools'].post = op({
@@ -1352,6 +1493,7 @@ function rutas() {
   rutasDeSistema(p);
   rutasDePoolsYAsignaciones(p);
   rutasDeEdicionDePools(p);
+  rutasDeDirecciones(p);
   rutasDeReservas(p);
   rutasDeTokens(p);
   rutasDeAdministracion(p);
@@ -1390,6 +1532,7 @@ function construirOpenApi({ servidor = '/' } = {}) {
       { name: 'Tokens', description: 'Credenciales de servicio.' },
       { name: 'Pools' },
       { name: 'Asignaciones' },
+      { name: 'Direcciones IP', description: 'IPs fijas de interfaces, gateways, VIP…' },
       { name: 'Respaldo' },
       { name: 'Administración' },
       { name: 'Jira' },

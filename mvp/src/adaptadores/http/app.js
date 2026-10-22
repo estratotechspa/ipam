@@ -16,6 +16,7 @@ const administracionRutas = require('./rutas/administracion');
 const jiraRutas = require('./rutas/jira');
 const reservasRutas = require('./rutas/reservas');
 const tokensRutas = require('./rutas/tokens');
+const direccionesRutas = require('./rutas/direcciones');
 const contratoRutas = require('./rutas/contrato');
 const metricasRutas = require('./rutas/metricas');
 const { construirOpenApi } = require('../../openapi');
@@ -110,6 +111,7 @@ function crearApp(deps) {
   jiraRutas.montar(app, dep);
   reservasRutas.montar(app, dep);
   tokensRutas.montar(app, dep);
+  direccionesRutas.montar(app, dep);
   contratoRutas.montar(app, dep);
 
   app.use(express.static(path.join(__dirname, '..', '..', '..', 'public')));

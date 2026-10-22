@@ -210,28 +210,102 @@ test('historial: la auditoría se puede filtrar por pool y por segmento', opts, 
 test('pools: crear, no duplicar ni solapar (mismo proveedor y ambiente), editar y eliminar solo si está vacío', opts, async () => {
   const H = { 'Content-Type': 'application/json', 'X-Requested-With': 'ipam' };
   const llamar = (metodo, ruta, cuerpo) => fetch(base + ruta, { method: metodo, headers: H, body: cuerpo ? JSON.stringify(cuerpo) : undefined });
-  const nuevo = { id: 'lan-prueba-prod', tipo: 'LAN', ambiente: 'prod', proveedor: 'On-prem', cidr: '10.250.0.0/16' };
+  const sufijo = Date.now().toString(36);
+  const id = `lan-prueba-${sufijo}`;
+  const nuevo = { id, tipo: 'LAN', ambiente: 'prod', proveedor: 'On-prem', cidr: '10.250.0.0/16' };
   assert.equal((await post('/api/v1/pools', nuevo)).status, 201);
   assert.equal((await (await post('/api/v1/pools', nuevo)).json()).error, 'pool_existe');
-  const solapa = await post('/api/v1/pools', { ...nuevo, id: 'lan-prueba-2', proveedor: 'on-prem', cidr: '10.250.128.0/17' });
+  const solapa = await post('/api/v1/pools', { ...nuevo, id: `lan-prueba-2-${sufijo}`, proveedor: 'on-prem', cidr: '10.250.128.0/17' });
   assert.deepEqual([solapa.status, (await solapa.json()).error], [409, 'pool_solapado']);
   // Otro ambiente: el mismo rango sí se permite.
-  assert.equal((await post('/api/v1/pools', { ...nuevo, id: 'lan-prueba-dev', ambiente: 'dev' })).status, 201);
+  assert.equal((await post('/api/v1/pools', { ...nuevo, id: `lan-prueba-dev-${sufijo}`, ambiente: 'dev' })).status, 201);
   assert.equal((await post('/api/v1/pools', { ...nuevo, id: 'mal', cidr: '10.250.0.0/31' })).status, 400);
 
-  const e = await llamar('PATCH', '/api/v1/pools/lan-prueba-prod', { tipo: 'LAN sucursal', proveedor: 'On-prem' });
+  const e = await llamar('PATCH', `/api/v1/pools/${id}`, { tipo: 'LAN sucursal', proveedor: 'On-prem' });
   assert.equal((await e.json()).tipo, 'LAN sucursal');
   assert.equal((await llamar('PATCH', '/api/v1/pools/no-existe', { tipo: 'x', proveedor: 'y' })).status, 404);
 
-  const a = await (await post('/api/v1/solicitudes', { pool: 'lan-prueba-prod', vpc: 'sucursal-1', mascara: 24 })).json();
-  const enUso = await llamar('DELETE', '/api/v1/pools/lan-prueba-prod');
+  const a = await (await post('/api/v1/solicitudes', { pool: id, vpc: 'sucursal-1', mascara: 24 })).json();
+  const enUso = await llamar('DELETE', `/api/v1/pools/${id}`);
   assert.deepEqual([enUso.status, (await enUso.json()).error], [409, 'pool_en_uso']);
   await llamar('DELETE', `/api/v1/asignaciones/${a.id}`, { motivo: 'prueba' });
-  assert.equal((await llamar('DELETE', '/api/v1/pools/lan-prueba-prod')).status, 200);
-  assert.equal((await llamar('DELETE', '/api/v1/pools/lan-prueba-dev')).status, 200);
-  const hist = await (await fetch(`${base}/api/v1/auditoria?pool=lan-prueba-prod`)).json();
+  assert.equal((await llamar('DELETE', `/api/v1/pools/${id}`)).status, 200);
+  assert.equal((await llamar('DELETE', `/api/v1/pools/lan-prueba-dev-${sufijo}`)).status, 200);
+  const hist = await (await fetch(`${base}/api/v1/auditoria?pool=${id}`)).json();
   assert.deepEqual(
     hist.map((f) => f.accion).filter((x) => x.endsWith('_pool')),
     ['eliminar_pool', 'editar_pool', 'crear_pool'],
   );
+});
+
+test('direcciones IP fijas: dentro del segmento, excepciones, repetidas, ambiguas, edición y liberar con IPs', opts, async () => {
+  const H = { 'Content-Type': 'application/json', 'X-Requested-With': 'ipam' };
+  const llamar = (metodo, ruta, cuerpo) => fetch(base + ruta, { method: metodo, headers: H, body: cuerpo ? JSON.stringify(cuerpo) : undefined });
+  const json = async (r) => ({ estado: r.status, ...(await r.json()) });
+  const a = await (await post('/api/v1/solicitudes', { pool: 'gke-nodos-qa', vpc: 'vpc-con-ips', mascara: 28 })).json();
+  const [red] = a.cidr.split('/');
+  const n = red.split('.').map(Number);
+  const ip1 = `${n[0]}.${n[1]}.${n[2]}.${n[3] + 1}`;
+
+  const gw = await json(await post('/api/v1/direcciones', { ip: ip1, dispositivo: 'rtr-test-01', interfaz: 'Gi0/1', rol: 'gateway' }));
+  assert.deepEqual([gw.estado, gw.segmento, gw.asignacion_id, gw.pool_id, gw.aviso], [201, a.cidr, String(a.id), 'gke-nodos-qa', null]);
+  assert.equal((await json(await post('/api/v1/direcciones', { ip: ip1 }))).error, 'ip_repetida');
+  const deRed = await json(await post('/api/v1/direcciones', { ip: red, dispositivo: 'sw-test', interfaz: 'Vlan10' }));
+  assert.match(deRed.aviso, /de red/);
+
+  // Fuera de un segmento: exige motivo. Dentro de un pool o fuera de todo pool.
+  assert.equal((await json(await post('/api/v1/direcciones', { ip: '10.20.250.250' }))).error, 'fuera_de_segmento');
+  const exc = await json(await post('/api/v1/direcciones', { ip: '10.20.250.250', dispositivo: 'fw-test', excepcion: 'IP de gestión heredada' }));
+  assert.deepEqual([exc.estado, exc.pool_id, exc.asignacion_id], [201, 'gke-nodos-qa', null]);
+  const publica = await json(
+    await post('/api/v1/direcciones', { ip: '203.0.113.10', dispositivo: 'fw-test', interfaz: 'ethernet1/1', excepcion: 'IP pública del firewall' }),
+  );
+  assert.deepEqual([publica.estado, publica.pool_id], [201, null]);
+
+  // El mismo rango privado en dos ambientes: hay que indicar el pool.
+  for (const [id, ambiente] of [
+    ['lan-ips-dev', 'dev'],
+    ['lan-ips-qa', 'qa'],
+  ])
+    await post('/api/v1/pools', { id, tipo: 'LAN', ambiente, proveedor: 'On-prem', cidr: '10.251.0.0/16' });
+  const amb = await json(await post('/api/v1/direcciones', { ip: '10.251.0.5', excepcion: 'prueba' }));
+  assert.deepEqual([amb.estado, amb.error, amb.opciones.length], [422, 'ip_ambigua', 2]);
+  const conPool = await json(await post('/api/v1/direcciones', { ip: '10.251.0.5', pool: 'lan-ips-qa', excepcion: 'prueba' }));
+  assert.equal(conPool.pool_id, 'lan-ips-qa');
+
+  // Editar: lo que no viene se conserva; una excepción no puede quedar sin motivo.
+  const ed = await json(await llamar('PATCH', `/api/v1/direcciones/${gw.id}`, { interfaz: 'Gi0/2' }));
+  assert.deepEqual([ed.interfaz, ed.dispositivo, ed.rol], ['Gi0/2', 'rtr-test-01', 'gateway']);
+  assert.equal((await json(await llamar('PATCH', `/api/v1/direcciones/${exc.id}`, { excepcion: null }))).error, 'falta_excepcion');
+
+  // Búsqueda e historial del segmento.
+  const lista = await (await fetch(`${base}/api/v1/direcciones?q=rtr-test`)).json();
+  assert.deepEqual(
+    lista.map((d) => d.ip),
+    [ip1],
+  );
+  assert.equal((await (await fetch(`${base}/api/v1/direcciones?asignacion=${a.id}`)).json()).length, 2);
+  const hist = await (await fetch(`${base}/api/v1/auditoria?pool=gke-nodos-qa&cidr=${encodeURIComponent(a.cidr)}`)).json();
+  assert.ok(hist.some((f) => f.accion === 'registrar_ip' && f.detalle.ip === ip1));
+
+  // No se libera un segmento con IPs registradas; tampoco se borra un pool con IPs.
+  assert.equal((await json(await llamar('DELETE', `/api/v1/asignaciones/${a.id}`, { motivo: 'x' }))).error, 'tiene_direcciones');
+  assert.equal((await json(await llamar('DELETE', '/api/v1/pools/lan-ips-qa'))).error, 'pool_en_uso');
+  for (const d of [gw, deRed, exc, publica, conPool]) assert.equal((await llamar('DELETE', `/api/v1/direcciones/${d.id}`)).status, 200);
+  assert.equal((await llamar('DELETE', `/api/v1/asignaciones/${a.id}`, { motivo: 'x' })).status, 200);
+  for (const id of ['lan-ips-dev', 'lan-ips-qa']) assert.equal((await llamar('DELETE', `/api/v1/pools/${id}`)).status, 200);
+});
+
+test('respaldo JSON: incluye las direcciones IP fijas y las restaura sin duplicar', opts, async () => {
+  const H = { 'Content-Type': 'application/json', 'X-Requested-With': 'ipam' };
+  const d = await (await post('/api/v1/direcciones', { ip: '203.0.113.77', dispositivo: 'fw-respaldo', excepcion: 'prueba de respaldo' })).json();
+  const respaldo = await (await fetch(`${base}/api/v1/exportar.json`)).json();
+  assert.ok(respaldo.direcciones.some((x) => x.ip === '203.0.113.77' && x.dispositivo === 'fw-respaldo'));
+  await fetch(`${base}/api/v1/direcciones/${d.id}`, { method: 'DELETE', headers: H });
+  const r = await (await post('/api/v1/importar', respaldo)).json();
+  assert.ok(r.direcciones >= 1);
+  const vuelta = (await (await fetch(`${base}/api/v1/direcciones?q=fw-respaldo`)).json())[0];
+  assert.deepEqual([vuelta.ip, vuelta.excepcion], ['203.0.113.77', 'prueba de respaldo']);
+  assert.equal((await (await post('/api/v1/importar', respaldo)).json()).direcciones, 0); // no duplica
+  await fetch(`${base}/api/v1/direcciones/${vuelta.id}`, { method: 'DELETE', headers: H });
 });

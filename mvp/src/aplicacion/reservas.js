@@ -313,6 +313,10 @@ function crearReservas({ repo, eventos, config, alConfirmar }) {
       const dec = R.decidirLiberacion(actual.estado);
       if (dec.accion === 'repetida') return ok({ reserva: actual, repetida: true, asignacionBorrada: false });
       let borrada = false;
+      if (dec.accion === 'borrar_asignacion' && actual.asignacion_id && tx.contarDireccionesDe && (await tx.contarDireccionesDe(actual.asignacion_id)))
+        return fallo('conflicto', 'tiene_direcciones', {
+          mensaje: 'La asignación de esta reserva tiene direcciones IP registradas. Elimínalas antes de liberarla.',
+        });
       if (dec.accion === 'borrar_asignacion' && actual.asignacion_id) borrada = await tx.borrarAsignacion(actual.asignacion_id);
       return ok({ reserva: await tx.marcarLiberada(id), repetida: false, asignacionBorrada: borrada });
     });
