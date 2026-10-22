@@ -61,8 +61,11 @@ test(
       const a1 = crearAlmacenPostgres(p1),
         a2 = crearAlmacenPostgres(p2);
       await Promise.all(Array.from({ length: 100 }, (_, i) => (i % 2 ? a1 : a2).incrementar(['compartida'])));
-      assert.equal((await a1.estado('compartida')).actual, 100);
-      assert.equal((await a2.estado('compartida')).actual, 100);
+      // Si la ráfaga cruza un cambio de minuto (reloj de la base), parte queda en la ventana «previa»: la suma debe seguir siendo 100.
+      for (const a of [a1, a2]) {
+        const e = await a.estado('compartida');
+        assert.equal(e.actual + e.previa, 100);
+      }
     } finally {
       await p1.end();
       await p2.end();
