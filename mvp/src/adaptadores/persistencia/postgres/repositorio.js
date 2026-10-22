@@ -36,6 +36,19 @@ function consultas(x) {
     async obtenerPool(id) {
       return (await q('select id, tipo, ambiente, proveedor, cidr::text from pools where id=$1', [id])).rows[0];
     },
+    /** Todos los pools (para analizar una importación). */
+    async todosLosPools() {
+      return (await q('select id, tipo, ambiente, proveedor, cidr::text from pools order by id')).rows;
+    },
+    /** Todo lo ocupado en cualquier pool: asignaciones y reservas vigentes. */
+    async todosOcupados() {
+      return (
+        await q(
+          `select pool_id, cidr::text, vpc from asignaciones
+           union all select pool_id, cidr::text, vpc from reservas where ${RESERVA_VIGENTE}`,
+        )
+      ).rows;
+    },
     async buscarPools({ ambiente, tipo }) {
       return (await q('select id, tipo, ambiente, proveedor, cidr::text from pools where ambiente=$1 and tipo=$2 order by id', [ambiente, tipo])).rows;
     },

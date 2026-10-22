@@ -47,6 +47,7 @@ input,select{width:100%;border:1px solid var(--line);border-radius:6px;padding:9
 .nav button:focus-visible,#yo button:focus-visible{outline-color:#fff}
 .tag.reservada{background:#0b5cad}.tag.confirmada{background:#1d7a46}.tag.liberada{background:#5b6577}.tag.expirada{background:#a33a3a}
 .tag.activo{background:#1d7a46}.tag.vencido{background:#a33a3a}.tag.revocado{background:#5b6577}.tag.pronto{background:#8a4b00}
+.tag.imp-ok{background:#1d7a46}.tag.imp-omitida{background:#5b6577}.tag.imp-aviso{background:#8a4b00}.tag.imp-error{background:#a33a3a}
 .filtros{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin:0 0 14px}
 .filtros label{margin:0;min-width:160px}
 .filtros input,.filtros select{margin-top:4px}

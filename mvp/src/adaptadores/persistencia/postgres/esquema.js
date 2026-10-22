@@ -1,7 +1,7 @@
 'use strict';
 // Versión del esquema que esta versión de la app necesita. Debe coincidir con la última fila que inserta db/schema.sql
 // (una prueba lo comprueba). /readyz la usa: la app NO modifica el esquema al arrancar.
-const VERSION_MINIMA = 7;
+const VERSION_MINIMA = 8;
 
 /** @param {{query: Function}} db */
 async function versionActual(db) {

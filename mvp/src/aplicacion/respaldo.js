@@ -4,7 +4,7 @@ const { parse } = require('../dominio/cidr');
 const { ok, fallo, ConflictoDeDatos } = require('./resultado');
 
 const AMBIENTES = ['dev', 'qa', 'pre', 'prod'];
-const ORIGENES_IMPORTABLES = ['panel', 'jira', 'semilla', 'agente'];
+const ORIGENES_IMPORTABLES = ['panel', 'jira', 'semilla', 'agente', 'importado'];
 
 /**
  * Respaldo lógico completo y su restauración (portabilidad hacia otra infraestructura).

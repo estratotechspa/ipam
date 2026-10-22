@@ -5,10 +5,11 @@ const { requiere } = require('../../auth/acceso');
 const { enviarFallo, error } = require('../errores');
 const { construirLibro } = require('../excel');
 const marca = require('../marca');
+const { leerSegmentos } = require('../archivo-segmentos');
 
 /** @param {import('express').Express} app @param {{casos: any, audita: Function}} deps */
 function montar(app, { casos, audita, validacion }) {
-  const { admin, asignaciones, respaldo } = casos;
+  const { admin, asignaciones, respaldo, importacion } = casos;
 
   api(app, 'get', '/pools', async (req, res) => {
     const { ambiente, tipo } = req.query;
@@ -50,6 +51,35 @@ function montar(app, { casos, audita, validacion }) {
   });
 
   // Exporta a Excel todos los segmentos asignados (con los datos de su pool) y la lista de pools.
+  // Importación masiva de segmentos que ya existen (Excel/CSV). Solo admin. «simular» no escribe nada; «aplicar» importa lo válido
+  // (y lo que el admin aprobó con `aprobar`: números de fila que se solapan con OTRO pool). Todo o nada.
+  const leerArchivo = async (req) => {
+    const b = req.body || {};
+    const buffer = Buffer.from(String(b.contenido_base64 || ''), 'base64');
+    if (!buffer.length) return { ok: false, tipo: 'validacion', error: 'archivo_vacio', mensaje: 'No llegó ningún archivo.' };
+    const l = await leerSegmentos({ formato: b.formato, buffer });
+    return l.ok ? l : { ...l, tipo: 'validacion' };
+  };
+  const defectosDe = (b) => ({ proveedor: b.proveedor, ambiente: b.ambiente, tipo: b.tipo });
+  api(app, 'post', '/importaciones/simular', requiere('admin'), validacion.cuerpo('ImportacionSolicitud'), async (req, res) => {
+    const l = await leerArchivo(req);
+    if (!l.ok) return enviarFallo(res, l, { legado: false });
+    const r = await importacion.simular(l.filas, defectosDe(req.body));
+    if (!r.ok) return enviarFallo(res, r, { legado: false });
+    const { ok: _ok, ...cuerpo } = r;
+    res.json({ ...cuerpo, columnas: l.columnas, columnas_ignoradas: l.ignoradas });
+  });
+  api(app, 'post', '/importaciones/aplicar', requiere('admin'), validacion.cuerpo('ImportacionSolicitud'), async (req, res) => {
+    const l = await leerArchivo(req);
+    if (!l.ok) return enviarFallo(res, l, { legado: false });
+    const aprobar = Array.isArray(req.body.aprobar) ? req.body.aprobar.map(Number).filter(Number.isInteger) : [];
+    const r = await importacion.aplicar(req.actor, l.filas, defectosDe(req.body), aprobar);
+    if (!r.ok) return enviarFallo(res, r, { legado: false });
+    const { ok: _ok, ...cuerpo } = r;
+    await audita(req, 'importar_segmentos', { ...cuerpo, archivo: String(req.body.nombre || '').slice(0, 120) });
+    res.json(cuerpo);
+  });
+
   api(app, 'get', '/exportar.xlsx', requiere('lector'), async (req, res) => {
     const datos = await admin.asignacionesParaExcel();
     const wb = construirLibro(datos, marca.config().nombre);

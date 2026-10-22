@@ -47,11 +47,22 @@ Debajo, una fila por pool: su **tipo** (Nodos, Pods, Servicios), **ambiente**, *
 **Filtro por ambiente y proveedor:** arriba de la tabla hay dos listas, **Ambiente** (`dev`, `qa`, `pre`, `prod`) y **Proveedor** (p. ej. GCP). Al elegir una, los números y la tabla muestran solo esos pools. El filtro **se conserva** al pasar a Asignaciones y Reservas, que también quedan acotadas; **Limpiar filtro** lo quita.
 
 ### Asignaciones — «lo ya entregado»
-La lista oficial de segmentos definitivos: **ID** (`ASG-000123`, único por asignación: el mismo rango, si se libera y se vuelve a asignar, tendrá otro ID), **segmento**, **pool**, **proyecto/VPC**, cuántas **direcciones** son, quién lo **solicitó**, el **origen** (`panel`, `jira`, `agente`, `semilla`), el **ticket** y la **fecha**.
+La lista oficial de segmentos definitivos: **ID** (`ASG-000123`, único por asignación: el mismo rango, si se libera y se vuelve a asignar, tendrá otro ID), **segmento**, **pool**, **proyecto/VPC**, cuántas **direcciones** son, quién lo **solicitó**, el **origen** (`panel`, `jira`, `agente`, `semilla`, `importado`), el **ticket** y la **fecha**.
 - **Buscar** por ID, segmento, proyecto, ticket o quién lo pidió (cuadro «Buscar», junto al filtro).
 - **Exportar a Excel** para auditorías o reportes (incluye el ID).
 - **Respaldo JSON** (solo admin): copia lógica completa para llevar el IPAM a otra infraestructura ([MIGRACION](ops/MIGRACION.md)).
 - **Liberar** (solo admin): devuelve el segmento al pool. Pide el **motivo**, que queda en la auditoría junto con quién lo hizo. Hazlo solo cuando la red realmente se eliminó.
+
+### Importar — «cargar los segmentos que ya existen» (solo admin)
+Para partir con el inventario real (una planilla Excel o un CSV) en vez de escribir segmento por segmento. **Primero se simula y nada se escribe hasta que confirmas.**
+1. Prepara el archivo (`.xlsx` o `.csv`, separado por coma, punto y coma o tabulador). Basta una columna **cidr**; las demás son opcionales: **proyecto/VPC**, **proveedor**, **ambiente**, **tipo**, **ticket**, **descripción**. Se aceptan encabezados equivalentes (`prefijo`, `subred`, `red`, `project`, `nube`, `entorno`…) y las columnas desconocidas se ignoran. Hay una plantilla en la misma pestaña (`plantilla-importacion.csv`). Máximo 5.000 filas por archivo.
+2. Si el archivo no trae proveedor o ambiente, elígelos como **valor por defecto** (se aplican a las filas que no lo traen).
+3. Pulsa **Simular importación**. Cada fila queda en uno de estos estados:
+   - **Listo para importar**: entra en el pool más pequeño del mismo proveedor y ambiente que lo contiene; si no hay ninguno, el IPAM propone **crear un pool** automático (`imp-<proveedor>-<ambiente>-10`, `-172` o `-192` según la red privada).
+   - **Ya registrado**: ese mismo segmento ya está en el mismo pool; se omite (importar dos veces el mismo archivo no duplica).
+   - **Solapa con otro pool**: choca con un segmento de **otro** pool. No se importa salvo que marques **Aprobar** en esa fila.
+   - **Choca dentro del mismo pool** e **Inválida** (CIDR mal escrito o desalineado, ambiente inválido…): no se pueden importar. Si el CIDR está desalineado, el detalle sugiere la red correcta.
+4. Pulsa **Importar N segmentos**. Es **todo o nada**: si la base rechaza algo, no se importa ninguno. Los segmentos quedan con origen `importado` y la importación queda en la **Auditoría**.
 
 ### Asignar directo — «entrégalo ya, definitivo» (solo admin)
 Formulario para entregar un segmento **de inmediato y de forma definitiva**, **sin reserva y sin aprobación de otra persona**. Queda en la auditoría a nombre del admin que lo hizo.

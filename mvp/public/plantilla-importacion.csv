@@ -1,0 +1,4 @@
+cidr,proyecto,proveedor,ambiente,tipo,ticket,descripcion
+10.210.0.0/24,vpc-ejemplo-a,GCP,dev,Nodos,DEMO-1,Subred de nodos de ejemplo (FICTICIA)
+10.210.16.0/22,vpc-ejemplo-a,GCP,dev,Pods,DEMO-1,Rango de pods de ejemplo (FICTICIO)
+192.168.50.0/24,oficina-central,On-prem,prod,LAN,DEMO-2,LAN de una oficina de ejemplo (FICTICIA)

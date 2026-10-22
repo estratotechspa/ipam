@@ -8,6 +8,7 @@ const { crearAdministracion } = require('./administracion');
 const { crearBarrido } = require('./barrido');
 const { crearReservas } = require('./reservas');
 const { crearTokens } = require('./tokens');
+const { crearImportacion } = require('./importacion');
 
 /** Une todos los casos de uso con sus puertos. @param {any} deps */
 function crearCasos({ repo, eventos, auditor, tickets, reloj, config, instancia, generadorToken, contrasenas }) {
@@ -21,6 +22,7 @@ function crearCasos({ repo, eventos, auditor, tickets, reloj, config, instancia,
     jira,
     admin: crearAdministracion({ repo, rolesUsuario: ROLES_USUARIO, contrasenas, cuentasLocales: () => config.auth.cuentasLocales }),
     reservas,
+    importacion: crearImportacion({ repo, eventos }),
     tokens: crearTokens({ repo, generador: generadorToken, config }),
     barrido: crearBarrido({ repo, eventos, intervaloMs: config.reservas.barredorIntervaloSeg * 1000, instancia }),
   };

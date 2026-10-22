@@ -22,7 +22,14 @@ const { construirOpenApi } = require('../../openapi');
 const { crearValidador } = require('./validacion');
 const { crearMiddlewareLimite } = require('./middleware/limite');
 
-const RUTAS_IMPORTAR = new Set(['/api/importar', '/api/v1/importar']);
+const RUTAS_IMPORTAR = new Set([
+  '/api/importar',
+  '/api/v1/importar',
+  '/api/importaciones/simular',
+  '/api/v1/importaciones/simular',
+  '/api/importaciones/aplicar',
+  '/api/v1/importaciones/aplicar',
+]);
 
 /**
  * @param {{config: any, log: any, db: any, repo: any, casos: any, auditar: Function, publicador: any, tickets: any,

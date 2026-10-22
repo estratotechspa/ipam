@@ -221,7 +221,7 @@ const schemas = {
       vpc: { type: 'string' },
       solicitante: { type: 'string' },
       ticket: { type: 'string' },
-      origen: { enum: ['panel', 'jira', 'semilla', 'agente'] },
+      origen: { enum: ['panel', 'jira', 'semilla', 'agente', 'importado'] },
       creado_en: { type: 'string', format: 'date-time' },
     },
     example: {
@@ -490,6 +490,24 @@ const schemas = {
       creado_por: { type: ['string', 'null'] },
     },
     example: { email: 'ana@empresa.example', nombre: 'Ana', rol: 'solicitante', activo: true, local: false, debe_cambiar_clave: false, ultimo_acceso: AHORA },
+  },
+  ImportacionSolicitud: {
+    type: 'object',
+    required: ['formato', 'contenido_base64'],
+    properties: {
+      nombre: { type: 'string', description: 'Nombre del archivo (solo para la auditoría).' },
+      formato: { enum: ['xlsx', 'csv'] },
+      contenido_base64: { type: 'string', description: 'El archivo codificado en base64.' },
+      proveedor: { type: 'string', description: 'Proveedor por defecto para las filas que no lo traen (p. ej. GCP u On-prem).' },
+      ambiente: { enum: ['dev', 'qa', 'pre', 'prod'], description: 'Ambiente por defecto para las filas que no lo traen.' },
+      tipo: { type: 'string', description: 'Tipo por defecto (por omisión «Importado»).' },
+      aprobar: {
+        type: 'array',
+        items: { type: 'integer' },
+        description: 'Solo en «aplicar»: números de fila (como se ven en el archivo) que se solapan con OTRO pool y un admin decidió aceptar.',
+      },
+    },
+    example: { nombre: 'segmentos.xlsx', formato: 'xlsx', contenido_base64: 'UEsDBBQ…', proveedor: 'GCP', ambiente: 'prod' },
   },
   UsuarioCrear: {
     type: 'object',
@@ -1133,6 +1151,31 @@ function rutasDeAdministracion(p) {
     post: accion(
       'Restablece la clave de una cuenta local (solo admin)',
       'Devuelve una clave temporal **una sola vez** (`clave_temporal`) y obliga a cambiarla. Solo para cuentas locales.',
+    ),
+  };
+  const importacion = (resumen, descripcion, ejemplo) =>
+    op({
+      tag: 'Administración',
+      summary: resumen,
+      description: descripcion,
+      body: cuerpo('ImportacionSolicitud', schemas.ImportacionSolicitud.example),
+      ok: { 200: respuesta('Resultado.', { type: 'object' }, ejemplo) },
+      extra: { ...e400, ...e403, 409: respuesta('La base de datos rechazó la importación (no se importó nada).', 'Error') },
+    });
+  p['/api/v1/importaciones/simular'] = {
+    'x-alias-legado': '/api/importaciones/simular',
+    post: importacion(
+      'Simula la importación de segmentos desde Excel o CSV (solo admin)',
+      'Lee el archivo y dice qué pasaría con cada fila **sin escribir nada**. Estados: `ok`, `ya_existe` (se omite), `solapa_otro_pool` (un admin debe aprobarlo o rechazarlo), `choca_mismo_pool` (no importable) e `invalida`. Si no hay pools que contengan los segmentos, propone crear uno por proveedor, ambiente y familia de red (`pools_a_crear`).',
+      { total: 2, resumen: { ok: 2, ya_existe: 0, solapa_otro_pool: 0, choca_mismo_pool: 0, invalida: 0 }, pools_a_crear: [], filas: [] },
+    ),
+  };
+  p['/api/v1/importaciones/aplicar'] = {
+    'x-alias-legado': '/api/importaciones/aplicar',
+    post: importacion(
+      'Importa los segmentos válidos (solo admin)',
+      'Importa las filas `ok` y las `solapa_otro_pool` cuyo número venga en `aprobar`. **Todo o nada**; crea los pools automáticos que hagan falta; origen `importado`; queda en la auditoría. Importar dos veces el mismo archivo no duplica (`ya_existe`).',
+      { importadas: 2, pools_creados: 1, omitidas: 0, rechazadas_por_solapamiento: 0, no_importables: 0, aprobadas: 0 },
     ),
   };
   p['/api/v1/yo/clave'] = {

@@ -225,6 +225,20 @@ insert into esquema_version (version, descripcion) values (7, 'cuentas de usuari
   on conflict (version) do nothing;
 
 -- ============================================================================
+-- Origen «importado»: segmentos que ya existían (Excel/CSV) y se cargaron con la importación masiva.
+-- ============================================================================
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conrelid = 'asignaciones'::regclass and contype = 'c' and pg_get_constraintdef(oid) like '%''importado''%') then
+    alter table asignaciones drop constraint if exists asignaciones_origen_check;
+    alter table asignaciones add constraint asignaciones_origen_check check (origen in ('panel','jira','semilla','agente','importado'));
+  end if;
+end $$;
+
+insert into esquema_version (version, descripcion) values (8, 'origen importado para la importacion masiva de segmentos')
+  on conflict (version) do nothing;
+
+-- ============================================================================
 -- Permisos del rol de la aplicación (solo si existe `ipam_app`; ver db/roles.sql)
 -- ============================================================================
 -- Se ejecuta con el rol migrador (dueño de las tablas) y se repite en cada migración. Sin el rol, no hace nada (desarrollo local).
