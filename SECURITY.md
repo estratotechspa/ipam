@@ -5,7 +5,7 @@
 
 1. **GitHub:** pestaña *Security* → *Report a vulnerability* (reporte privado), o
 2. **GitLab:** crea un issue marcado como **confidencial**, o
-3. Por correo a **[COMPLETAR: correo del equipo de seguridad]**.
+3. Por correo a **ext_carlos.quiroz@cajalosandes.cl**.
 
 Incluye: qué versión, cómo reproducirlo, qué impacto crees que tiene y, si puedes, una prueba mínima. **No incluyas datos reales ni credenciales.**
 
