@@ -977,6 +977,20 @@ function rutasDeSistema(p) {
       seguridad: publico,
     }),
   };
+  p['/auth/salir'] = {
+    get: op({
+      tag: 'Sesión',
+      summary: 'Cierra la sesión en modo Basic (pide al navegador que olvide las credenciales)',
+      description:
+        'Basic Auth no tiene sesión en el servidor. Esta ruta responde siempre **401** con `WWW-Authenticate: Basic realm="IPAM"`; la interfaz la llama con ' +
+        'credenciales falsas para que Chromium y Firefox reemplacen las guardadas. Es pública y no cuenta como intento fallido. Sin modo Basic redirige a `/`.',
+      ok: {
+        401: { description: 'Página «Sesión cerrada» con el desafío de Basic.', content: { 'text/html': { schema: { type: 'string' } } } },
+        302: { description: 'Sin modo Basic: vuelve a la aplicación.' },
+      },
+      seguridad: publico,
+    }),
+  };
   p['/auth/sesion-cerrada'] = {
     get: op({
       tag: 'Sesión',

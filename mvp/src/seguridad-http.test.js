@@ -170,3 +170,13 @@ test('Helm: los límites de peticiones y la cuota por token son configurables co
   assert.match(otro, /RATE_LIMIT_POR_MINUTO: "60"/);
   assert.match(otro, /CUOTA_RESERVAS_POR_TOKEN: "5"/);
 });
+
+test('Helm: auth.local activa AUTH_LOCAL (apagado por defecto)', conHelm, () => {
+  const render = (...extra) => spawnSync('helm', ['template', 'ipam', CHART, '--set', 'secrets.appUser=admin', ...extra], { encoding: 'utf8' });
+  const apagado = render();
+  assert.equal(apagado.status, 0, apagado.stderr);
+  assert.match(apagado.stdout, /AUTH_LOCAL: "false"/);
+  const encendido = render('--set', 'auth.local=true');
+  assert.equal(encendido.status, 0, encendido.stderr);
+  assert.match(encendido.stdout, /AUTH_LOCAL: "true"/);
+});

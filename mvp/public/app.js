@@ -503,8 +503,25 @@ function dialogoCambioClave({ obligatorio = false } = {}) {
 }
 
 // ---- Pestaña Usuarios (admin). SSO: pre-registro por correo y baja. Cuentas locales (AUTH_LOCAL): clave temporal de un solo uso. ----
+/** Panel de la pestaña Usuarios cuando el modo de acceso no permite crear cuentas (Basic sin AUTH_LOCAL, o acceso abierto). */
+function usuariosSinCuentas(raiz) {
+  const quien =
+    YO.modo === 'none'
+      ? 'El acceso está <b>abierto</b>: cualquiera que llegue al servicio entra como administrador.'
+      : `Hoy se entra con el usuario y la clave únicos del administrador de emergencia (<b>${esc(YO.usuario)}</b>). Su clave no se cambia desde esta pantalla: vive en la configuración (<code>APP_PASS</code>, mejor como hash <code>scrypt$…</code>).`;
+  raiz.innerHTML = `<h2>Usuarios</h2><div class="card" style="max-width:820px">
+    <p><b>Las cuentas de usuario no están habilitadas en este modo de acceso.</b></p><p>${quien}</p>
+    <p>Para tener varias personas con su rol (lector, solicitante o admin) hay dos caminos:</p>
+    <ul>
+      <li><b>Cuentas locales</b> (pruebas y POC): activa <code>AUTH_LOCAL=true</code> (Helm: <code>auth.local=true</code>) con Basic (<code>APP_USER</code> y <code>APP_PASS</code>) y reinicia.
+        Aquí podrás crear cuentas con una clave temporal, desactivarlas, eliminarlas y restablecer su clave; cada persona cambia la suya al entrar y tiene su botón «Mi contraseña».</li>
+      <li><b>SSO</b> (recomendado para uso real): configura OpenID Connect (Google Workspace, Entra, Okta…) y pre-registra aquí a las personas por correo.</li>
+    </ul><p class="muted">Se cambia en la configuración del servicio (variables de entorno o los values de Helm), no desde la interfaz.</p></div>`;
+}
+
 async function renderUsuarios() {
   const raiz = $('usuarios');
+  if (YO.modo !== 'oidc' && !YO.cuentas_locales) return usuariosSinCuentas(raiz);
   try {
     const usuarios = await get('/api/v1/usuarios');
     const local = YO.modo !== 'oidc'; // en modo SSO se pre-registra; en modo Basic con AUTH_LOCAL se crean cuentas locales
@@ -1055,11 +1072,11 @@ function formularioNuevoPool(recargar) {
   return h(
     'details',
     { class: 'card', style: 'margin:0 0 14px' },
-    h('summary', { style: 'cursor:pointer;font-weight:600' }, '＋ Nuevo pool (bloque base)'),
+    h('summary', { class: 'btn', style: 'display:inline-block;cursor:pointer' }, '＋ Nuevo pool'),
     h(
       'p',
       { class: 'muted', style: 'max-width:760px' },
-      'CIDR alineado de /8 a /30. No puede solaparse con otro pool del mismo proveedor y ambiente; en otro ambiente o proveedor el mismo rango sí se permite.',
+      'Crea un bloque base en el ambiente que corresponda (dev, qa, pre o prod). CIDR alineado de /8 a /30. No puede solaparse con otro pool del mismo proveedor y ambiente; en otro ambiente o proveedor el mismo rango sí se permite.',
     ),
     h(
       'form',
@@ -2033,6 +2050,15 @@ async function marca() {
     $('pie').textContent = m.pie || '';
   } catch (e) {}
 }
+/** Llama a /auth/salir con credenciales falsas: el 401 hace que el navegador reemplace las que tenía guardadas. */
+function olvidarCredencialesBasic() {
+  return new Promise((listo) => {
+    const x = new XMLHttpRequest();
+    x.open('GET', '/auth/salir', true, 'salir', 'salir');
+    x.onloadend = () => listo();
+    x.send();
+  });
+}
 async function iniciar() {
   marca();
   const r = await fetch('/api/me', { headers: CAB });
@@ -2043,19 +2069,25 @@ async function iniciar() {
   YO = await r.json();
   const nav = $('nav');
   nav.querySelector('[data-t="tokens"]').hidden = !puede('admin');
-  nav.querySelector('[data-t="usuarios"]').hidden = !(puede('admin') && (YO.modo === 'oidc' || YO.cuentas_locales));
+  nav.querySelector('[data-t="usuarios"]').hidden = !puede('admin'); // sin cuentas habilitadas explica cómo habilitarlas
   $('yo').innerHTML =
     YO.modo === 'oidc'
       ? `${esc(YO.nombre)} · <b>${esc(YO.rol)}</b> <button id="salir">Salir</button>`
       : YO.modo === 'none'
         ? '<span class="tag qa">Sin autenticación (demo)</span>'
-        : `${esc(YO.usuario)}`;
+        : `${esc(YO.usuario)} · <b>${esc(YO.rol)}</b> <button type="button" id="salir">Salir</button>`;
   if (YO.local) {
     $('yo').append(' ', h('button', { id: 'mi-clave', type: 'button', onclick: () => dialogoCambioClave() }, 'Mi contraseña'));
   }
   const salir = $('salir');
   if (salir)
     salir.onclick = async () => {
+      if (YO.modo === 'basic') {
+        // Basic Auth no tiene sesión: se le pide al navegador que olvide las credenciales (ver src/adaptadores/auth/basic.js).
+        await olvidarCredencialesBasic();
+        location.href = '/auth/sesion-cerrada';
+        return;
+      }
       const x = await api('/auth/logout', { body: {} });
       location.href = (x.data && x.data.redirect) || '/';
     };

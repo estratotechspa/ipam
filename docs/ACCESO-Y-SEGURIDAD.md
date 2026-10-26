@@ -35,6 +35,9 @@ Los usuarios pueden ser `lector`, `solicitante` o `admin`; los tokens, `lector` 
   - `APP_USER`/`APP_PASS` es el administrador de emergencia: nunca queda fuera nadie aunque se borren las cuentas.
   - **Límites:** no hay MFA, ni recuperación de clave por correo, ni bloqueo por cuenta (solo por IP). Es para POC; para uso real usa SSO.
 - Nadie puede desactivarse ni eliminarse a sí mismo; todo queda en la auditoría sin claves.
+- **La pestaña Usuarios la ve todo admin.** Con SSO o con `AUTH_LOCAL=true` trae las cuentas; sin ellas (Basic sin `AUTH_LOCAL`, o acceso abierto) explica cómo habilitarlas en vez de ocultarse. En Helm: `auth.local=true`.
+- **Cambiar la clave:** cada cuenta local tiene su botón «Mi contraseña». El administrador de emergencia (`APP_USER`/`APP_PASS`) no la cambia desde la interfaz: vive en el Secret/variable (usa un hash `scrypt$…`, ver `npm run hash-password`). Con `AUTH_LOCAL=true` lo habitual es crear cuentas `admin` propias y dejar el de emergencia guardado.
+- **Cerrar sesión:** con SSO, «Salir» borra la cookie. Con Basic no hay sesión que cerrar (el navegador guarda las credenciales): «Salir» llama a `/auth/salir`, que responde 401, y con credenciales falsas hace que Chromium y Firefox **olviden** las guardadas, y lleva a la página «Sesión cerrada». Es un recurso de mejor esfuerzo (Safari puede seguir recordándolas): en un equipo compartido, cierra además la ventana del navegador.
 
 ## 3 · Tokens de servicio
 - Formato `ipam_` + 43 caracteres (256 bits aleatorios). Se muestra **una sola vez**; en la base solo vive su hash SHA-256.

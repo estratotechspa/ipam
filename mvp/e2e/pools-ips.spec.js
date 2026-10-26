@@ -95,3 +95,14 @@ test('la página de la API muestra el contrato navegable, sin errores de segurid
   await expect(page.getByRole('heading', { name: /Reservas/ }).first()).toBeVisible();
   expect(errores).toEqual([]);
 });
+
+test('pools: «Nuevo pool» es un botón visible y el formulario permite elegir el ambiente', async ({ page }) => {
+  await page.goto('/');
+  const boton = page.locator('#pools summary.btn', { hasText: 'Nuevo pool' });
+  await expect(boton).toBeVisible();
+  await expect(page.locator('#np-ambiente')).toBeHidden();
+  await boton.click();
+  await expect(page.locator('#np-ambiente')).toBeVisible();
+  await expect(page.locator('#np-ambiente option')).toHaveText(['Elige…', 'dev', 'qa', 'pre', 'prod']);
+  await expect(page.locator('#pools details', { hasText: 'Nuevo pool' })).toContainText('en el ambiente que corresponda');
+});
