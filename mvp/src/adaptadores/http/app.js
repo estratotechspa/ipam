@@ -7,6 +7,7 @@ const helmet = require('helmet');
 const { crearSolicitud } = require('./middleware/solicitud');
 const { crearAcceso } = require('../auth/acceso');
 const { montarOidc } = require('../auth/oidc');
+const { montarBasic } = require('../auth/basic');
 const { manejadorDeErrores, noEncontrada } = require('./errores');
 const { ruta } = require('./registro');
 const marca = require('./marca');
@@ -85,6 +86,7 @@ function crearApp(deps) {
   metricasRutas.montar(app, { metricas });
   marca.montar(app);
   montarOidc(app, { repo, auditar, ruta });
+  montarBasic(app, { ruta });
 
   app.use(
     crearAcceso({

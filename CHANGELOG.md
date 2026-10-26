@@ -2,6 +2,16 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y versionado semántico.
 
+## [Sin publicar]
+### Agregado
+- **Cerrar sesión en modo Basic:** el botón «Salir» ahora también aparece con usuario y contraseña. Llama a `/auth/salir` (401 con el desafío de Basic) con credenciales falsas para que Chromium y Firefox olviden las guardadas, y lleva a «Sesión cerrada». Es de mejor esfuerzo (Safari puede recordarlas).
+- Helm: `auth.local` (variable `AUTH_LOCAL`) para habilitar las cuentas locales; también en `docker-compose.yml`.
+
+### Cambiado
+- La pestaña **Usuarios** la ve todo admin; sin cuentas habilitadas (Basic sin `AUTH_LOCAL`, o acceso abierto) explica cómo habilitarlas en vez de ocultarse.
+- **«＋ Nuevo pool»** es un botón visible y el texto indica que el pool se crea en el ambiente que corresponda (dev, qa, pre o prod).
+- La barra superior muestra usuario y rol también en modo Basic.
+
 ## [0.3.0] - 2026-10-21
 ### Agregado
 - **Disponibilidad por máscara:** `GET /pools/{id}/disponibilidad` y un panel en Asignar directo y Nueva reserva (direcciones por bloque, utilizables y bloques libres; el selector muestra «/24 · 15 libres»). README en la raíz y análisis de un IPAM comercial (`docs/ANALISIS-IPAM-COMERCIAL.md`).

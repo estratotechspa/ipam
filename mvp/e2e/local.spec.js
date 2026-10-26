@@ -69,3 +69,26 @@ test('admin crea una cuenta local; la persona cambia la clave temporal y entra c
   await expect(page.locator('tr', { hasText: usuario })).toHaveCount(0);
   void root;
 });
+
+test('Basic: muestra usuario, rol y «Salir»; Salir llama a /auth/salir (401) y lleva a «Sesión cerrada»', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#yo')).toContainText('root');
+  await expect(page.locator('#yo')).toContainText('admin');
+  const salir = page.getByRole('button', { name: 'Salir', exact: true });
+  await expect(salir).toBeVisible();
+  const [respuesta] = await Promise.all([page.waitForResponse((r) => r.url().endsWith('/auth/salir')), salir.click()]);
+  // El 401 con el desafío de Basic es lo que hace que el navegador reemplace las credenciales guardadas. Que el navegador de
+  // verdad las olvide no se puede comprobar aquí (Playwright maneja las credenciales por su cuenta): se verifica a mano.
+  expect(respuesta.status()).toBe(401);
+  expect(respuesta.headers()['www-authenticate']).toMatch(/^Basic realm="IPAM"/);
+  await expect(page).toHaveURL(/\/auth\/sesion-cerrada$/);
+  await expect(page.getByRole('heading', { name: 'Sesión cerrada' })).toBeVisible();
+});
+
+test('Basic con cuentas locales: «Mi contraseña» solo en cuentas locales; el administrador de emergencia ve «Salir» pero no «Mi contraseña»', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: 'Salir', exact: true })).toBeVisible();
+  await expect(page.locator('#mi-clave')).toHaveCount(0);
+});

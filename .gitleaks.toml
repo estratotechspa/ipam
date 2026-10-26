@@ -1,18 +1,10 @@
-# gitleaks: detección de secretos (corre en CI y en el pre-commit). Extiende las reglas por defecto.
-title = "IPAM"
-
+# Configuración de Gitleaks (la lee solo al estar en la raíz del repositorio).
+# Hereda las reglas por defecto y añade una lista de excepciones.
 [extend]
 useDefault = true
 
 [allowlist]
-description = "Valores de relleno de ejemplos, documentación y pruebas: no son secretos reales"
-regexes = [
-  '''ipam_AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_ABCDE''',  # token de ejemplo del contrato OpenAPI
-]
-paths = [
-  '''mvp/src/.*\.test\.js''',          # las pruebas usan claves y tokens inventados
-  '''mvp/e2e/.*''',
-  '''mvp/src/pruebas/.*''',
-  '''.*\.env\.example''',
-  '''docs/.*''',                        # la documentación usa valores de relleno
-]
+description = "Valores de ejemplo de la documentación OpenAPI (no son secretos)"
+# Los ejemplos de tokens de servicio de src/openapi.js (ramas feat/ipam-*) siempre empiezan con «ipam_AbCd».
+# Un token real tiene otro prefijo aleatorio, así que esta excepción no oculta secretos de verdad.
+regexes = ['''ipam_AbCd''']

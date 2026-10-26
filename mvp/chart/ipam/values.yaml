@@ -68,6 +68,10 @@ auth:
   # SOLO PARA DEMOS: permite entrar sin credenciales (todos como admin). Por defecto NO: sin OIDC, Basic (secrets.appUser) ni
   # existingSecret, el chart se niega a renderizar, y la app se niega a arrancar en producción sin autenticación.
   allowAnonymous: false
+  # Cuentas locales con contraseña (solo con Basic: secrets.appUser/appPass, sin OIDC). El admin crea, desactiva y restablece
+  # cuentas desde la pestaña Usuarios; cada persona cambia su clave temporal. Pensado para pruebas y POC; para uso real, OIDC.
+  # secrets.appUser/appPass sigue siendo el administrador de emergencia (su clave vive en el Secret).
+  local: false
   oidc:
     issuer: ""                  # Google: https://accounts.google.com · Entra: https://login.microsoftonline.com/<tenant>/v2.0
     clientId: ""

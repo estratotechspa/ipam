@@ -176,3 +176,36 @@ test('la auditoría registra las altas y bajas sin guardar ninguna clave, y las 
   for (const t of temporales) assert.ok(!logs.includes(t), 'una clave temporal se coló en los logs');
   assert.ok(!logs.includes('una-clave-larga-123'), 'una clave elegida por el usuario se coló en los logs');
 });
+
+test('Basic · /auth/salir responde 401 con el desafío para que el navegador olvide las credenciales; en otros modos redirige', opts, async () => {
+  // Es pública (no pide credenciales) y siempre 401 en modo Basic.
+  const r = await fetch(local.url + '/auth/salir');
+  assert.equal(r.status, 401);
+  assert.match(r.headers.get('www-authenticate'), /^Basic realm="IPAM"/);
+  assert.equal(r.headers.get('cache-control'), 'no-store');
+  assert.match(r.headers.get('content-type'), /text\/html/);
+  const html = await r.text();
+  assert.match(html, /Sesión cerrada/);
+  assert.match(html, /cierra también la ventana/);
+  assert.ok(!/<script/i.test(html), 'sin scripts (CSP)');
+  // Con credenciales falsas (lo que hace la interfaz) tampoco es un error de autenticación nuevo: sigue siendo el mismo 401.
+  assert.equal((await fetch(local.url + '/auth/salir', { headers: basic('salir', 'salir') })).status, 401);
+  // El administrador sigue pudiendo entrar con sus credenciales después (no hay estado en el servidor).
+  assert.equal((await root('GET', '/api/v1/me')).status, 200);
+  // Sin Basic (acceso abierto) no hay nada que cerrar: vuelve a la aplicación.
+  const abierta = await fetch(abierto.url + '/auth/salir', { redirect: 'manual' });
+  assert.equal(abierta.status, 302);
+  assert.equal(abierta.headers.get('location'), '/');
+});
+
+test('Basic · /api/me informa el modo, el rol y si hay cuentas locales (la interfaz decide Salir y Usuarios con eso)', opts, async () => {
+  const me = (await json(await root('GET', '/api/v1/me'))).cuerpo;
+  assert.equal(me.modo, 'basic');
+  assert.equal(me.rol, 'admin');
+  assert.equal(me.usuario, 'root');
+  assert.equal(me.cuentas_locales, true);
+  assert.equal(me.local, false, 'el administrador de emergencia no es una cuenta local (su clave vive en la configuración)');
+  const sin = (await json(await pedir(abierto, 'GET', '/api/v1/me', undefined, H))).cuerpo;
+  assert.equal(sin.modo, 'none');
+  assert.equal(sin.cuentas_locales, false);
+});

@@ -133,3 +133,18 @@ test('ficha de un pool: uso asignado + reservado, segmentos e historial, accesib
   await page.keyboard.press('Escape');
   await expect(ficha).toHaveCount(0);
 });
+
+test('Usuarios: la ve todo admin; sin cuentas habilitadas explica cómo habilitarlas en vez de ocultarse', async ({ page }) => {
+  await page.goto('/');
+  const pestana = page.locator('#nav').getByRole('button', { name: 'Usuarios', exact: true });
+  await expect(pestana).toBeVisible();
+  await pestana.click();
+  const panel = page.locator('#usuarios');
+  await expect(panel.getByRole('heading', { name: 'Usuarios', exact: true })).toBeVisible();
+  await expect(panel).toContainText('no están habilitadas');
+  await expect(panel).toContainText('AUTH_LOCAL=true');
+  await expect(panel).toContainText('auth.local=true');
+  await expect(panel.locator('#us-crear')).toHaveCount(0); // no ofrece un formulario que no puede funcionar
+  const axe = await new AxeBuilder({ page }).include('#usuarios').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
+  expect(axe.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(' | ')}`)).toEqual([]);
+});
