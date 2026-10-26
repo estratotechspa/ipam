@@ -8,7 +8,7 @@
 #  - sin registry fijo: se etiqueta y publica donde diga la variable de CI (ver scripts/ci/).
 #  - multi-arquitectura (amd64 y arm64): `docker buildx build --platform linux/amd64,linux/arm64 …` (lo hace el CI).
 ARG BUILD_IMAGE=node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402
-ARG BASE_IMAGE=cgr.dev/chainguard/node@sha256:95f6858673107192ab0c550f4d8d31347d53d33f799c14bf74222c61e0063641
+ARG BASE_IMAGE=cgr.dev/chainguard/node@sha256:939413e9b81609d6d7188037f76faf627566de86fa786f9a25baf6764a51b618
 
 # hadolint ignore=DL3006
 FROM ${BUILD_IMAGE} AS deps
