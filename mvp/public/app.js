@@ -81,11 +81,12 @@ async function renderJira(){
    <label>Máscara</label><select id="j-len">${[16,20,22,24,28].map(n=>`<option ${n===22?'selected':''} value="${n}">/${n}</option>`).join('')}</select>
    <label>VPC</label><input id="j-vpc" value="vpc-nueva"><p><button class="btn" id="j-go">Enviar webhook</button></p></div>
   <div style="flex:2;min-width:260px"><b>Registro de eventos</b><div class="log">${esc(ev.map(linea).join('\n'))||'(sin eventos)'}</div></div></div></div>`;
-  $('j-go').onclick=async()=>{$('j-go').disabled=true;await api('/api/jira/simular',{body:{ambiente:$('j-amb').value,tipo:$('j-tipo').value,mascara:+$('j-len').value,vpc:$('j-vpc').value.trim()||'vpc-sin-nombre'}});renderJira()}}
+  if(je.simulador===false){$('j-go').parentElement.parentElement.hidden=true}
+  else $('j-go').onclick=async()=>{$('j-go').disabled=true;await api('/api/jira/simular',{body:{ambiente:$('j-amb').value,tipo:$('j-tipo').value,mascara:+$('j-len').value,vpc:$('j-vpc').value.trim()||'vpc-sin-nombre'}});renderJira()}}
 
 async function renderUsuarios(){
   try{const u=await get('/api/usuarios');
-  $('usuarios').innerHTML=`<h2>Usuarios</h2><p class="muted">El rol asignado aquí rige desde el próximo inicio de sesión de cada persona. «Heredar» usa los grupos / la configuración del proveedor.</p>
+  $('usuarios').innerHTML=`<h2>Usuarios</h2><p class="muted">El rol asignado aquí rige en pocos minutos (se revalida cada 5 min), sin que la persona tenga que volver a entrar. «Heredar» usa los grupos / la configuración del proveedor.</p>
   <div class="card tablewrap"><table><tr><th>Correo</th><th>Nombre</th><th>Último acceso</th><th>Rol asignado</th></tr>
   ${u.map(x=>`<tr><td>${esc(x.email)}</td><td>${esc(x.nombre)}</td><td>${x.ultimo_acceso?new Date(x.ultimo_acceso).toLocaleString('es-CL'):'—'}</td>
   <td><select data-u="${esc(x.email)}"><option value="">Heredar</option>${['lector','solicitante','admin'].map(r=>`<option ${x.rol===r?'selected':''}>${r}</option>`).join('')}</select></td></tr>`).join('')||'<tr><td colspan="4" class="muted">Nadie ha iniciado sesión todavía.</td></tr>'}</table></div>`;

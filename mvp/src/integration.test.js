@@ -9,13 +9,17 @@ const ExcelJS = require('exceljs');
 
 const SECRET = 'secreto-de-pruebas';
 process.env.JIRA_WEBHOOK_SECRET = SECRET;
+process.env.RATE_LIMIT_WEBHOOK_MAX = '40'; // por minuto; la prueba del limitador va al final del archivo
 const hay = !!process.env.DATABASE_URL;
 const opts = { skip: hay ? false : 'sin DATABASE_URL' };
 
 let server, base, db, mod;
 const post = (ruta, cuerpo, h = {}) => fetch(base + ruta, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'ipam', ...h }, body: JSON.stringify(cuerpo) });
 let webhook; // se define abajo: POST firmado a /webhook/jira
-const firma = (txt) => 'sha256=' + crypto.createHmac('sha256', SECRET).update(txt).digest('hex');
+// La firma cubre «<timestamp>.<cuerpo>» (cabecera x-ipam-timestamp).
+const ahora = () => String(Math.floor(Date.now() / 1000));
+const firma = (txt, ts) => 'sha256=' + crypto.createHmac('sha256', SECRET).update(`${ts}.${txt}`).digest('hex');
+const cabecerasWebhook = (txt, ts = ahora()) => ({ 'Content-Type': 'application/json', 'x-ipam-timestamp': ts, 'x-hub-signature-256': firma(txt, ts) });
 
 test.before(async () => {
   if (!hay) return;
@@ -26,9 +30,9 @@ test.before(async () => {
 });
 test.after(async () => { if (hay) { server.close(); await db.end(); } });
 
-webhook = (cuerpo) => {
+webhook = (cuerpo, ts) => {
   const txt = JSON.stringify(cuerpo);
-  return fetch(base + '/webhook/jira', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-hub-signature-256': firma(txt) }, body: txt });
+  return fetch(base + '/webhook/jira', { method: 'POST', headers: cabecerasWebhook(txt, ts), body: txt });
 };
 
 test('salud y estado de Jira (desactivada por defecto)', opts, async () => {
@@ -74,9 +78,9 @@ test('asignar y liberar devuelve el espacio', opts, async () => {
 
 test('webhook de Jira: firma inválida → 401; firma válida → asigna', opts, async () => {
   const cuerpo = JSON.stringify({ ticket: 'NET-9001', ambiente: 'qa', tipo: 'Nodos', mascara: 24, vpc: 'vpc-webhook' });
-  const mal = await fetch(base + '/webhook/jira', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-hub-signature-256': 'sha256=00' }, body: cuerpo });
+  const mal = await fetch(base + '/webhook/jira', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-ipam-timestamp': ahora(), 'x-hub-signature-256': 'sha256=00' }, body: cuerpo });
   assert.equal(mal.status, 401);
-  const bien = await fetch(base + '/webhook/jira', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-hub-signature-256': firma(cuerpo) }, body: cuerpo });
+  const bien = await fetch(base + '/webhook/jira', { method: 'POST', headers: cabecerasWebhook(cuerpo), body: cuerpo });
   assert.equal(bien.status, 200);
   const d = await bien.json();
   assert.equal(d.ticket, 'NET-9001');
@@ -97,9 +101,13 @@ test('respaldo JSON: exporta, restaura lo borrado y rechaza solapamientos sin im
   const H = { 'X-Requested-With': 'ipam' };
   const r = await fetch(base + '/api/exportar.json');
   assert.equal(r.status, 200);
-  const resp = await r.json();
-  assert.equal(resp.formato, 'ipam-respaldo');
-  assert.ok(resp.pools.length >= 6 && resp.asignaciones.length >= 12);
+  const completo = await r.json();
+  assert.equal(completo.formato, 'ipam-respaldo');
+  assert.ok(completo.pools.length >= 6 && completo.asignaciones.length >= 12);
+  // Se restaura solo la semilla: otros archivos de prueba corren en paralelo sobre la misma base y sus filas
+  // transitorias (que ya habrán borrado) no deben volver a entrar con el respaldo.
+  const resp = { ...completo, asignaciones: completo.asignaciones.filter((a) => a.origen === 'semilla') };
+  assert.equal(resp.asignaciones.length, 12);
 
   // Importar lo mismo no duplica nada.
   const igual = await (await post('/api/importar', resp)).json();
@@ -111,7 +119,7 @@ test('respaldo JSON: exporta, restaura lo borrado y rechaza solapamientos sin im
   const a = lista.find((x) => x.ticket === 'NET-101');
   await fetch(`${base}/api/asignaciones/${a.id}`, { method: 'DELETE', headers: H });
   const rest = await (await post('/api/importar', resp)).json();
-  assert.ok(rest.asignaciones >= 1); // «>=»: otras pruebas que corren en paralelo pueden haber dejado filas en el respaldo
+  assert.equal(rest.asignaciones, 1);
   assert.ok((await (await fetch(base + '/api/asignaciones?q=NET-101')).json()).some((x) => x.ticket === 'NET-101'));
 
   // Un respaldo con un segmento que se solapa con otro existente se rechaza completo.
@@ -374,4 +382,151 @@ test('SIGTERM: el servidor deja de aceptar, termina y drena el pool (salida 0)',
   assert.equal(senal, null);
   assert.equal(codigo, 0, salida);
   assert.match(salida, /SIGTERM: cerrando/);
+});
+
+// ---------- Fase 2 · seguridad ----------
+const jiraMod = require('./jira');
+
+test('webhook con timestamp: exige la cabecera, la ventana de ±5 min y que la firma lo cubra', opts, async () => {
+  const cuerpo = { ambiente: 'qa', tipo: 'Nodos', mascara: 24, vpc: 'vpc-ts' };
+  const nuevo = (ticket) => ({ ticket, ...cuerpo });
+  const crudo = (c, h) => fetch(base + '/webhook/jira', { method: 'POST', headers: { 'Content-Type': 'application/json', ...h }, body: JSON.stringify(c) });
+  const ts = ahora();
+
+  // sin timestamp, aunque la firma antigua (solo del cuerpo) sea «correcta»
+  const viejo = JSON.stringify(nuevo('NET-9201'));
+  const sinTs = await crudo(nuevo('NET-9201'), { 'x-hub-signature-256': 'sha256=' + crypto.createHmac('sha256', SECRET).update(viejo).digest('hex') });
+  assert.equal(sinTs.status, 401);
+  assert.match((await sinTs.json()).motivo, /x-ipam-timestamp/);
+
+  // firma que no cubre el timestamp (se firmó con otro): inválida
+  const otro = await crudo(nuevo('NET-9202'), { 'x-ipam-timestamp': ts, 'x-hub-signature-256': firma(JSON.stringify(nuevo('NET-9202')), String(Number(ts) - 1)) });
+  assert.equal(otro.status, 401);
+  assert.equal((await otro.json()).motivo, 'firma inválida');
+
+  // fuera de la ventana: 6 minutos atrás y 6 minutos hacia adelante, bien firmados
+  for (const desfase of [-360, 360]) {
+    const t = String(Number(ts) + desfase);
+    const r = await webhook(nuevo('NET-9203'), t);
+    assert.equal(r.status, 401, `desfase ${desfase}`);
+    assert.match((await r.json()).motivo, /ventana/);
+  }
+  assert.equal((await webhook({ ...nuevo('NET-9204') }, 'abc')).status, 401);
+
+  // dentro de la ventana (4 min atrás): vale
+  const ok = await webhook(nuevo('NET-9205'), String(Number(ts) - 240));
+  assert.equal(ok.status, 200);
+  const a = (await (await fetch(base + '/api/asignaciones?q=NET-9205')).json())[0];
+
+  // repetición: la misma petición otra vez → 409 y no se asigna dos veces
+  const rep = await webhook(nuevo('NET-9205'), String(Number(ts) - 240));
+  assert.equal(rep.status, 409);
+  assert.equal((await (await fetch(base + '/api/asignaciones?q=NET-9205')).json()).length, 1);
+  await borrar(a.id);
+});
+
+test('verificarWebhook: ventana exacta, milisegundos y firmas distintas con otro timestamp', opts, async () => {
+  const buf = Buffer.from('{"a":1}');
+  const t = 1_800_000_000;
+  const h = (ts) => ({ 'x-ipam-timestamp': String(ts), 'x-hub-signature-256': firma(buf.toString(), String(ts)) });
+  assert.equal(mod.verificarWebhook(h(t), buf, t * 1000 + 299_000).ok, true);
+  assert.equal(mod.verificarWebhook(h(t + 1), buf, (t + 1) * 1000 + 301_000).ok, false);
+  assert.equal(mod.verificarWebhook(h(t + 2), buf, (t + 2) * 1000).ok, true);
+  assert.equal(mod.verificarWebhook(h(t + 3), Buffer.from('otro'), (t + 3) * 1000).ok, false, 'firmado para otro cuerpo');
+  assert.notEqual(mod.firmar(String(t), buf), mod.firmar(String(t + 1), buf));
+});
+
+test('simulador: disponible fuera de producción; en producción solo con ENABLE_SIMULADOR=true', opts, async () => {
+  const simular = () => post('/api/jira/simular', { ambiente: 'qa', tipo: 'Nodos', mascara: 28, vpc: 'vpc-sim' });
+  const limpiar = async () => { for (const a of await (await fetch(base + '/api/asignaciones?q=vpc-sim')).json()) await borrar(a.id); };
+  assert.equal((await (await fetch(base + '/api/jira/estado')).json()).simulador, true);
+  const r = await simular();
+  assert.equal(r.status, 200);
+  assert.match((await r.json()).ticket, /^NET-\d+$/);
+  const ev = (await eventos()).find((e) => e.tipo === 'jira_webhook_recibido');
+  assert.match(ev.detalle.timestamp, /^\d{10}$/, 'el simulador firma con timestamp');
+  await limpiar();
+
+  const antes = process.env.NODE_ENV;
+  process.env.NODE_ENV = 'production';
+  try {
+    assert.equal((await (await fetch(base + '/api/jira/estado')).json()).simulador, false);
+    const bloqueado = await simular();
+    assert.equal(bloqueado.status, 404);
+    process.env.ENABLE_SIMULADOR = 'true';
+    assert.equal((await (await fetch(base + '/api/jira/estado')).json()).simulador, true);
+    assert.equal((await simular()).status, 200);
+  } finally {
+    delete process.env.ENABLE_SIMULADOR;
+    if (antes === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = antes;
+    await limpiar();
+  }
+});
+
+test('JIRA_WEBHOOK_SECRET: en producción falta o es el valor de ejemplo → error; fuera de producción se tolera', opts, async () => {
+  const prod = { NODE_ENV: 'production' };
+  assert.throws(() => jiraMod.validarSecretoWebhook(prod), /JIRA_WEBHOOK_SECRET/);
+  assert.throws(() => jiraMod.validarSecretoWebhook({ ...prod, JIRA_WEBHOOK_SECRET: 'dev-secret-cambiar' }), /valor de ejemplo/);
+  assert.doesNotThrow(() => jiraMod.validarSecretoWebhook({ ...prod, JIRA_WEBHOOK_SECRET: 'un-secreto-largo-y-propio' }));
+  assert.doesNotThrow(() => jiraMod.validarSecretoWebhook({ NODE_ENV: 'development' }));
+  assert.doesNotThrow(() => jiraMod.validarSecretoWebhook({}));
+});
+
+// Arranca el servidor real como proceso y devuelve cómo terminó (para probar que se niega a arrancar).
+const arrancar = (extra) => new Promise((ok) => {
+  const hijo = spawn(process.execPath, [require.resolve('./server')], {
+    env: { PATH: process.env.PATH, DATABASE_URL: process.env.DATABASE_URL, PORT: '0', RETENCION_DIAS: '0', ...extra }, stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let salida = '';
+  hijo.stdout.on('data', (d) => { salida += d; if (/escuchando/.test(salida)) hijo.kill('SIGTERM'); });
+  hijo.stderr.on('data', (d) => { salida += d; });
+  hijo.on('exit', (codigo) => ok({ codigo, salida }));
+});
+
+test('arranque en producción: sin secreto del webhook o sin autenticación explícita, no arranca', opts, async () => {
+  const sinSecreto = await arrancar({ NODE_ENV: 'production', AUTH_MODE: 'none' });
+  assert.notEqual(sinSecreto.codigo, 0);
+  assert.match(sinSecreto.salida, /JIRA_WEBHOOK_SECRET es obligatorio/);
+
+  const ejemplo = await arrancar({ NODE_ENV: 'production', AUTH_MODE: 'none', JIRA_WEBHOOK_SECRET: 'dev-secret-cambiar' });
+  assert.notEqual(ejemplo.codigo, 0);
+  assert.match(ejemplo.salida, /valor de ejemplo/);
+
+  const sinAuth = await arrancar({ NODE_ENV: 'production', JIRA_WEBHOOK_SECRET: 'secreto-propio-de-pruebas' });
+  assert.notEqual(sinAuth.codigo, 0);
+  assert.match(sinAuth.salida, /no arranca sin autenticación/);
+
+  const abierto = await arrancar({ NODE_ENV: 'production', AUTH_MODE: 'none', JIRA_WEBHOOK_SECRET: 'secreto-propio-de-pruebas' });
+  assert.equal(abierto.codigo, 0, abierto.salida);
+  assert.match(abierto.salida, /sin autenticación \(modo none\)/);
+
+  const basic = await arrancar({ NODE_ENV: 'production', APP_USER: 'u', APP_PASS: 'p', JIRA_WEBHOOK_SECRET: 'secreto-propio-de-pruebas' });
+  assert.equal(basic.codigo, 0, basic.salida);
+});
+
+test('cabeceras: Permissions-Policy y Referrer-Policy', opts, async () => {
+  const r = await fetch(base + '/api/health');
+  assert.equal(r.headers.get('referrer-policy'), 'no-referrer');
+  const pp = r.headers.get('permissions-policy');
+  for (const f of ['camera=()', 'microphone=()', 'geolocation=()', 'payment=()']) assert.ok(pp.includes(f), f);
+});
+
+test('PUT /api/usuarios/:email valida el formato del correo', opts, async () => {
+  const put = (email, rol = 'lector') => fetch(`${base}/api/usuarios/${encodeURIComponent(email)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...H }, body: JSON.stringify({ rol }) });
+  for (const malo of ['sin-arroba', 'a@b', '@x.cl', 'a b@x.cl', 'a@@x.cl', 'x'.repeat(65) + '@x.cl', 'a@' + 'x'.repeat(250) + '.cl', '<script>@x.cl', "a'; drop table usuarios;--@x.cl"]) {
+    assert.equal((await put(malo)).status, 400, malo);
+  }
+  const ok = await put('Persona.Prueba+1@Empresa-Test.cl');
+  assert.equal(ok.status, 200);
+  assert.equal((await ok.json()).email, 'persona.prueba+1@empresa-test.cl');
+  await db.query("delete from usuarios where email = 'persona.prueba+1@empresa-test.cl'");
+});
+
+test('limitador del webhook: pasado el máximo por minuto responde 429 con Retry-After', opts, async () => {
+  const mal = () => fetch(base + '/webhook/jira', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  let r;
+  for (let i = 0; i < 60; i++) { r = await mal(); if (r.status === 429) break; }
+  assert.equal(r.status, 429);
+  assert.ok(Number(r.headers.get('retry-after')) >= 1);
+  assert.equal((await r.json()).error, 'demasiados_intentos');
 });

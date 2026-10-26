@@ -3,14 +3,24 @@
 //                                      Microsoft Entra, Okta, Keycloak…). Flujo de código con PKCE, state y nonce.
 //   modo basic (APP_USER y APP_PASS):  un solo usuario con Basic Auth; rol admin. Solo para demos.
 //   modo none:                         sin autenticación (demostración local); rol admin.
-// La sesión es una cookie firmada (HMAC) sin estado en el servidor: sirve con varias réplicas.
+// El modo sale de AUTH_MODE (oidc | basic | none) o, si no se define, de lo configurado (OIDC_ISSUER, APP_USER y APP_PASS).
+// En producción (NODE_ENV=production) NO se arranca sin autenticación salvo que se pida con AUTH_MODE=none.
+// La sesión es una cookie firmada (HMAC); el rol y la existencia del usuario se revalidan contra la base cada pocos
+// minutos (SESSION_REVALIDAR_SEG), así que un cambio de rol o una baja rigen sin esperar a que expire la cookie.
 const crypto = require('crypto');
+const limites = require('./limites');
 const env = process.env;
 
 const ROLES = ['lector', 'solicitante', 'admin'];
 const tiene = (rol, minimo) => ROLES.indexOf(rol) >= ROLES.indexOf(minimo);
 const lista = (v) => String(v || '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
-const modo = () => (env.OIDC_ISSUER ? 'oidc' : env.APP_USER && env.APP_PASS ? 'basic' : 'none');
+const MODOS = ['oidc', 'basic', 'none'];
+const modoExplicito = () => String(env.AUTH_MODE || '').trim().toLowerCase();
+const modo = () => {
+  const e = modoExplicito();
+  if (MODOS.includes(e)) return e;
+  return env.OIDC_ISSUER ? 'oidc' : env.APP_USER && env.APP_PASS ? 'basic' : 'none';
+};
 
 const SESION = 'ipam_sesion';
 const LOGIN = 'ipam_login';
@@ -47,6 +57,10 @@ function ponerCookie(res, nombre, valor, segundos) {
   res.append('Set-Cookie', c);
 }
 const borrarCookie = (res, nombre) => ponerCookie(res, nombre, '', 0);
+const CSRF = 'X-Requested-With: ipam';
+// Defensa CSRF: los cambios desde el navegador exigen una cabecera que un sitio externo no puede enviar sin permiso CORS.
+const csrfValido = (req) => req.headers['x-requested-with'] === 'ipam';
+const csrfRechazo = (res) => res.status(403).json({ error: `falta la cabecera ${CSRF}` });
 const rutaSegura = (n) => (typeof n === 'string' && n.startsWith('/') && !n.startsWith('//') && !n.startsWith('/\\') ? n : '/');
 
 // ---------- Roles ----------
@@ -88,16 +102,68 @@ async function cliente() {
 }
 
 function validarConfiguracion() {
+  const explicito = modoExplicito();
+  if (explicito && !MODOS.includes(explicito)) throw new Error(`AUTH_MODE inválido «${env.AUTH_MODE}»: usa oidc, basic o none`);
+  if (explicito === 'oidc' && !env.OIDC_ISSUER) throw new Error('AUTH_MODE=oidc requiere OIDC_ISSUER');
+  if (explicito === 'basic' && !(env.APP_USER && env.APP_PASS)) throw new Error('AUTH_MODE=basic requiere APP_USER y APP_PASS');
+  if (explicito === 'none' && (env.OIDC_ISSUER || env.APP_USER || env.APP_PASS)) {
+    throw new Error('AUTH_MODE=none contradice la configuración de acceso (OIDC_ISSUER / APP_USER / APP_PASS): quita una de las dos');
+  }
+  if (modo() === 'none') {
+    if (env.NODE_ENV === 'production' && explicito !== 'none') {
+      throw new Error('En producción la app no arranca sin autenticación: define OIDC_ISSUER (+ OIDC_*), APP_USER y APP_PASS, '
+        + 'o pide el modo abierto de forma explícita con AUTH_MODE=none');
+    }
+    console.warn('⚠ IPAM sin autenticación (modo none): cualquiera que llegue al servicio es administrador.');
+  }
   if (modo() !== 'oidc') return;
   const falta = ['OIDC_CLIENT_ID', 'OIDC_CLIENT_SECRET', 'PUBLIC_URL', 'SESSION_SECRET'].filter((k) => !env[k]);
   if (falta.length) throw new Error(`Modo OIDC: faltan variables ${falta.join(', ')}`);
   if (secreto().length < 32) throw new Error('SESSION_SECRET debe tener al menos 32 caracteres');
 }
 
+// Ejecuta middlewares de Express en serie y devuelve una promesa. Si uno responde sin llamar a next (p. ej. un
+// limitador con 429), la promesa se resuelve cuando se cierra la respuesta.
+const correr = (mws, req, res) => new Promise((ok, mal) => {
+  res.once('close', ok);
+  let i = 0;
+  const sig = (e) => { if (e) return mal(e); if (i >= mws.length) return ok(); mws[i++](req, res, sig); };
+  sig();
+});
+
+// ---------- Revalidación de sesiones ----------
+// La cookie es válida mientras no caduque, pero el rol puede cambiar o la persona darse de baja. Cada
+// SESSION_REVALIDAR_SEG (300; 0 = en cada petición) se consulta la fila del usuario y se calcula el rol vigente:
+// correos admin de la configuración > rol asignado en la base > rol base de la sesión (grupos/configuración al entrar).
+// La caché es por proceso: con varias réplicas, un cambio puede tardar hasta ese tiempo en llegar a todas.
+const cacheUsuarios = new Map(); // email → { fila, hasta }
+const olvidar = (email) => cacheUsuarios.delete(String(email || '').toLowerCase());
+const olvidarTodos = () => cacheUsuarios.clear();
+async function filaUsuario(db, email) {
+  const ttl = Math.max(0, Number(env.SESSION_REVALIDAR_SEG === undefined || env.SESSION_REVALIDAR_SEG === '' ? 300 : env.SESSION_REVALIDAR_SEG)) * 1000;
+  const c = cacheUsuarios.get(email);
+  if (c && c.hasta > Date.now()) return c.fila;
+  const fila = (await db.query('select rol from usuarios where email = $1', [email])).rows[0] || null;
+  if (ttl) {
+    if (cacheUsuarios.size > 5000) for (const [k, v] of cacheUsuarios) if (v.hasta <= Date.now()) cacheUsuarios.delete(k);
+    cacheUsuarios.set(email, { fila, hasta: Date.now() + ttl });
+  }
+  return fila;
+}
+async function rolVigente(db, sesion) {
+  const fila = await filaUsuario(db, sesion.email);
+  if (!fila) return null; // dado de baja
+  if (lista(env.OIDC_ADMIN_EMAILS).includes(sesion.email)) return 'admin';
+  const rol = fila.rol || sesion.rolBase;
+  return ROLES.includes(rol) ? rol : null;
+}
+
 // ---------- Rutas /auth y middleware ----------
 // db: pool de pg; auditar(accion, usuario, rol, detalle, ip)
 function montar(app, { db, auditar }) {
-  const horas = Number(env.SESSION_HORAS) || 8;
+  const horas = Number(env.SESSION_HORAS) || 4;
+  app.use(['/auth/login', '/auth/callback'], limites.limiteAuth());
+  const lim = limites.limitesBasic();
 
   app.get('/auth/login', async (req, res, next) => {
     try {
@@ -145,13 +211,17 @@ function montar(app, { db, auditar }) {
         await auditar('login_rechazado', email, null, { motivo: 'sin rol asignado' }, req.ip);
         return res.status(403).send('Tu cuenta no tiene un rol asignado. Pide acceso a un administrador.');
       }
-      ponerCookie(res, SESION, sellar({ email, nombre: claims.name || email, rol, exp: Date.now() / 1000 + horas * 3600 }), horas * 3600);
+      // La cookie no guarda el rol efectivo sino el que dan el proveedor y la configuración (sin la asignación de la base):
+      // el rol vigente se calcula en cada revalidación, con el cambio que haya hecho un administrador.
+      const rolBase = resolverRol({ ...claims, email }, null);
+      ponerCookie(res, SESION, sellar({ v: 2, email, nombre: claims.name || email, rolBase, exp: Date.now() / 1000 + horas * 3600 }), horas * 3600);
       await auditar('login', email, rol, {}, req.ip);
       res.redirect(rutaSegura(previo.next));
     } catch (e) { next(e); }
   });
 
   app.post('/auth/logout', async (req, res) => {
+    if (!csrfValido(req)) return csrfRechazo(res); // cerrar la sesión también es un cambio de estado: mismo control que la API
     const s = abrir(cookies(req)[SESION]);
     borrarCookie(res, SESION);
     if (s) await auditar('logout', s.email, s.rol, {}, req.ip);
@@ -162,31 +232,35 @@ function montar(app, { db, auditar }) {
   });
 
   // Middleware de acceso: todo exige sesión salvo salud, webhook (firmado) y /auth.
-  app.use((req, res, next) => {
-    if (req.path === '/api/health' || req.path === '/webhook/jira' || req.path.startsWith('/auth/') || req.path === '/api/config' || req.path === '/brand.css' || req.path === '/brand/logo') return next();
-    const m = modo();
-    if (m === 'none') { req.usuario = 'anonimo'; req.rol = 'admin'; }
-    else if (m === 'basic') {
-      const h = req.headers.authorization || '';
-      const [u, ...rest] = Buffer.from(h.replace(/^Basic /, ''), 'base64').toString().split(':');
-      const igual = (a, b) => a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
-      if (!(h.startsWith('Basic ') && igual(u || '', env.APP_USER) && igual(rest.join(':'), env.APP_PASS))) {
-        return res.set('WWW-Authenticate', 'Basic realm="IPAM"').status(401).send('Autenticación requerida');
+  app.use(async (req, res, next) => {
+    try {
+      if (req.path === '/api/health' || req.path === '/webhook/jira' || req.path.startsWith('/auth/') || req.path === '/api/config' || req.path === '/brand.css' || req.path === '/brand/logo') return next();
+      const m = modo();
+      if (m === 'none') { req.usuario = 'anonimo'; req.rol = 'admin'; }
+      else if (m === 'basic') {
+        // Los intentos fallidos con credenciales se limitan por IP (bloqueo progresivo, ver limites.js).
+        await correr(lim, req, res);
+        if (res.headersSent) return; // el limitador ya respondió 429
+        const h = req.headers.authorization || '';
+        const [u, ...rest] = Buffer.from(h.replace(/^Basic /, ''), 'base64').toString().split(':');
+        const igual = (a, b) => a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+        if (!(h.startsWith('Basic ') && igual(u || '', env.APP_USER) && igual(rest.join(':'), env.APP_PASS))) {
+          return res.set('WWW-Authenticate', 'Basic realm="IPAM"').status(401).send('Autenticación requerida');
+        }
+        req.usuario = u; req.rol = 'admin';
+      } else {
+        const s = abrir(cookies(req)[SESION]);
+        const rol = s && s.v === 2 ? await rolVigente(db, s) : null; // cookies anteriores a la revalidación obligan a entrar de nuevo
+        if (!rol) {
+          if (s) borrarCookie(res, SESION); // sesión revocada: usuario dado de baja o sin rol
+          if (req.path.startsWith('/api/')) return res.status(401).json({ error: s ? 'sesión revocada' : 'no autenticado', login: '/auth/login' });
+          return res.redirect('/auth/login?next=' + encodeURIComponent(req.originalUrl));
+        }
+        req.usuario = s.email; req.nombre = s.nombre; req.rol = rol;
       }
-      req.usuario = u; req.rol = 'admin';
-    } else {
-      const s = abrir(cookies(req)[SESION]);
-      if (!s) {
-        if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'no autenticado', login: '/auth/login' });
-        return res.redirect('/auth/login?next=' + encodeURIComponent(req.originalUrl));
-      }
-      req.usuario = s.email; req.nombre = s.nombre; req.rol = s.rol;
-    }
-    // Defensa CSRF: los cambios desde el navegador exigen una cabecera que un sitio externo no puede enviar sin permiso CORS.
-    if (req.path.startsWith('/api/') && !['GET', 'HEAD', 'OPTIONS'].includes(req.method) && req.headers['x-requested-with'] !== 'ipam') {
-      return res.status(403).json({ error: 'falta la cabecera X-Requested-With: ipam' });
-    }
-    next();
+      if (req.path.startsWith('/api/') && !['GET', 'HEAD', 'OPTIONS'].includes(req.method) && !csrfValido(req)) return csrfRechazo(res);
+      next();
+    } catch (e) { next(e); }
   });
 
   app.get('/api/me', (req, res) => res.json({ modo: modo(), usuario: req.usuario, nombre: req.nombre || req.usuario, rol: req.rol }));
@@ -195,4 +269,4 @@ function montar(app, { db, auditar }) {
 const requiere = (minimo) => (req, res, next) =>
   tiene(req.rol, minimo) ? next() : res.status(403).json({ error: 'permiso insuficiente', requiere: minimo, rol: req.rol });
 
-module.exports = { ROLES, tiene, modo, montar, requiere, resolverRol, dominioPermitido, validarConfiguracion, sellar, abrir };
+module.exports = { ROLES, tiene, modo, montar, requiere, resolverRol, dominioPermitido, validarConfiguracion, sellar, abrir, olvidar, olvidarTodos };

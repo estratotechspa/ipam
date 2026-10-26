@@ -3,13 +3,15 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
+const express = require('express');
 
+process.env.RATE_LIMIT_AUTH_MAX = '1000'; // las pruebas hacen muchos inicios de sesión desde la misma IP
 const hay = !!process.env.DATABASE_URL;
 const opts = { skip: hay ? false : 'sin DATABASE_URL' };
 const GRUPOS = { 'ana@empresa.cl': ['ipam-solicitantes'], 'jefe@empresa.cl': ['ipam-admins'] };
 const H = { 'X-Requested-With': 'ipam', 'Content-Type': 'application/json' };
 
-let app, base, idp, db;
+let app, base, idp, db, auth;
 
 // Navegador mínimo: mantiene cookies por origen y sigue redirecciones a mano.
 class Navegador {
@@ -68,6 +70,7 @@ test.before(async () => {
   });
   // 1) La app escucha primero para conocer su URL; 2) el IdP registra ese retorno; 3) se activa OIDC_ISSUER.
   process.env.OIDC_ISSUER = 'http://127.0.0.1:1';
+  auth = require('./auth');
   ({ app, db } = require('./server'));
   const srvApp = await new Promise((ok) => { const s = app.listen(0, () => ok(s)); });
   base = `http://127.0.0.1:${srvApp.address().port}`;
@@ -178,4 +181,179 @@ test('el parámetro next no permite redirigir a otros sitios', opts, async () =>
   const cb = await new Navegador().entrar('root@empresa.cl', '//evil.example.com');
   assert.equal(cb.headers.get('location'), '/');
   void n;
+});
+
+// ---------- Fase 2 · seguridad ----------
+// Ejecuta `fn` con variables de entorno cambiadas (undefined = borrar) y las restaura al terminar.
+async function conEnv(vars, fn) {
+  const antes = { ...process.env };
+  for (const [k, v] of Object.entries(vars)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+  try { return await fn(); } finally {
+    for (const k of Object.keys(process.env)) if (!(k in antes)) delete process.env[k];
+    Object.assign(process.env, antes);
+  }
+}
+const SIN_ACCESO = { OIDC_ISSUER: undefined, APP_USER: undefined, APP_PASS: undefined, AUTH_MODE: undefined, NODE_ENV: undefined };
+
+test('AUTH_MODE: el modo explícito manda y las combinaciones contradictorias no arrancan', opts, async () => {
+  await conEnv({ ...SIN_ACCESO }, () => { assert.equal(auth.modo(), 'none'); });
+  await conEnv({ ...SIN_ACCESO, APP_USER: 'u', APP_PASS: 'p' }, () => { assert.equal(auth.modo(), 'basic'); });
+  await conEnv({ ...SIN_ACCESO, AUTH_MODE: 'NONE' }, () => { assert.equal(auth.modo(), 'none'); assert.doesNotThrow(() => auth.validarConfiguracion()); });
+  await conEnv({ ...SIN_ACCESO, AUTH_MODE: 'oidc' }, () => assert.throws(() => auth.validarConfiguracion(), /AUTH_MODE=oidc requiere OIDC_ISSUER/));
+  await conEnv({ ...SIN_ACCESO, AUTH_MODE: 'basic', APP_USER: 'u' }, () => assert.throws(() => auth.validarConfiguracion(), /APP_USER y APP_PASS/));
+  await conEnv({ ...SIN_ACCESO, AUTH_MODE: 'google' }, () => assert.throws(() => auth.validarConfiguracion(), /AUTH_MODE inválido/));
+  await conEnv({ ...SIN_ACCESO, AUTH_MODE: 'none', APP_USER: 'u', APP_PASS: 'p' }, () => assert.throws(() => auth.validarConfiguracion(), /contradice/));
+  await conEnv({ ...SIN_ACCESO, AUTH_MODE: 'none', OIDC_ISSUER: 'http://x' }, () => assert.throws(() => auth.validarConfiguracion(), /contradice/));
+});
+
+test('producción sin autenticación: falla cerrado salvo AUTH_MODE=none explícito', opts, async () => {
+  const prod = { ...SIN_ACCESO, NODE_ENV: 'production' };
+  await conEnv(prod, () => assert.throws(() => auth.validarConfiguracion(), /no arranca sin autenticación/));
+  // credenciales a medias (falta la clave): tampoco queda abierta por accidente
+  await conEnv({ ...prod, APP_USER: 'u' }, () => assert.throws(() => auth.validarConfiguracion(), /no arranca sin autenticación/));
+  await conEnv({ ...prod, AUTH_MODE: 'none' }, () => assert.doesNotThrow(() => auth.validarConfiguracion()));
+  await conEnv({ ...prod, APP_USER: 'u', APP_PASS: 'p' }, () => assert.doesNotThrow(() => auth.validarConfiguracion()));
+  await conEnv({ ...prod, OIDC_ISSUER: 'http://x', OIDC_CLIENT_ID: 'i', OIDC_CLIENT_SECRET: 's', PUBLIC_URL: 'http://x', SESSION_SECRET: 'x'.repeat(40) },
+    () => assert.doesNotThrow(() => auth.validarConfiguracion()));
+  // fuera de producción (desarrollo, pruebas) el modo abierto sigue siendo posible sin pedirlo
+  await conEnv({ ...SIN_ACCESO }, () => assert.doesNotThrow(() => auth.validarConfiguracion()));
+});
+
+test('la sesión dura 4 horas por defecto y la cookie guarda el rol base, no el efectivo', opts, async () => {
+  const n = new Navegador();
+  const cb = await n.entrar('horas@empresa.cl');
+  const c = cb.headers.getSetCookie().find((x) => x.startsWith('ipam_sesion='));
+  assert.match(c, /Max-Age=14400/);
+  const payload = JSON.parse(Buffer.from(decodeURIComponent(c.split('=')[1].split(';')[0]).split('.')[0], 'base64url').toString());
+  assert.equal(payload.v, 2);
+  assert.equal(payload.rolBase, 'lector');
+  assert.equal(payload.rol, undefined);
+});
+
+test('revocación: un usuario dado de baja pierde el acceso (con caché de 5 min, hasta olvidarla)', opts, async () => {
+  const n = new Navegador();
+  await n.entrar('baja@empresa.cl');
+  assert.equal((await n.api('/api/pools')).status, 200);
+  await db.query("delete from usuarios where email = 'baja@empresa.cl'");
+  assert.equal((await n.api('/api/pools')).status, 200, 'dentro de la caché sigue valiendo');
+  auth.olvidarTodos(); // equivale a que venza la caché
+  const r = await n.api('/api/pools');
+  assert.equal(r.status, 401);
+  assert.equal((await r.json()).error, 'sesión revocada');
+  assert.ok(r.headers.getSetCookie().some((c) => /^ipam_sesion=;/.test(c) || /Max-Age=0/.test(c)), 'se borra la cookie');
+  // una página (no la API) redirige al login
+  assert.equal((await n.pedir(base + '/')).status, 302);
+});
+
+test('revocación sin caché (SESSION_REVALIDAR_SEG=0): la baja rige en la petición siguiente', opts, async () => {
+  const n = new Navegador();
+  await n.entrar('baja2@empresa.cl');
+  await conEnv({ SESSION_REVALIDAR_SEG: '0' }, async () => {
+    assert.equal((await n.api('/api/pools')).status, 200);
+    await db.query("delete from usuarios where email = 'baja2@empresa.cl'");
+    assert.equal((await n.api('/api/pools')).status, 401);
+  });
+});
+
+test('un cambio de rol rige sin volver a entrar: ascenso, degradación y «heredar»', opts, async () => {
+  const root = new Navegador();
+  await root.entrar('root@empresa.cl');
+  const ana = new Navegador();
+  await ana.entrar('ana@empresa.cl'); // solicitante por su grupo
+  const rol = async () => (await (await ana.api('/api/me')).json()).rol;
+  const poner = (email, r) => root.api('/api/usuarios/' + email, { method: 'PUT', body: JSON.stringify({ rol: r }) });
+  assert.equal(await rol(), 'solicitante');
+  assert.equal((await ana.api('/api/auditoria')).status, 403);
+
+  await poner('ana@empresa.cl', 'admin');
+  assert.equal(await rol(), 'admin');
+  assert.equal((await ana.api('/api/auditoria')).status, 200);
+
+  await poner('ana@empresa.cl', 'lector'); // degradada por debajo de lo que le dan sus grupos
+  assert.equal(await rol(), 'lector');
+  assert.equal((await ana.api('/api/auditoria')).status, 403);
+  assert.equal((await ana.api('/api/solicitudes', { method: 'POST', body: JSON.stringify({ pool: 'onprem-lan-dev', vpc: 'x', mascara: 24 }) })).status, 403);
+
+  await poner('ana@empresa.cl', null); // «heredar»: vuelve al rol base de la sesión (el de sus grupos)
+  assert.equal(await rol(), 'solicitante');
+
+  // un administrador de la configuración no se puede degradar desde la base
+  await poner('root@empresa.cl', 'lector');
+  assert.equal((await (await root.api('/api/me')).json()).rol, 'admin');
+  await poner('root@empresa.cl', null);
+});
+
+test('un cambio directo en la base se ve al vencer la caché de revalidación', opts, async () => {
+  const n = new Navegador();
+  await n.entrar('directo@empresa.cl');
+  assert.equal((await (await n.api('/api/me')).json()).rol, 'lector');
+  await db.query("update usuarios set rol = 'solicitante' where email = 'directo@empresa.cl'");
+  assert.equal((await (await n.api('/api/me')).json()).rol, 'lector', 'aún en caché');
+  auth.olvidarTodos();
+  assert.equal((await (await n.api('/api/me')).json()).rol, 'solicitante');
+  await db.query("delete from usuarios where email = 'directo@empresa.cl'");
+});
+
+test('una cookie de sesión con el formato anterior (sin revalidación) obliga a entrar de nuevo', opts, async () => {
+  const vieja = auth.sellar({ email: 'root@empresa.cl', nombre: 'x', rol: 'admin', exp: Date.now() / 1000 + 3600 });
+  const n = new Navegador();
+  n.jar.set(base, new Map([['ipam_sesion', vieja]]));
+  assert.equal((await n.api('/api/me')).status, 401);
+});
+
+test('/auth/logout exige X-Requested-With (defensa CSRF) y sin él no cierra la sesión', opts, async () => {
+  const n = new Navegador();
+  await n.entrar('root@empresa.cl');
+  const sin = await n.pedir(base + '/auth/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  assert.equal(sin.status, 403);
+  assert.match((await sin.json()).error, /X-Requested-With/);
+  assert.equal((await n.api('/api/me')).status, 200, 'la sesión sigue activa');
+  assert.equal((await n.api('/auth/logout', { method: 'POST', body: '{}' })).status, 200);
+  assert.equal((await n.api('/api/me')).status, 401);
+});
+
+// Aplicación mínima con el módulo de autenticación real, para probar los limitadores con su propia configuración.
+async function appPrueba(vars, fn) {
+  return conEnv({ ...SIN_ACCESO, ...vars }, async () => {
+    const mini = express();
+    auth.montar(mini, { db: { query: async () => ({ rows: [] }) }, auditar: async () => {} });
+    mini.get('/api/prueba', (_q, res) => res.json({ ok: true }));
+    const srv = await new Promise((ok) => { const s = mini.listen(0, '127.0.0.1', () => ok(s)); });
+    try { return await fn(`http://127.0.0.1:${srv.address().port}`); } finally { srv.close(); }
+  });
+}
+
+test('limitador de /auth/login y /auth/callback: comparten contador y responden 429 con Retry-After', opts, async () => {
+  await appPrueba({ RATE_LIMIT_AUTH_MAX: '3' }, async (url) => {
+    const g = (ruta) => fetch(url + ruta, { redirect: 'manual' });
+    assert.equal((await g('/auth/login')).status, 302);
+    assert.equal((await g('/auth/login')).status, 302);
+    assert.equal((await g('/auth/callback')).status, 302);
+    const r = await g('/auth/login');
+    assert.equal(r.status, 429);
+    assert.ok(Number(r.headers.get('retry-after')) >= 1);
+    assert.ok(r.headers.get('ratelimit') || r.headers.get('ratelimit-policy'), 'cabeceras estándar RateLimit');
+    const d = await r.json();
+    assert.equal(d.error, 'demasiados_intentos');
+    assert.equal((await g('/auth/callback')).status, 429);
+    assert.equal((await g('/api/prueba')).status, 200, 'el resto de la app no se ve afectada');
+  });
+});
+
+test('modo basic: bloqueo por IP tras intentos fallidos; los correctos y los sin credenciales no cuentan', opts, async () => {
+  const cred = (u, p) => ({ Authorization: 'Basic ' + Buffer.from(`${u}:${p}`).toString('base64') });
+  await appPrueba({ APP_USER: 'admin', APP_PASS: 'buena', RATE_LIMIT_BASIC_MAX: '2' }, async (url) => {
+    const g = (h) => fetch(url + '/api/prueba', { headers: h });
+    // el desafío inicial del navegador (sin cabecera) y los accesos correctos no suman
+    for (let i = 0; i < 6; i++) assert.equal((await g({})).status, 401);
+    for (let i = 0; i < 6; i++) assert.equal((await g(cred('admin', 'buena'))).status, 200);
+    // fallos con credenciales: 2 permitidos, el 3.º ya está bloqueado
+    assert.equal((await g(cred('admin', 'mala'))).status, 401);
+    assert.equal((await g(cred('admin', 'mala'))).status, 401);
+    const bloqueado = await g(cred('admin', 'mala'));
+    assert.equal(bloqueado.status, 429);
+    assert.ok(Number(bloqueado.headers.get('retry-after')) >= 1);
+    // bloqueada la IP, ni siquiera las credenciales correctas entran durante el bloqueo
+    assert.equal((await g(cred('admin', 'buena'))).status, 429);
+  });
 });

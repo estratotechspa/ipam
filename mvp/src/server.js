@@ -8,9 +8,11 @@ const { parse, libres } = require('./cidr');
 const jira = require('./jira');
 const auth = require('./auth');
 const marca = require('./marca');
+const limites = require('./limites');
 
 const PORT = process.env.PORT || 8080;
-const WEBHOOK_SECRET = process.env.JIRA_WEBHOOK_SECRET || 'dev-secret-cambiar';
+jira.validarSecretoWebhook(); // en producción, sin secreto propio la app no arranca
+const WEBHOOK_SECRET = process.env.JIRA_WEBHOOK_SECRET || jira.SECRETO_DE_EJEMPLO;
 const entero = (v, defecto) => (Number.isFinite(Number(v)) && String(v).trim() !== '' ? Number(v) : defecto);
 
 // Pool de conexiones: tiempos máximos para que una base lenta o caída no cuelgue las peticiones, y un
@@ -35,7 +37,11 @@ app.use(helmet({
     upgradeInsecureRequests: null,   // el TLS lo termina el ingress del cliente; no forzar https desde la app
   } },
   hsts: process.env.HSTS === 'true',  // solo cuando el acceso es siempre por HTTPS
+  referrerPolicy: { policy: 'no-referrer' },
 }));
+// helmet no trae Permissions-Policy: la interfaz no usa ninguna de estas capacidades del navegador, así que se desactivan.
+const PERMISOS = ['accelerometer', 'autoplay', 'camera', 'display-capture', 'geolocation', 'gyroscope', 'magnetometer', 'microphone', 'midi', 'payment', 'usb'];
+app.use((_q, res, next) => { res.set('Permissions-Policy', PERMISOS.map((p) => `${p}=()`).join(', ')); next(); });
 // Cuerpos JSON: 100 KB por defecto (JSON_LIMIT). Solo la importación de respaldos admite más (IMPORT_LIMIT, 5 MB) y su
 // parser va después de la autenticación, para que quien no tiene sesión no pueda hacernos procesar 5 MB.
 const guardarCrudo = (req, _res, buf) => { req.raw = buf; };
@@ -250,7 +256,10 @@ app.get('/api/asignaciones', wrap(async (req, res) => {
   res.json(filas);
 }));
 
-app.get('/api/jira/estado', (_q, res) => res.json({ activa: jira.enabled(), faltantes: jira.enabled() ? jira.faltantes() : [] }));
+// El simulador de tickets es solo para demos: en producción hay que pedirlo con ENABLE_SIMULADOR=true.
+const simuladorHabilitado = () => process.env.NODE_ENV !== 'production' || process.env.ENABLE_SIMULADOR === 'true';
+app.get('/api/jira/estado', (_q, res) =>
+  res.json({ activa: jira.enabled(), faltantes: jira.enabled() ? jira.faltantes() : [], simulador: simuladorHabilitado() }));
 
 // Exporta a Excel todos los segmentos asignados (con los datos de su pool) y la lista de pools.
 // Se escribe por streaming (ExcelJS WorkbookWriter) leyendo la base por lotes dentro de una transacción de solo lectura
@@ -403,16 +412,19 @@ app.delete('/api/asignaciones/:id', requiere('admin'), wrap(async (req, res) => 
   res.json({ liberado: r.rows[0] });
 }));
 
-// Usuarios y auditoría (solo admin). El rol asignado aquí rige desde el próximo inicio de sesión del usuario.
+// Usuarios y auditoría (solo admin). El rol asignado aquí rige en minutos (revalidación de sesiones), sin esperar a que caduque la cookie.
 app.get('/api/usuarios', requiere('admin'), wrap(async (_q, res) => {
   res.json((await db.query('select email, nombre, rol, ultimo_acceso from usuarios order by email')).rows);
 }));
+const EMAIL = /^[\p{L}\p{N}._%+'-]{1,64}@[\p{L}\p{N}-]+(\.[\p{L}\p{N}-]+)+$/u;
 app.put('/api/usuarios/:email', requiere('admin'), wrap(async (req, res) => {
+  const email = String(req.params.email).trim().toLowerCase();
+  if (email.length > 254 || !EMAIL.test(email)) return res.status(400).json({ error: 'correo inválido' });
   const rol = req.body && req.body.rol === null ? null : String((req.body || {}).rol || '');
   if (rol !== null && !auth.ROLES.includes(rol)) return res.status(400).json({ error: 'rol inválido' });
-  const email = req.params.email.toLowerCase();
   await db.query(
     'insert into usuarios (email, rol) values ($1,$2) on conflict (email) do update set rol = excluded.rol', [email, rol]);
+  auth.olvidar(email); // el cambio rige de inmediato en este proceso (en otras réplicas, al vencer la caché)
   await audita(req, 'cambiar_rol', { usuario: email, rol });
   res.json({ email, rol });
 }));
@@ -425,8 +437,30 @@ app.get('/api/eventos', wrap(async (_q, res) => {
 }));
 
 // ---------- Jira → IPAM (webhook firmado) ----------
-// Cuerpo esperado: { ticket, ambiente, tipo, mascara, vpc }. Firma: x-hub-signature-256 = sha256=HMAC(body, secreto).
-const firmar = (buf) => 'sha256=' + crypto.createHmac('sha256', WEBHOOK_SECRET).update(buf).digest('hex');
+// Cuerpo esperado: { ticket, ambiente, tipo, mascara, vpc }. La firma cubre el momento y el cuerpo:
+//   x-ipam-timestamp:   segundos desde 1970 (UTC) en que se firmó
+//   x-hub-signature-256: sha256=HMAC-SHA256(secreto, "<timestamp>.<cuerpo>")
+// Se rechaza lo que se firmó hace más de 5 minutos (o en el futuro) y una misma firma no se acepta dos veces dentro de
+// esa ventana, de modo que una captura de la petición no se puede reenviar. (La memoria de firmas es por proceso.)
+const VENTANA_WEBHOOK_S = 300;
+const firmar = (ts, buf) => 'sha256=' + crypto.createHmac('sha256', WEBHOOK_SECRET).update(`${ts}.`).update(buf).digest('hex');
+const firmasVistas = new Map(); // firma → instante (s) en que ya no hace falta recordarla
+
+function verificarWebhook(headers, buf, ahoraMs = Date.now()) {
+  const ts = String(headers['x-ipam-timestamp'] || '').trim();
+  if (!/^\d{9,13}$/.test(ts)) return { ok: false, motivo: 'falta x-ipam-timestamp o no es un número' };
+  const t = Number(ts) > 1e11 ? Math.floor(Number(ts) / 1000) : Number(ts); // tolera milisegundos
+  if (Math.abs(ahoraMs / 1000 - t) > VENTANA_WEBHOOK_S) return { ok: false, motivo: 'timestamp fuera de la ventana de 5 minutos' };
+  const recibida = String(headers['x-hub-signature-256'] || '');
+  const esperada = firmar(ts, buf);
+  if (!(recibida.length === esperada.length && crypto.timingSafeEqual(Buffer.from(recibida), Buffer.from(esperada)))) {
+    return { ok: false, motivo: 'firma inválida' };
+  }
+  for (const [f, vence] of firmasVistas) if (vence <= ahoraMs / 1000) firmasVistas.delete(f);
+  if (firmasVistas.has(recibida)) return { ok: false, repetido: true, motivo: 'petición repetida' };
+  firmasVistas.set(recibida, t + 2 * VENTANA_WEBHOOK_S);
+  return { ok: true };
+}
 
 // Tipos y largos máximos de lo que llega por el webhook (los valores se usan en consultas, en Jira y en el log).
 function camposWebhookInvalidos(b) {
@@ -456,11 +490,12 @@ async function procesarTicket({ ticket, ambiente, tipo, mascara, vpc }) {
   return { status: 200, body: { ticket, pool: p.id, cidr: r.asignacion.cidr } };
 }
 
-app.post('/webhook/jira', wrap(async (req, res) => {
-  const recibida = String(req.headers['x-hub-signature-256'] || '');
-  const esperada = firmar(req.raw || Buffer.alloc(0));
-  const ok = recibida.length === esperada.length && crypto.timingSafeEqual(Buffer.from(recibida), Buffer.from(esperada));
-  if (!ok) { await evento('jira_firma_invalida', {}); return res.status(401).json({ error: 'firma inválida' }); }
+app.post('/webhook/jira', limites.limiteWebhook(), wrap(async (req, res) => {
+  const v = verificarWebhook(req.headers, req.raw || Buffer.alloc(0));
+  if (!v.ok) {
+    await evento('jira_firma_invalida', { motivo: v.motivo });
+    return res.status(v.repetido ? 409 : 401).json({ error: v.repetido ? 'petición repetida' : 'firma inválida', motivo: v.motivo });
+  }
   const b = req.body || {};
   if (!b.ticket || !b.ambiente || !b.tipo || !b.mascara || !b.vpc) return res.status(400).json({ error: 'faltan campos' });
   const invalido = camposWebhookInvalidos(b);
@@ -469,13 +504,22 @@ app.post('/webhook/jira', wrap(async (req, res) => {
   res.status(out.status).json(out.body);
 }));
 
-// Simulador para la demo: arma un ticket de Jira, lo firma y lo procesa por el mismo camino del webhook.
+// Simulador para la demo: arma un ticket de Jira, lo firma como lo haría Jira y lo procesa por el mismo camino del
+// webhook (con la misma verificación de firma y de timestamp). Solo fuera de producción o con ENABLE_SIMULADOR=true.
 app.post('/api/jira/simular', requiere('solicitante'), wrap(async (req, res) => {
+  if (!simuladorHabilitado()) return res.status(404).json({ error: 'El simulador no está habilitado en este entorno.' });
   const { ambiente, tipo, mascara, vpc } = req.body || {};
   const ticket = await nuevoTicket();
   const cuerpo = Buffer.from(JSON.stringify({ ticket, ambiente, tipo, mascara, vpc }));
-  await evento('jira_webhook_recibido', { ticket, ambiente, tipo, mascara, vpc, firma: firmar(cuerpo).slice(0, 23) + '…' });
-  const out = await procesarTicket({ ticket, ambiente, tipo, mascara, vpc });
+  const ts = String(Math.floor(Date.now() / 1000));
+  const firma = firmar(ts, cuerpo);
+  await evento('jira_webhook_recibido', { ticket, ambiente, tipo, mascara, vpc, timestamp: ts, firma: firma.slice(0, 23) + '…' });
+  const v = verificarWebhook({ 'x-ipam-timestamp': ts, 'x-hub-signature-256': firma }, cuerpo);
+  if (!v.ok) return res.status(401).json({ ticket, error: v.motivo });
+  const datos = { ticket, ambiente, tipo, mascara, vpc };
+  const invalido = camposWebhookInvalidos(datos);
+  if (invalido) return res.status(400).json({ error: `campo inválido: ${invalido}` });
+  const out = await procesarTicket(datos);
   res.status(out.status).json(out.body);
 }));
 
@@ -534,4 +578,4 @@ function iniciar() {
 }
 
 if (require.main === module) iniciar();
-module.exports = { app, db, evento, esperarSegundoPlano, purgar, poolsConUso };
+module.exports = { app, db, evento, esperarSegundoPlano, purgar, poolsConUso, verificarWebhook, firmar };

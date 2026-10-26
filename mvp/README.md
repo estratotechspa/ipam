@@ -10,6 +10,7 @@ docker compose up -d --build        # http://localhost:8080
 docker compose down -v              # apaga y borra la base (vuelve a los datos de ejemplo)
 ```
 Variables opcionales (archivo `.env` junto al compose): `APP_USER` y `APP_PASS` (clave de acceso) o `OIDC_*` + `PUBLIC_URL` + `SESSION_SECRET` (ver «Acceso, roles y auditoría»), `DB_PASSWORD`, `JIRA_WEBHOOK_SECRET`, `PORT`.
+El compose es una **demo local**: corre con `NODE_ENV=development` (abierto y con simulador de Jira). La imagen, en cambio, trae `NODE_ENV=production`: ahí la app **no arranca** sin autenticación ni con un secreto de webhook de ejemplo (ver «Acceso, roles y auditoría»).
 Pruebas unitarias: `npm test`.
 
 ## Variables de entorno de la app
@@ -21,6 +22,16 @@ Pruebas unitarias: `npm test`.
 | `RETENCION_DIAS` | 365 | días que se conservan `eventos` y `auditoria`; se purga al arrancar y cada 24 h. `0` = conservar todo |
 | `JIRA_REINTENTOS` · `JIRA_REINTENTO_MS` | 3 · 2000 | intentos de la sincronización con Jira (en segundo plano) y espera base entre ellos (× n) |
 | `SHUTDOWN_TIMEOUT_MS` | 10000 | tiempo máximo para drenar peticiones al recibir SIGTERM/SIGINT |
+| `NODE_ENV` | `production` en la imagen | en `production` la app exige autenticación y `JIRA_WEBHOOK_SECRET` propio, y oculta el simulador de Jira |
+| `AUTH_MODE` | se deduce | `oidc` · `basic` · `none`. Vacío: OIDC si hay `OIDC_ISSUER`, Basic si hay `APP_USER`+`APP_PASS`, si no abierto. **En producción el modo abierto hay que pedirlo con `AUTH_MODE=none`**; si no, la app no arranca |
+| `JIRA_WEBHOOK_SECRET` | — | secreto del webhook. En producción es obligatorio y no puede ser `dev-secret-cambiar` |
+| `ENABLE_SIMULADOR` | `false` | `true` deja disponible `POST /api/jira/simular` en producción (fuera de producción siempre lo está) |
+| `SESSION_HORAS` | 4 | duración máxima de la sesión OIDC |
+| `SESSION_REVALIDAR_SEG` | 300 | cada cuántos segundos se revalida el rol y la existencia del usuario en la base (`0` = en cada petición) |
+| `RATE_LIMIT_AUTH_MAX` · `RATE_LIMIT_AUTH_VENTANA_MIN` | 30 · 15 | peticiones por IP a `/auth/login` + `/auth/callback` por ventana |
+| `RATE_LIMIT_WEBHOOK_MAX` | 120 | peticiones por minuto y por IP a `/webhook/jira` |
+| `RATE_LIMIT_BASIC_MAX` | 5 | fallos de Basic Auth por minuto y por IP; luego 2× en 15 min y 4× en 1 h (bloqueo progresivo) |
+| `TRUST_PROXY` | — | saltos de proxy delante de la app. **Necesario detrás de un ingress** para que los límites por IP usen la IP del cliente y no la del proxy |
 
 ## Instalar en Kubernetes con Helm
 El chart está en `chart/ipam` (API + PostgreSQL opcional + migración de esquema + Ingress opcional).
@@ -48,7 +59,7 @@ helm install ipam chart/ipam -n ipam -f mis-valores.yaml \
 - **Webhook de Jira:** debe poder llegar a `https://<host>/webhook/jira`; usa el mismo `JIRA_WEBHOOK_SECRET`.
 
 ## Acceso, roles y auditoría
-Tres modos, según la configuración: **OIDC** (`OIDC_ISSUER`), **Basic Auth** de un solo usuario (`APP_USER` + `APP_PASS`, solo demos) o **abierto** (demo local; la interfaz lo avisa).
+Tres modos, que salen de `AUTH_MODE` o, si no se define, de la configuración: **OIDC** (`OIDC_ISSUER`), **Basic Auth** de un solo usuario (`APP_USER` + `APP_PASS`, solo demos) o **abierto** (demo local; la interfaz lo avisa). Con `NODE_ENV=production` (la imagen) la app **no arranca sin autenticación** —tampoco con credenciales a medias— a menos que el modo abierto se pida expresamente con `AUTH_MODE=none`. `AUTH_MODE=none` junto a `OIDC_ISSUER`/`APP_USER` es una contradicción y tampoco arranca. Helm: `auth.mode`.
 
 **Inicio de sesión con Google Workspace** (cualquier proveedor OpenID Connect funciona igual cambiando `issuer`):
 1. En Google Cloud → *APIs y servicios → Credenciales* → *ID de cliente de OAuth* (aplicación web). URI de redirección autorizado: `<PUBLIC_URL>/auth/callback`.
@@ -61,7 +72,8 @@ Tres modos, según la configuración: **OIDC** (`OIDC_ISSUER`), **Basic Auth** d
 | `solicitante` | + solicitar segmentos |
 | `admin` | + liberar, simular tickets de Jira, ver auditoría, asignar roles a otras personas |
 
-El rol sale de: correos admin de la configuración (siempre) → rol asignado en la pestaña *Usuarios* → grupos del proveedor → `defaultRole` (`lector`; `ninguno` = solo entran los mapeados). Un cambio de rol rige en el próximo inicio de sesión. La sesión es una cookie firmada de 8 h (`SESSION_HORAS`) sin estado en el servidor (sirve con varias réplicas); cerrar sesión borra la cookie local, no cierra la sesión en Google. Los cambios desde el navegador exigen la cabecera `X-Requested-With: ipam` (defensa CSRF). Todo inicio/cierre de sesión, asignación, liberación, exportación y cambio de rol queda en la tabla `auditoria` (pestaña *Auditoría*).
+El rol sale de: correos admin de la configuración (siempre) → rol asignado en la pestaña *Usuarios* → grupos del proveedor → `defaultRole` (`lector`; `ninguno` = solo entran los mapeados). La sesión es una cookie firmada de 4 h (`SESSION_HORAS`); **el rol y la existencia del usuario se revalidan contra la base cada 5 min** (`SESSION_REVALIDAR_SEG`, caché por proceso), así que quien es degradado, cambia de rol o se da de baja lo nota en minutos sin esperar a que caduque la cookie. «Heredar» devuelve al rol que dan sus grupos/la configuración al entrar (que se fija en la cookie; un cambio de grupos en el proveedor sí requiere volver a entrar), y los administradores de `OIDC_ADMIN_EMAILS` no se pueden degradar desde la base. Con varias réplicas un cambio puede tardar hasta esos 5 min en llegar a todas. Cerrar sesión borra la cookie local, no cierra la sesión en Google. Los cambios desde el navegador —incluido `POST /auth/logout`— exigen la cabecera `X-Requested-With: ipam` (defensa CSRF).
+**Límites de tasa** (`express-rate-limit`, por IP): `/auth/login` y `/auth/callback`, `/webhook/jira` y, en modo Basic, bloqueo progresivo tras fallos (5/min → 10/15 min → 20/h; los accesos correctos y la primera petición sin credenciales no cuentan). Responden `429` con `Retry-After`. Los contadores viven en cada réplica. Todo inicio/cierre de sesión, asignación, liberación, exportación y cambio de rol queda en la tabla `auditoria` (pestaña *Auditoría*).
 
 ## Respaldos y exposición
 - **Respaldos incrementales a GCS** (`postgres.backup.*`): completo semanal + incremental diario + WAL continuo (recuperación a cualquier instante), retención de 4 completos y prueba de restauración mensual. Imagen `mvp/postgres` (PostgreSQL + pgBackRest). Pasos, restauración y qué vigilar: **`docs/OPERACION.md`**.
@@ -83,13 +95,14 @@ Nada de «EstratoTech» está escrito en el código ni en la imagen: nombre, col
 - **Imagen:** dos etapas; runtime `cgr.dev/chainguard/node` fijado por digest (sin shell ni gestor de paquetes; Trivy: 0 CRITICAL/HIGH con parche). Usuario `65532`, sistema de archivos de solo lectura, sin capacidades Linux.
 - **Imagen propia del cliente:** `docker build --build-arg BASE_IMAGE=<su-imagen-node> --build-arg BUILD_IMAGE=<su-imagen-node> .` (Node ≥ 20 en el PATH, usuario no root).
 - **Chart:** `seccomp RuntimeDefault`, ServiceAccount propia sin token montado, `NetworkPolicy` (`networkPolicy.*`; `ingressFrom` para limitar quién llega a la app), Postgres y Job con filesystem de solo lectura y límites de recursos.
-- **Cabeceras HTTP:** `helmet` con CSP estricta (`script-src 'self'`). Detrás de un ingress: `TRUST_PROXY=1`; con acceso solo por HTTPS: `HSTS=true`.
+- **Cabeceras HTTP:** `helmet` con CSP estricta (`script-src 'self'`) y `Referrer-Policy: no-referrer`; `Permissions-Policy` desactiva cámara, micrófono, geolocalización, pagos, USB… (helmet no la trae: se añade con un middleware propio). Detrás de un ingress: `TRUST_PROXY=1`; con acceso solo por HTTPS: `HSTS=true`.
 - **Cadena de suministro:** `publicar.yml` publica en GHCR con SBOM y atestación. Pendiente: firma de imágenes y TLS de extremo a extremo → `docs/DEUDA-TECNICA.md`.
 
 ## Cómo está resuelto lo importante
 - **Sin solapamientos, garantizado por la base:** restricción de exclusión GiST (`sin_solapamiento`) sobre `(pool, cidr)`; además un trigger exige que el segmento caiga dentro del pool. Aunque alguien inserte directo en la base, se rechaza.
 - **Concurrencia:** las asignaciones de un mismo pool se serializan con un bloqueo de transacción (probado: 20 solicitudes simultáneas → 20 segmentos distintos).
-- **Jira → IPAM:** `POST /webhook/jira`, cuerpo `{ticket, ambiente, tipo, mascara, vpc}`, firma `x-hub-signature-256: sha256=HMAC(cuerpo, JIRA_WEBHOOK_SECRET)`. Firma inválida → 401.
+- **Jira → IPAM:** `POST /webhook/jira`, cuerpo `{ticket, ambiente, tipo, mascara, vpc}` con dos cabeceras: `x-ipam-timestamp` (segundos desde 1970, UTC) y `x-hub-signature-256: sha256=HMAC-SHA256(JIRA_WEBHOOK_SECRET, "<timestamp>.<cuerpo>")`. La firma cubre el timestamp; se rechaza (`401`) lo firmado hace más de 5 min o en el futuro, y una misma firma no se acepta dos veces dentro de esa ventana (`409`; la memoria de firmas es por réplica). **Cambio incompatible:** quien firmaba solo el cuerpo debe añadir el timestamp. Ejemplo:
+  `ts=$(date +%s); sig=$(printf '%s.%s' "$ts" "$cuerpo" | openssl dgst -sha256 -hmac "$SECRETO" | sed 's/^.* //'); curl -H "x-ipam-timestamp: $ts" -H "x-hub-signature-256: sha256=$sig" -H 'Content-Type: application/json' -d "$cuerpo" https://<host>/webhook/jira`
 
 ## API
 | Método | Ruta | |
@@ -101,12 +114,12 @@ Nada de «EstratoTech» está escrito en el código ni en la imagen: nombre, col
 | GET · POST | `/api/exportar.json` · `/api/importar` | respaldo lógico completo · restauración (admin) |
 | GET | `/api/config` · `/brand.css` · `/brand/logo` | marca (abiertos) |
 | GET | `/api/exportar.xlsx` | Excel con todos los segmentos (hoja «Segmentos») y los pools (hoja «Pools»); se genera por streaming, sin cargar todo en memoria |
-| GET | `/api/jira/estado` | si la integración saliente con Jira está activa |
+| GET | `/api/jira/estado` | si la integración saliente con Jira está activa, qué variables faltan y si el simulador está disponible |
 | GET | `/api/pools/:id/libres?mascara=22` | 3 segmentos libres |
 | POST | `/api/solicitudes` `{pool, vpc, cidr?, mascara?}` | 201 · 400 inválido · 409 solapamiento (con conflicto y sugeridos) |
 | DELETE | `/api/asignaciones/:id` | liberar |
 | POST | `/webhook/jira` | entrada desde Jira (firmada) |
-| POST | `/api/jira/simular` | simula un ticket para la demo |
+| POST | `/api/jira/simular` | simula un ticket para la demo (firmado igual que el webhook real). Solo fuera de producción o con `ENABLE_SIMULADOR=true`; si no, 404 |
 
 ## Integración saliente con Jira (desactivada por defecto)
 Código en `src/jira.js`. Se activa con `JIRA_ENABLED=true` más `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_PROJECT` (opcionales: `JIRA_ISSUE_TYPE`=Task, `JIRA_DONE_TRANSITION`=Done).
@@ -118,7 +131,7 @@ Código en `src/jira.js`. Se activa con `JIRA_ENABLED=true` más `JIRA_BASE_URL`
 
 ## Alcance del MVP (lo que NO está)
 - Con la integración desactivada, los números de ticket (`NET-xxx`) los genera el IPAM.
-- Solo IPv4. El rol efectivo se resuelve al iniciar sesión (no hay revocación inmediata de sesiones).
+- Solo IPv4. Las sesiones se revalidan cada 5 min (no hay cierre inmediato ni «cerrar sesión en todos los dispositivos»); el rol que dan los grupos del proveedor se fija al iniciar sesión.
 - Los 6 pools y 12 asignaciones son datos de ejemplo.
 
 ## Guion de demo (5 min)

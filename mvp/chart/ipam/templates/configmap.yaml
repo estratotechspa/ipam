@@ -17,6 +17,16 @@ data:
   {{- end }}
   HSTS: {{ .Values.config.hsts | quote }}
   RETENCION_DIAS: {{ .Values.config.retencionDias | quote }}
+  {{- with .Values.auth.mode }}
+  AUTH_MODE: {{ . | quote }}
+  {{- end }}
+  {{- if .Values.config.enableSimulador }}
+  ENABLE_SIMULADOR: "true"
+  {{- end }}
+  SESSION_REVALIDAR_SEG: {{ .Values.auth.revalidateSeconds | quote }}
+  RATE_LIMIT_AUTH_MAX: {{ .Values.auth.rateLimit.authMax | quote }}
+  RATE_LIMIT_WEBHOOK_MAX: {{ .Values.auth.rateLimit.webhookMax | quote }}
+  RATE_LIMIT_BASIC_MAX: {{ .Values.auth.rateLimit.basicMax | quote }}
   {{- range $k, $val := dict "BRAND_NAME" .Values.branding.name "BRAND_SUBTITLE" .Values.branding.subtitle "BRAND_FOOTER" .Values.branding.footer "BRAND_COLOR" .Values.branding.color "BRAND_COLOR_TOP" .Values.branding.colorTop "BRAND_COLOR_ACCENT" .Values.branding.colorAccent }}
   {{- if $val }}
   {{ $k }}: {{ $val | quote }}
