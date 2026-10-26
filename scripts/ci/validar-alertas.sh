@@ -34,12 +34,16 @@ if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
   docker run --rm --entrypoint promtool -v "$A:/reglas:ro" prom/prometheus:v2.55.1 check rules /reglas/reglas-prometheus.yml >/tmp/promtool.out 2>&1 && ok "promtool check rules" || { cat /tmp/promtool.out; mal "promtool rechazó las reglas"; }
   echo "OpenTofu (validate)"
   cp -R "$A/cloud-monitoring" "$TMP/tf"
-  docker run --rm -v "$TMP/tf:/work" -w /work ghcr.io/opentofu/opentofu:1.8 init -backend=false -input=false >/tmp/tofu-init.out 2>&1 \
-    && docker run --rm -v "$TMP/tf:/work" -w /work ghcr.io/opentofu/opentofu:1.8 validate >/tmp/tofu-validate.out 2>&1 \
-    && docker run --rm -v "$TMP/tf:/work" -w /work ghcr.io/opentofu/opentofu:1.8 fmt -check >/dev/null 2>&1 \
+  # Con tu mismo usuario (no root): en Linux, lo que el contenedor escribe en $TMP/tf como root no se podía borrar al terminar
+  # («rm: cannot remove … .terraform/providers/…») y el script fallaba en el CI. HOME=/tmp porque ese usuario no tiene directorio propio.
+  tofu() { docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$TMP/tf:/work" -w /work ghcr.io/opentofu/opentofu:1.8 "$@"; }
+  tofu init -backend=false -input=false >/tmp/tofu-init.out 2>&1 \
+    && tofu validate >/tmp/tofu-validate.out 2>&1 \
+    && tofu fmt -check >/dev/null 2>&1 \
     && ok "tofu init + validate + fmt" || { cat /tmp/tofu-init.out /tmp/tofu-validate.out 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | tail -15; mal "tofu falló (validate o formato)"; }
 else
   echo "  (sin Docker: se omiten promtool y tofu validate; ejecútalos donde haya Docker)"
 fi
+chmod -R u+w "$TMP" 2>/dev/null || true # los proveedores descargados son de solo lectura
 rm -rf "$TMP"
 [ "$fallos" -eq 0 ] && echo "Alertas y dashboard: OK" || { echo "Alertas y dashboard: FALLÓ ($fallos)"; exit 1; }
