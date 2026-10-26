@@ -64,7 +64,8 @@ const { requiere } = auth;
 const idError = () => crypto.randomBytes(4).toString('hex');
 function responderError(req, res, e) {
   const id = idError();
-  console.error(`[error ${id}] ${req.method} ${req.originalUrl}`, e);
+  // Marcadores %s: la URL la controla quien llama y no debe interpretarse como cadena de formato.
+  console.error('[error %s] %s %s', id, req.method, req.originalUrl, e);
   if (res.headersSent) return res.destroy(); // p. ej. falló a mitad de una descarga
   res.status(500).json({ error: 'interno', id });
 }

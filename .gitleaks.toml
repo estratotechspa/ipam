@@ -1,0 +1,10 @@
+# Configuración de Gitleaks (la lee solo al estar en la raíz del repositorio).
+# Hereda las reglas por defecto y añade una lista de excepciones.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Valores de ejemplo de la documentación OpenAPI (no son secretos)"
+# Los ejemplos de tokens de servicio de src/openapi.js (ramas feat/ipam-*) siempre empiezan con «ipam_AbCd».
+# Un token real tiene otro prefijo aleatorio, así que esta excepción no oculta secretos de verdad.
+regexes = ['''ipam_AbCd''']
