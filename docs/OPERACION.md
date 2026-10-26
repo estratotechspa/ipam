@@ -101,3 +101,11 @@ networkPolicy:
 2. En la POC: *Respaldo JSON* (admin). En el cliente: `POST /api/importar` con ese archivo.
 3. Registrar la nueva URL de retorno en su proveedor OIDC y la del webhook en su Jira.
 4. Apagar la POC. Nada de EstratoTech queda en el código ni en la imagen: solo en los valores de la POC.
+
+## 4. Operación de la aplicación
+
+- **Errores internos:** la API nunca devuelve el mensaje de un error inesperado; responde `{"error":"interno","id":"1a2b3c4d"}` y el detalle completo queda en el log del contenedor con ese mismo `id` (`[error 1a2b3c4d] POST /api/…`). Para investigar un reporte: `kubectl -n ipam logs deploy/ipam-ipam | grep 1a2b3c4d`.
+- **Retención:** `RETENCION_DIAS` (chart: `config.retencionDias`, 365 por defecto) borra de `eventos` y `auditoria` lo más antiguo que ese plazo. Corre al arrancar y cada 24 h en cada réplica (es idempotente). Si la auditoría debe conservarse más tiempo por política, súbelo o usa `0` (sin purga) y archiva la tabla por tu cuenta. El índice `eventos_ts_idx` lo crea el esquema.
+- **Apagado ordenado:** con SIGTERM/SIGINT la app deja de aceptar conexiones (`/api/health` responde 503 para que el balanceador deje de enviarle tráfico), termina las peticiones en curso y la sincronización con Jira pendiente, cierra el pool de PostgreSQL y sale con 0. Tiene `SHUTDOWN_TIMEOUT_MS` (10 s) como tope; el `terminationGracePeriodSeconds` de Kubernetes (30 s por defecto) lo cubre.
+- **Base de datos lenta o caída:** una consulta se corta a los `DB_STATEMENT_TIMEOUT_MS` (15 s) y esperar una conexión libre falla a los `DB_CONNECT_TIMEOUT_MS` (5 s) en vez de colgar la petición; un error en una conexión inactiva se registra y no tumba el proceso.
+- **Jira:** la sincronización saliente va en segundo plano; el resultado (`jira_ticket_creado`, `jira_ticket_actualizado`, `jira_error`) se ve en la pestaña *Jira* y en la tabla `eventos`.

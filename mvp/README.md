@@ -12,6 +12,16 @@ docker compose down -v              # apaga y borra la base (vuelve a los datos 
 Variables opcionales (archivo `.env` junto al compose): `APP_USER` y `APP_PASS` (clave de acceso) o `OIDC_*` + `PUBLIC_URL` + `SESSION_SECRET` (ver «Acceso, roles y auditoría»), `DB_PASSWORD`, `JIRA_WEBHOOK_SECRET`, `PORT`.
 Pruebas unitarias: `npm test`.
 
+## Variables de entorno de la app
+| Variable | Por defecto | Para qué |
+|---|---|---|
+| `DATABASE_URL` | — | conexión a PostgreSQL |
+| `DB_POOL_MAX` · `DB_CONNECT_TIMEOUT_MS` · `DB_STATEMENT_TIMEOUT_MS` | 10 · 5000 · 15000 | tamaño del pool, espera máxima por una conexión y duración máxima de cada consulta |
+| `JSON_LIMIT` · `IMPORT_LIMIT` | `100kb` · `5mb` | tamaño máximo de un cuerpo JSON; `IMPORT_LIMIT` solo rige en `POST /api/importar` (admin) |
+| `RETENCION_DIAS` | 365 | días que se conservan `eventos` y `auditoria`; se purga al arrancar y cada 24 h. `0` = conservar todo |
+| `JIRA_REINTENTOS` · `JIRA_REINTENTO_MS` | 3 · 2000 | intentos de la sincronización con Jira (en segundo plano) y espera base entre ellos (× n) |
+| `SHUTDOWN_TIMEOUT_MS` | 10000 | tiempo máximo para drenar peticiones al recibir SIGTERM/SIGINT |
+
 ## Instalar en Kubernetes con Helm
 El chart está en `chart/ipam` (API + PostgreSQL opcional + migración de esquema + Ingress opcional).
 
@@ -85,11 +95,12 @@ Nada de «EstratoTech» está escrito en el código ni en la imagen: nombre, col
 | Método | Ruta | |
 |---|---|---|
 | GET | `/api/health` | salud (abierta) |
-| GET | `/api/pools`, `/api/resumen`, `/api/asignaciones`, `/api/eventos` | lecturas |
+| GET | `/api/pools`, `/api/resumen`, `/api/eventos` | lecturas. `/api/pools` trae `total`, `usadas`, `libres` y `uso` por pool; `/api/resumen` se calcula de la misma consulta (la interfaz ya no lo usa) |
+| GET | `/api/asignaciones` | paginada: `limit` (50; máx. 200), `offset`, filtros `pool`, `ambiente`, `q` (CIDR, proyecto/VPC, solicitante o ticket), `orden` (`fecha`·`cidr`·`pool`·`vpc`·`solicitante`·`ticket`·`origen`·`direcciones`) y `dir` (`asc`·`desc`). El total sin paginar va en la cabecera `X-Total-Count` |
 | GET | `/api/me` · `/api/usuarios` · `/api/auditoria` | sesión actual · usuarios y roles (admin) · bitácora (admin) |
 | GET · POST | `/api/exportar.json` · `/api/importar` | respaldo lógico completo · restauración (admin) |
 | GET | `/api/config` · `/brand.css` · `/brand/logo` | marca (abiertos) |
-| GET | `/api/exportar.xlsx` | Excel con todos los segmentos (hoja «Segmentos») y los pools (hoja «Pools») |
+| GET | `/api/exportar.xlsx` | Excel con todos los segmentos (hoja «Segmentos») y los pools (hoja «Pools»); se genera por streaming, sin cargar todo en memoria |
 | GET | `/api/jira/estado` | si la integración saliente con Jira está activa |
 | GET | `/api/pools/:id/libres?mascara=22` | 3 segmentos libres |
 | POST | `/api/solicitudes` `{pool, vpc, cidr?, mascara?}` | 201 · 400 inválido · 409 solapamiento (con conflicto y sugeridos) |
@@ -101,6 +112,7 @@ Nada de «EstratoTech» está escrito en el código ni en la imagen: nombre, col
 Código en `src/jira.js`. Se activa con `JIRA_ENABLED=true` más `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_PROJECT` (opcionales: `JIRA_ISSUE_TYPE`=Task, `JIRA_DONE_TRANSITION`=Done).
 - Solicitud desde el panel → crea el ticket en Jira y guarda su clave real en la asignación.
 - Ticket que llega por webhook → comenta el rango en el ticket y lo pasa a la transición final.
+- **Corre en segundo plano:** la respuesta al usuario no espera a Jira (hasta 3 llamadas de 10 s antes). Si falla, se reintenta (`JIRA_REINTENTOS`) y el resultado queda en la tabla `eventos`: `jira_ticket_creado`, `jira_ticket_actualizado` o `jira_error`. Mientras tanto la asignación lleva su ticket `NET-xxx` interno, que se reemplaza por la clave de Jira al crearse. Un reintento tras un fallo parcial puede duplicar el comentario en Jira.
 - Si Jira falla, la asignación se mantiene y queda un evento `jira_error`. Sin activar, todo funciona como antes (tickets `NET-xxx` simulados).
 - Aún no probada contra un Jira real. Pendiente para Helm: pasar estas variables al Secret/values del chart.
 

@@ -14,6 +14,7 @@ config:
   publicUrl: ""
   trustProxy: "1"               # saltos de proxy delante de la app (ingress); "" para desactivar
   hsts: false                   # true si el acceso es siempre por HTTPS
+  retencionDias: 365            # días que se conservan eventos y auditoría (0 = conservar todo)
 
 # Marca: todo opcional y sin reconstruir la imagen.
 branding:

@@ -10,7 +10,7 @@ async function api(url,opt){
   const r=await fetch(url,init);
   if(r.status===401&&YO.modo==='oidc'){location.href='/auth/login?next='+encodeURIComponent(location.pathname);return {ok:false,status:401,data:null}}
   let j=null;try{j=await r.json()}catch(e){}
-  return {ok:r.ok,status:r.status,data:j};
+  return {ok:r.ok,status:r.status,data:j,total:Number(r.headers.get('X-Total-Count'))};
 }
 let YO={modo:'none',rol:'admin',usuario:'',nombre:''};
 const NIVEL={lector:0,solicitante:1,admin:2};
@@ -23,7 +23,8 @@ $('nav').onclick=e=>{if(e.target.dataset.t)show(e.target.dataset.t)};
 const fail=(id,e)=>$(id).innerHTML=`<div class="alert">No se pudo cargar: ${esc(e.message)}</div>`;
 
 async function renderPools(){
-  try{const [pools,r]=await Promise.all([get('/api/pools'),get('/api/resumen')]);
+  try{const pools=await get('/api/pools');
+  const r={pools:pools.length,asignaciones:pools.reduce((n,p)=>n+p.asignaciones,0),uso_promedio:pools.length?pools.reduce((n,p)=>n+p.uso,0)/pools.length:0,solapamientos:0};
   $('pools').innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h2>Estado de pools</h2><a class="btn sec" href="/api/exportar.xlsx" download>⬇ Exportar a Excel</a></div>
   <div class="row"><div class="card"><div class="kpi">${r.pools}</div><div class="sub">Pools</div></div>
   <div class="card"><div class="kpi">${r.asignaciones}</div><div class="sub">Asignaciones activas</div></div>
@@ -34,10 +35,10 @@ async function renderPools(){
   <td><div class="bar" title="${(p.uso*100).toFixed(2)}%"><i style="width:${Math.max(p.uso*100,1)}%"></i></div></td></tr>`).join('')}</table></div>`}catch(e){fail('pools',e)}}
 
 async function renderAsig(){
-  try{const a=await get('/api/asignaciones');
+  try{const ra=await api('/api/asignaciones?limit=200');if(!ra.ok)throw new Error('Error '+ra.status);const a=ra.data,total=ra.total||a.length;
   $('asig').innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h2>Asignaciones</h2><span><a class="btn" href="/api/exportar.xlsx" download>⬇ Exportar a Excel</a> ${puede('admin')?'<a class="btn sec" href="/api/exportar.json" download title="Respaldo completo para llevar el IPAM a otra infraestructura">⬇ Respaldo JSON</a>':''}</span></div><div class="card tablewrap"><table><tr><th>Segmento</th><th>Pool</th><th>Proyecto / VPC</th><th>Direcciones</th><th>Solicitó</th><th>Origen</th><th>Ticket</th><th>Fecha</th><th></th></tr>
   ${a.map(x=>`<tr><td><code>${esc(x.cidr)}</code></td><td>${esc(x.pool_id)}</td><td>${esc(x.vpc)}</td><td>${fmt(size(x.cidr))}</td><td>${esc(x.solicitante)}</td><td>${esc(x.origen)}</td><td>${esc(x.ticket)}</td><td>${fecha(x.creado_en)}</td>
-  <td>${puede('admin')?`<button class="btn sec" data-del="${x.id}" data-c="${esc(x.cidr)}">Liberar</button>`:''}</td></tr>`).join('')}</table></div>`;
+  <td>${puede('admin')?`<button class="btn sec" data-del="${x.id}" data-c="${esc(x.cidr)}">Liberar</button>`:''}</td></tr>`).join('')}</table></div>${total>a.length?`<p class="muted">Se muestran las ${a.length} más recientes de ${total}. El Excel incluye todas.</p>`:''}`;
   $('asig').querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{
     if(!confirm('¿Liberar '+b.dataset.c+'?'))return;
     await api('/api/asignaciones/'+b.dataset.del,{method:'DELETE',body:{}});renderAsig()})}catch(e){fail('asig',e)}}

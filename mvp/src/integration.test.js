@@ -3,23 +3,33 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
+const http = require('node:http');
+const { spawn } = require('node:child_process');
+const ExcelJS = require('exceljs');
 
 const SECRET = 'secreto-de-pruebas';
 process.env.JIRA_WEBHOOK_SECRET = SECRET;
 const hay = !!process.env.DATABASE_URL;
 const opts = { skip: hay ? false : 'sin DATABASE_URL' };
 
-let server, base, db;
+let server, base, db, mod;
 const post = (ruta, cuerpo, h = {}) => fetch(base + ruta, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'ipam', ...h }, body: JSON.stringify(cuerpo) });
+let webhook; // se define abajo: POST firmado a /webhook/jira
 const firma = (txt) => 'sha256=' + crypto.createHmac('sha256', SECRET).update(txt).digest('hex');
 
 test.before(async () => {
   if (!hay) return;
-  ({ app: server, db } = require('./server'));
+  mod = require('./server');
+  ({ app: server, db } = mod);
   server = await new Promise((ok) => { const s = server.listen(0, () => ok(s)); });
   base = `http://127.0.0.1:${server.address().port}`;
 });
 test.after(async () => { if (hay) { server.close(); await db.end(); } });
+
+webhook = (cuerpo) => {
+  const txt = JSON.stringify(cuerpo);
+  return fetch(base + '/webhook/jira', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-hub-signature-256': firma(txt) }, body: txt });
+};
 
 test('salud y estado de Jira (desactivada por defecto)', opts, async () => {
   assert.deepEqual(await (await fetch(base + '/api/health')).json(), { ok: true });
@@ -47,7 +57,7 @@ test('concurrencia: 20 solicitudes simultáneas → 20 segmentos distintos', opt
   assert.ok(rs.every((r) => r.status === 201));
   const cidrs = (await Promise.all(rs.map((r) => r.json()))).map((x) => x.cidr);
   assert.equal(new Set(cidrs).size, 20);
-  for (const a of await (await fetch(base + '/api/asignaciones')).json()) {
+  for (const a of await (await fetch(base + '/api/asignaciones?q=conc-&limit=200')).json()) {
     if (a.vpc.startsWith('conc-')) assert.equal((await fetch(`${base}/api/asignaciones/${a.id}`, { method: 'DELETE', headers: { 'X-Requested-With': 'ipam' } })).status, 200);
   }
 });
@@ -70,7 +80,7 @@ test('webhook de Jira: firma inválida → 401; firma válida → asigna', opts,
   assert.equal(bien.status, 200);
   const d = await bien.json();
   assert.equal(d.ticket, 'NET-9001');
-  const a = (await (await fetch(base + '/api/asignaciones')).json()).find((x) => x.ticket === 'NET-9001');
+  const a = (await (await fetch(base + '/api/asignaciones?q=NET-9001')).json()).find((x) => x.ticket === 'NET-9001');
   assert.equal(a.origen, 'jira');
   await fetch(`${base}/api/asignaciones/${a.id}`, { method: 'DELETE', headers: { 'X-Requested-With': 'ipam' } });
 });
@@ -97,17 +107,18 @@ test('respaldo JSON: exporta, restaura lo borrado y rechaza solapamientos sin im
   assert.equal(igual.omitidas, resp.asignaciones.length);
 
   // Se borra una asignación y el respaldo la devuelve.
-  const lista = await (await fetch(base + '/api/asignaciones')).json();
+  const lista = await (await fetch(base + '/api/asignaciones?q=NET-101')).json();
   const a = lista.find((x) => x.ticket === 'NET-101');
   await fetch(`${base}/api/asignaciones/${a.id}`, { method: 'DELETE', headers: H });
   const rest = await (await post('/api/importar', resp)).json();
-  assert.equal(rest.asignaciones, 1);
+  assert.ok(rest.asignaciones >= 1); // «>=»: otras pruebas que corren en paralelo pueden haber dejado filas en el respaldo
+  assert.ok((await (await fetch(base + '/api/asignaciones?q=NET-101')).json()).some((x) => x.ticket === 'NET-101'));
 
   // Un respaldo con un segmento que se solapa con otro existente se rechaza completo.
   const malo = { ...resp, asignaciones: [{ pool_id: 'gke-pods-prod', cidr: '10.64.8.0/22', vpc: 'choque', solicitante: 'x', ticket: 'NET-7777', origen: 'panel' }] };
   const res = await post('/api/importar', malo);
   assert.equal(res.status, 409);
-  assert.ok(!(await (await fetch(base + '/api/asignaciones')).json()).some((x) => x.ticket === 'NET-7777'));
+  assert.ok(!(await (await fetch(base + '/api/asignaciones?q=NET-7777')).json()).some((x) => x.ticket === 'NET-7777'));
 
   assert.equal((await post('/api/importar', { hola: 1 })).status, 400);
 });
@@ -116,4 +127,251 @@ test('marca por API y logo inexistente', opts, async () => {
   assert.equal((await (await fetch(base + '/api/config')).json()).nombre, 'IPAM');
   assert.match(await (await fetch(base + '/brand.css')).text(), /--top:/);
   assert.equal((await fetch(base + '/brand/logo')).status, 404);
+});
+
+// ---------- Fase 1 · robustez ----------
+const H = { 'X-Requested-With': 'ipam' };
+const borrar = (id) => fetch(`${base}/api/asignaciones/${id}`, { method: 'DELETE', headers: H });
+const eventos = async () => (await fetch(base + '/api/eventos')).json();
+
+test('evento() captura el error y no lo propaga (como auditar)', opts, async () => {
+  // `detalle` es NOT NULL: undefined hace fallar el insert.
+  await assert.doesNotReject(mod.evento('prueba_fallida', undefined));
+});
+
+test('pool de pg: manejador de error, tiempos y statement_timeout', opts, async () => {
+  assert.ok(db.listenerCount('error') >= 1);
+  assert.equal(db.options.connectionTimeoutMillis, 5000);
+  assert.equal((await db.query('show statement_timeout')).rows[0].statement_timeout, '15s');
+});
+
+test('un error interno responde {error, id} sin exponer el detalle, y lo deja en el log', opts, async () => {
+  const log = [];
+  const err = console.error;
+  console.error = (...a) => log.push(a.map(String).join(' '));
+  db.query = async () => { throw new Error('secreto-interno-xyz'); };
+  let r, texto;
+  try { r = await fetch(base + '/api/health'); texto = await r.text(); } finally { delete db.query; console.error = err; }
+  assert.equal(r.status, 500);
+  const d = JSON.parse(texto);
+  assert.deepEqual(Object.keys(d).sort(), ['error', 'id']);
+  assert.equal(d.error, 'interno');
+  assert.match(d.id, /^[0-9a-f]{8}$/);
+  assert.ok(!texto.includes('secreto-interno-xyz'));
+  assert.ok(log.some((l) => l.includes(d.id) && l.includes('secreto-interno-xyz')), 'el detalle completo queda en el servidor');
+});
+
+test('límites de cuerpo: 100 KB en general, 5 MB solo en /api/importar; JSON roto → 400', opts, async () => {
+  const grande = { pool: 'onprem-lan-dev', vpc: 'x'.repeat(200 * 1024), mascara: 24 };
+  assert.equal((await post('/api/solicitudes', grande)).status, 413);
+  const roto = await fetch(base + '/api/solicitudes', { method: 'POST', headers: { 'Content-Type': 'application/json', ...H }, body: '{' });
+  assert.equal(roto.status, 400);
+  assert.equal((await roto.json()).error, 'JSON inválido.');
+  // un respaldo de ~300 KB (vacío pero con relleno) sí entra por /api/importar
+  const r = await post('/api/importar', { formato: 'ipam-respaldo', version: 1, pools: [], asignaciones: [], relleno: 'x'.repeat(300 * 1024) });
+  assert.equal(r.status, 200);
+  // y por encima de 5 MB se rechaza
+  assert.equal((await post('/api/importar', { formato: 'ipam-respaldo', version: 1, pools: [], asignaciones: [], relleno: 'x'.repeat(5.5 * 1024 * 1024) })).status, 413);
+});
+
+test('textos con largo máximo: vpc, pool, CIDR y campos del webhook', opts, async () => {
+  const largo = 'v'.repeat(101);
+  assert.equal((await post('/api/solicitudes', { pool: 'onprem-lan-dev', vpc: largo, mascara: 24 })).status, 400);
+  assert.equal((await post('/api/solicitudes', { pool: 'onprem-lan-dev', vpc: { a: 1 }, mascara: 24 })).status, 400);
+  assert.equal((await post('/api/solicitudes', { pool: 'p'.repeat(101), vpc: 'v', mascara: 24 })).status, 400);
+  assert.equal((await post('/api/solicitudes', { pool: 'onprem-lan-dev', vpc: 'v', cidr: '1'.repeat(60) })).status, 400);
+  const ok = await post('/api/solicitudes', { pool: 'onprem-lan-dev', vpc: 'v'.repeat(100), cidr: '192.168.90.0/24' });
+  assert.equal(ok.status, 201);
+  await borrar((await ok.json()).id);
+  for (const malo of [{ vpc: largo }, { ticket: 'NET 1; drop' }, { ticket: 'T'.repeat(51) }, { tipo: 'x'.repeat(51) }, { mascara: 'abc' }]) {
+    const r = await webhook({ ticket: 'NET-9100', ambiente: 'qa', tipo: 'Nodos', mascara: 24, vpc: 'v', ...malo });
+    assert.equal(r.status, 400, JSON.stringify(malo));
+  }
+});
+
+test('GET /api/asignaciones: paginación, filtros, orden y total', opts, async () => {
+  const get = (q) => fetch(`${base}/api/asignaciones?${q}`);
+  let r = await get('limit=5');
+  const total = Number(r.headers.get('x-total-count'));
+  assert.ok(total >= 12);
+  assert.equal((await r.json()).length, 5);
+  assert.equal((await (await get('limit=2&offset=2')).json()).length, 2);
+  r = await get('limit=2&offset=1000000');
+  assert.deepEqual(await r.json(), []);
+  assert.equal(Number(r.headers.get('x-total-count')), total, 'el total no depende de la página');
+  assert.ok((await (await get('limit=1000')).json()).length <= 200);
+
+  r = await get('pool=gke-nodos-prod&orden=cidr&dir=asc');
+  assert.deepEqual((await r.json()).map((x) => x.cidr), ['10.10.0.0/20', '10.10.16.0/20', '10.10.32.0/21']);
+  assert.equal(Number(r.headers.get('x-total-count')), 3);
+  assert.deepEqual((await (await get('pool=gke-nodos-prod&orden=cidr&dir=desc')).json()).map((x) => x.cidr), ['10.10.32.0/21', '10.10.16.0/20', '10.10.0.0/20']);
+  assert.deepEqual((await (await get('pool=gke-nodos-prod&orden=direcciones&dir=desc')).json()).map((x) => x.cidr).slice(-1), ['10.10.32.0/21']);
+
+  const porTexto = await (await get('q=NET-142')).json();
+  assert.equal(porTexto.length, 1);
+  assert.equal(porTexto[0].vpc, 'vpc-clientes');
+  assert.ok((await (await get('q=10.64.8')).json()).some((x) => x.ticket === 'NET-142'), 'busca por CIDR');
+  assert.ok((await (await get('q=MLOPEZ')).json()).length >= 4, 'sin distinguir mayúsculas, por solicitante');
+  assert.deepEqual(await (await get('q=%25')).json(), [], '% se busca literal, no como comodín');
+  const prod = await (await get('ambiente=prod&limit=200')).json();
+  assert.ok(prod.length >= 9 && prod.every((x) => x.ambiente === 'prod'));
+  assert.equal((await (await get('ambiente=qa&pool=gke-nodos-prod')).json()).length, 0);
+
+  for (const q of ['limit=0', 'limit=abc', 'offset=-1', 'orden=hack', 'orden=constructor', 'dir=up', 'ambiente=xx', 'q=' + 'a'.repeat(101), 'pool=a&pool=b']) {
+    assert.equal((await get(q)).status, 400, q);
+  }
+});
+
+test('pools y resumen salen de una sola consulta de uso (con libres)', opts, async () => {
+  const pools = await (await fetch(base + '/api/pools')).json();
+  const p = pools.find((x) => x.id === 'gke-nodos-prod');
+  assert.equal(p.total, 65536);
+  assert.equal(p.usadas, 4096 + 4096 + 2048);
+  assert.equal(p.libres, p.total - p.usadas);
+  assert.ok(Math.abs(p.uso - p.usadas / p.total) < 1e-12);
+  const r = await (await fetch(base + '/api/resumen')).json();
+  assert.equal(r.pools, pools.length);
+  assert.equal(r.asignaciones, pools.reduce((n, x) => n + x.asignaciones, 0));
+  assert.equal(r.libres, pools.reduce((n, x) => n + x.libres, 0));
+  assert.equal(r.solapamientos, 0);
+});
+
+test('Excel por streaming: hojas, estilos y más filas que un lote', opts, async () => {
+  const y = 2600;
+  await db.query(
+    `insert into asignaciones (pool_id,cidr,vpc,solicitante,ticket,origen)
+     select 'onprem-lan-dev', set_masklen(inet '192.168.128.0' + i*4, 30)::cidr, 'bulk-xlsx', 'prueba', 'BULK-' || i, 'panel' from generate_series(0, $1::int - 1) i`, [y]);
+  try {
+    const r = await fetch(base + '/api/exportar.xlsx');
+    assert.equal(r.status, 200);
+    assert.match(r.headers.get('content-disposition'), /ipam-segmentos-\d{4}-\d{2}-\d{2}\.xlsx/);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(Buffer.from(await r.arrayBuffer()));
+    const seg = wb.getWorksheet('Segmentos');
+    assert.ok(seg.rowCount >= y + 13, `filas: ${seg.rowCount}`);
+    assert.equal(seg.getCell('A1').value, 'Segmento (CIDR)');
+    assert.equal(seg.getCell('A1').font.bold, true);
+    assert.equal(seg.views[0].state, 'frozen');
+    const bulk = seg.getRows(2, seg.rowCount - 1).filter((f) => f.getCell('I').value === 'bulk-xlsx');
+    assert.equal(bulk.length, y, 'todas las filas, también las posteriores al primer lote');
+    assert.equal(bulk[0].getCell('C').numFmt, '#,##0');
+    assert.equal(bulk[0].getCell('C').value, 4);
+    const pools = wb.getWorksheet('Pools');
+    assert.equal(pools.getCell('A1').value, 'Pool');
+    assert.ok(pools.rowCount >= 7);
+    assert.equal(pools.getRow(2).getCell('G').numFmt, '0.0%');
+  } finally {
+    await db.query("delete from asignaciones where vpc = 'bulk-xlsx'");
+  }
+});
+
+test('retención: purga eventos y auditoría antiguos y deja los recientes; existe el índice', opts, async () => {
+  await db.query("insert into eventos (tipo, ts) values ('test_viejo', now() - interval '400 days'), ('test_reciente', now())");
+  await db.query("insert into auditoria (usuario, accion, ts) values ('t-ret', 'test_viejo', now() - interval '400 days'), ('t-ret', 'test_reciente', now())");
+  assert.equal((await mod.purgar(0)).omitida, true, 'RETENCION_DIAS=0 conserva todo');
+  const r = await mod.purgar(365);
+  assert.ok(r.eventos >= 1 && r.auditoria >= 1);
+  const tipos = (await db.query("select tipo from eventos where tipo like 'test_%'")).rows.map((x) => x.tipo);
+  assert.deepEqual(tipos, ['test_reciente']);
+  assert.deepEqual((await db.query("select accion from auditoria where usuario = 't-ret'")).rows.map((x) => x.accion), ['test_reciente']);
+  assert.equal((await db.query("select 1 from pg_indexes where indexname = 'eventos_ts_idx'")).rowCount, 1);
+  await db.query("delete from eventos where tipo like 'test_%'");
+  await db.query("delete from auditoria where usuario = 't-ret'");
+});
+
+// Jira falso: crea tickets (clave JIRA-77), con fallos y demoras configurables.
+function jiraFalso({ fallos = 0, demoraMs = 0 } = {}) {
+  const f = { llamadas: [], n: 0 };
+  f.srv = http.createServer((req, res) => {
+    let cuerpo = '';
+    req.on('data', (d) => { cuerpo += d; });
+    req.on('end', () => {
+      f.llamadas.push(`${req.method} ${req.url}`);
+      setTimeout(() => {
+        res.setHeader('content-type', 'application/json');
+        if (req.method === 'POST' && req.url === '/rest/api/3/issue') {
+          if (f.n++ < fallos) { res.statusCode = 500; return res.end('{"error":"boom"}'); }
+          return res.end('{"key":"JIRA-77"}');
+        }
+        res.end('{}');
+      }, demoraMs);
+    });
+  });
+  f.listen = () => new Promise((ok) => f.srv.listen(0, '127.0.0.1', () => {
+    Object.assign(process.env, { JIRA_ENABLED: 'true', JIRA_BASE_URL: `http://127.0.0.1:${f.srv.address().port}`, JIRA_EMAIL: 'a@b.cl', JIRA_API_TOKEN: 't', JIRA_PROJECT: 'NET', JIRA_REINTENTO_MS: '20' });
+    ok(f);
+  }));
+  f.cerrar = () => { for (const k of ['JIRA_ENABLED', 'JIRA_BASE_URL', 'JIRA_EMAIL', 'JIRA_API_TOKEN', 'JIRA_PROJECT', 'JIRA_REINTENTO_MS']) delete process.env[k]; f.srv.close(); };
+  return f;
+}
+const ultimoEvento = async (tipo) => (await eventos()).find((e) => e.tipo === tipo);
+
+test('Jira fuera del camino crítico: la respuesta no espera a Jira y el resultado queda en eventos', opts, async () => {
+  const j = await jiraFalso({ demoraMs: 1500 }).listen();
+  try {
+    const t0 = Date.now();
+    const r = await post('/api/solicitudes', { pool: 'onprem-lan-dev', vpc: 'jira-bg', cidr: '192.168.91.0/24' });
+    const ms = Date.now() - t0;
+    assert.equal(r.status, 201);
+    assert.ok(ms < 1000, `respondió en ${ms} ms, no debe esperar a Jira (1,5 s)`);
+    const a = await r.json();
+    assert.match(a.ticket, /^NET-\d+$/, 'la respuesta trae el ticket interno');
+    await mod.esperarSegundoPlano();
+    const ev = await ultimoEvento('jira_ticket_creado');
+    assert.equal(ev.detalle.ticket, 'JIRA-77');
+    assert.equal((await (await fetch(base + '/api/asignaciones?q=jira-bg')).json())[0].ticket, 'JIRA-77', 'la clave real reemplaza al ticket interno');
+    await borrar(a.id);
+  } finally { j.cerrar(); }
+});
+
+test('Jira con un fallo transitorio: se reintenta y termina creando el ticket', opts, async () => {
+  const j = await jiraFalso({ fallos: 1 }).listen();
+  const err = console.error;
+  console.error = () => {};
+  try {
+    const a = await (await post('/api/solicitudes', { pool: 'onprem-lan-dev', vpc: 'jira-reint', cidr: '192.168.92.0/24' })).json();
+    await mod.esperarSegundoPlano();
+    assert.equal(j.llamadas.filter((l) => l === 'POST /rest/api/3/issue').length, 2);
+    assert.equal((await ultimoEvento('jira_ticket_creado')).detalle.rango, '192.168.92.0/24');
+    await borrar(a.id);
+  } finally { console.error = err; j.cerrar(); }
+});
+
+test('Jira caído: la asignación se conserva y queda jira_error tras los reintentos', opts, async () => {
+  const j = await jiraFalso({ fallos: 99 }).listen();
+  const err = console.error;
+  console.error = () => {};
+  try {
+    const r = await post('/api/solicitudes', { pool: 'onprem-lan-dev', vpc: 'jira-caido', cidr: '192.168.93.0/24' });
+    assert.equal(r.status, 201);
+    const a = await r.json();
+    await mod.esperarSegundoPlano();
+    assert.equal(j.llamadas.length, 3);
+    const ev = await ultimoEvento('jira_error');
+    assert.equal(ev.detalle.ticket, a.ticket);
+    assert.equal(ev.detalle.intentos, 3);
+    assert.match(ev.detalle.motivo, /500/);
+    assert.equal((await (await fetch(base + '/api/asignaciones?q=jira-caido')).json())[0].ticket, a.ticket, 'sigue con su ticket interno');
+    await borrar(a.id);
+  } finally { console.error = err; j.cerrar(); }
+});
+
+test('SIGTERM: el servidor deja de aceptar, termina y drena el pool (salida 0)', opts, async () => {
+  const hijo = spawn(process.execPath, [require.resolve('./server')], {
+    env: { ...process.env, PORT: '0', RETENCION_DIAS: '0', NODE_ENV: 'test' }, stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let salida = '';
+  hijo.stdout.on('data', (d) => { salida += d; });
+  hijo.stderr.on('data', (d) => { salida += d; });
+  const puerto = await new Promise((ok, mal) => {
+    const t = setTimeout(() => mal(new Error('no arrancó: ' + salida)), 8000);
+    hijo.stdout.on('data', () => { const m = salida.match(/escuchando en :(\d+)/); if (m) { clearTimeout(t); ok(m[1]); } });
+  });
+  assert.equal((await fetch(`http://127.0.0.1:${puerto}/api/health`)).status, 200);
+  const fin = new Promise((ok) => hijo.on('exit', (codigo, senal) => ok({ codigo, senal })));
+  hijo.kill('SIGTERM');
+  const { codigo, senal } = await fin;
+  assert.equal(senal, null);
+  assert.equal(codigo, 0, salida);
+  assert.match(salida, /SIGTERM: cerrando/);
 });

@@ -16,6 +16,7 @@ data:
   TRUST_PROXY: {{ . | quote }}
   {{- end }}
   HSTS: {{ .Values.config.hsts | quote }}
+  RETENCION_DIAS: {{ .Values.config.retencionDias | quote }}
   {{- range $k, $val := dict "BRAND_NAME" .Values.branding.name "BRAND_SUBTITLE" .Values.branding.subtitle "BRAND_FOOTER" .Values.branding.footer "BRAND_COLOR" .Values.branding.color "BRAND_COLOR_TOP" .Values.branding.colorTop "BRAND_COLOR_ACCENT" .Values.branding.colorAccent }}
   {{- if $val }}
   {{ $k }}: {{ $val | quote }}
