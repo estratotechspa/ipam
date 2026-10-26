@@ -249,7 +249,8 @@ function montar(app, { db, auditar }) {
   app.get('/login', (req, res) => {
     if (modo() !== 'oidc') return res.redirect('/');
     const s = abrir(cookies(req)[SESION]);
-    if (s && s.v === 2 && !req.query.error) return res.redirect(rutaSegura(req.query.next)); // ya tiene sesión
+    // Ya tiene sesión: a la aplicación. Se ignora `next` a propósito (sin redirecciones hacia un valor que viene de la URL).
+    if (s && s.v === 2 && !req.query.error) return res.redirect('/');
     res.set('Cache-Control', 'no-store').sendFile(path.join(PUBLICO, 'login.html'));
   });
 

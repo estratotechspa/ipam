@@ -394,13 +394,14 @@ test('/login es pública, sin scripts en línea, y el resto sigue exigiendo sesi
   assert.equal((await n.pedir(base + '/login?error=revocada&next=/x')).status, 200, 'con ?error= se muestra aunque haya cookie');
 });
 
-test('/login con sesión vigente devuelve a la aplicación; con next inseguro, a la raíz', opts, async () => {
+test('/login con sesión vigente devuelve a la aplicación, sin seguir el valor de next', opts, async () => {
   const n = new Navegador();
   await n.entrar('root@empresa.cl');
-  const r = await n.pedir(base + '/login?next=' + encodeURIComponent('/pools'));
-  assert.equal(r.status, 302);
-  assert.equal(r.headers.get('location'), '/pools');
-  assert.equal((await n.pedir(base + '/login?next=//evil.example.com')).headers.get('location'), '/');
+  for (const next of ['/pools', '//evil.example.com', 'https://evil.example.com', '/\\evil.example.com']) {
+    const r = await n.pedir(base + '/login?next=' + encodeURIComponent(next));
+    assert.equal(r.status, 302, next);
+    assert.equal(r.headers.get('location'), '/', next);
+  }
 });
 
 test('error de dominio: página con título, qué pasó, qué hacer y botón; el correo va escapado', opts, async () => {
