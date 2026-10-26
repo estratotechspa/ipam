@@ -93,9 +93,11 @@ test('formularios y tablas: etiquetas asociadas, thead/th scope, roles de mensaj
   for (const a of lista) await page.request.delete(`/api/asignaciones/${a.id}`, { headers: { 'X-Requested-With': 'ipam' } });
 });
 
-test('reflujo: sin desplazamiento horizontal de la página a 320 px', async ({ page }) => {
+test('reflujo: sin desplazamiento horizontal de la página a 320 px (también con una fuente más ancha)', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 700 });
   await page.goto('/');
+  // las fuentes de Linux (CI) son más anchas que las de macOS: se simula para no depender de la máquina
+  await page.addStyleTag({ content: 'body{font-family:"DejaVu Sans",Verdana,sans-serif !important;letter-spacing:.02em}' });
   for (const t of ['pools', 'asig', 'sol', 'jira']) {
     await page.locator(`#nav [data-t=${t}]`).click();
     await page.waitForTimeout(200);

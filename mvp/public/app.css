@@ -195,7 +195,7 @@ h2[tabindex="-1"]:focus{outline:none}
 .orden:hover{color:var(--fg)}
 .orden .ic{margin:0}
 .paginacion{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:var(--sp-3);margin-top:var(--sp-3)}
-.paginacion-botones{display:flex;align-items:center;gap:var(--sp-3)}
+.paginacion-botones{display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-3)}
 .btn .ic:last-child:not(:first-child){margin:0 0 0 6px}
 
 /* Formulario de solicitud */
