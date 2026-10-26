@@ -101,3 +101,20 @@ networkPolicy:
 2. En la POC: *Respaldo JSON* (admin). En el cliente: `POST /api/importar` con ese archivo.
 3. Registrar la nueva URL de retorno en su proveedor OIDC y la del webhook en su Jira.
 4. Apagar la POC. Nada de EstratoTech queda en el código ni en la imagen: solo en los valores de la POC.
+
+## 4. Operación de la aplicación
+
+- **Errores internos:** la API nunca devuelve el mensaje de un error inesperado; responde `{"error":"interno","id":"1a2b3c4d"}` y el detalle completo queda en el log del contenedor con ese mismo `id` (`[error 1a2b3c4d] POST /api/…`). Para investigar un reporte: `kubectl -n ipam logs deploy/ipam-ipam | grep 1a2b3c4d`.
+- **Retención:** `RETENCION_DIAS` (chart: `config.retencionDias`, 365 por defecto) borra de `eventos` y `auditoria` lo más antiguo que ese plazo. Corre al arrancar y cada 24 h en cada réplica (es idempotente). Si la auditoría debe conservarse más tiempo por política, súbelo o usa `0` (sin purga) y archiva la tabla por tu cuenta. El índice `eventos_ts_idx` lo crea el esquema.
+- **Apagado ordenado:** con SIGTERM/SIGINT la app deja de aceptar conexiones (`/api/health` responde 503 para que el balanceador deje de enviarle tráfico), termina las peticiones en curso y la sincronización con Jira pendiente, cierra el pool de PostgreSQL y sale con 0. Tiene `SHUTDOWN_TIMEOUT_MS` (10 s) como tope; el `terminationGracePeriodSeconds` de Kubernetes (30 s por defecto) lo cubre.
+- **Base de datos lenta o caída:** una consulta se corta a los `DB_STATEMENT_TIMEOUT_MS` (15 s) y esperar una conexión libre falla a los `DB_CONNECT_TIMEOUT_MS` (5 s) en vez de colgar la petición; un error en una conexión inactiva se registra y no tumba el proceso.
+- **Jira:** la sincronización saliente va en segundo plano; el resultado (`jira_ticket_creado`, `jira_ticket_actualizado`, `jira_error`) se ve en la pestaña *Jira* y en la tabla `eventos`.
+
+## 5. Seguridad de la aplicación: lo que hay que saber al operar
+
+- **Arranque en producción:** la imagen trae `NODE_ENV=production`. La app se niega a arrancar (el pod queda en `CrashLoopBackOff` y el motivo está en `kubectl logs`) si: no hay autenticación (`auth.oidc.issuer`, `secrets.appUser`/`appPass`) y no se pidió `auth.mode=none` expresamente; o si `JIRA_WEBHOOK_SECRET` falta o es `dev-secret-cambiar`. El chart genera un secreto aleatorio si no das uno; con `secrets.existingSecret` debe traer `JIRA_WEBHOOK_SECRET`.
+- **Webhook de Jira con timestamp:** el emisor debe enviar `x-ipam-timestamp` y firmar `"<timestamp>.<cuerpo>"` (ver el README). El reloj del emisor y el del servidor no pueden diferir más de 5 min (sincronizar con NTP); si ves `401` con `motivo: "timestamp fuera de la ventana de 5 minutos"`, es el reloj. Un `409 petición repetida` indica un reenvío exacto de una petición ya procesada.
+- **Revocar un acceso:** quitar el rol en la pestaña *Usuarios* o borrar la fila de `usuarios` (`delete from usuarios where email = '…'`): la sesión deja de valer en ≤ 5 min (`auth.revalidateSeconds`; en la réplica que atendió el cambio por la API, al instante). Para cortar de inmediato en todas las réplicas, reiniciar el despliegue. Para invalidar **todas** las sesiones de golpe, rotar `SESSION_SECRET`.
+- **Límites de tasa:** responden `429` + `Retry-After`. Si usuarios legítimos detrás de un mismo NAT reciben 429 en el login, subir `auth.rateLimit.authMax`. **`config.trustProxy` debe corresponder a los saltos reales** delante de la app: si es 0 con un ingress, todos comparten la IP del ingress y se limitan entre sí; si es mayor que los saltos reales, un cliente puede falsear `X-Forwarded-For` y esquivar el límite.
+- **Simulador de Jira:** apagado en producción. `config.enableSimulador=true` lo habilita (solo para demos: crea asignaciones reales).
+- **Pantalla «Solicitar» de demostración:** `config.demo=true` (variable `DEMO`) muestra la pista para probar un CIDR que choque; en un entorno real déjalo apagado.

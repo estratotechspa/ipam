@@ -42,7 +42,8 @@ create table if not exists eventos (
   tipo    text not null,
   detalle jsonb not null default '{}'
 );
-
+-- La purga por retención (RETENCION_DIAS) filtra por fecha.
+create index if not exists eventos_ts_idx on eventos (ts);
 
 -- Usuarios que han iniciado sesión (OIDC). «rol» nulo = se resuelve por grupos / configuración.
 create table if not exists usuarios (

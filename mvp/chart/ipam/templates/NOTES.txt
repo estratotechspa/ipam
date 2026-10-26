@@ -13,3 +13,8 @@ Usuario y clave del panel (si los definiste o se generaron):
   kubectl -n {{ .Release.Namespace }} get secret {{ include "ipam.secretName" . }} -o jsonpath='{.data.APP_PASS}' | base64 -d; echo
 Secreto del webhook de Jira:
   kubectl -n {{ .Release.Namespace }} get secret {{ include "ipam.secretName" . }} -o jsonpath='{.data.JIRA_WEBHOOK_SECRET}' | base64 -d; echo
+{{- if and (not .Values.auth.mode) (not .Values.auth.oidc.issuer) (not .Values.secrets.appUser) (not .Values.secrets.existingSecret) }}
+
+ATENCIÓN: no configuraste acceso (ni OIDC ni Basic Auth). La app corre con NODE_ENV=production y NO arrancará sin
+autenticación. Define auth.oidc.issuer, secrets.appUser/appPass, o —solo para demos o redes de confianza— auth.mode=none.
+{{- end }}

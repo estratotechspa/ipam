@@ -43,3 +43,15 @@ test('logo: solo se acepta una imagen real (png, jpg, webp, svg)', () => {
   assert.equal(marca.config().logo, null);
   limpiar();
 });
+
+test('favicon: SVG con el color de la marca (y un código malicioso se descarta)', () => {
+  limpiar();
+  assert.match(marca.favicon(), /^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg"/);
+  assert.match(marca.favicon(), /fill="#2d6cdf"/);
+  process.env.BRAND_COLOR = '#0a7d4f';
+  assert.match(marca.favicon(), /fill="#0a7d4f"/);
+  process.env.BRAND_COLOR = '"/><script>alert(1)</script>';
+  assert.ok(!marca.favicon().includes('<script'));
+  assert.match(marca.favicon(), /fill="#2d6cdf"/);
+  limpiar();
+});

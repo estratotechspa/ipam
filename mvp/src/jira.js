@@ -44,4 +44,14 @@ async function actualizarTicket(clave, a) {
   await llamar('POST', `/rest/api/3/issue/${encodeURIComponent(clave)}/transitions`, { transition: { id: t.id } });
 }
 
-module.exports = { enabled, faltantes, crearTicket, actualizarTicket };
+// El webhook se firma con JIRA_WEBHOOK_SECRET. Sin él (o con el valor de ejemplo, que es público) cualquiera podría
+// fabricar peticiones válidas: en producción la app no arranca así.
+const SECRETO_DE_EJEMPLO = 'dev-secret-cambiar';
+function validarSecretoWebhook(e = env) {
+  if (e.NODE_ENV !== 'production') return;
+  if (!e.JIRA_WEBHOOK_SECRET || e.JIRA_WEBHOOK_SECRET === SECRETO_DE_EJEMPLO) {
+    throw new Error('En producción JIRA_WEBHOOK_SECRET es obligatorio y no puede ser el valor de ejemplo («' + SECRETO_DE_EJEMPLO + '»)');
+  }
+}
+
+module.exports = { enabled, faltantes, crearTicket, actualizarTicket, validarSecretoWebhook, SECRETO_DE_EJEMPLO };
