@@ -21,6 +21,7 @@ function pagina({ titulo, que, hacer = [], boton, enlace, icono = 'alerta', tono
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(titulo)} · ${esc(m.nombre)}</title>
+<link rel="icon" href="${esc(m.logo || '/favicon.svg')}">
 <link rel="stylesheet" href="/app.css">
 <link rel="stylesheet" href="/brand.css">
 </head>

@@ -163,7 +163,7 @@ async function rolVigente(db, sesion) {
 
 // Rutas que no exigen sesión: salud, webhook (va firmado), marca, y la pantalla de acceso con sus recursos.
 const PUBLICAS = new Set(['/api/health', '/webhook/jira', '/api/config', '/brand.css', '/brand/logo',
-  '/login', '/login.html', '/login.js', '/app.css']);
+  '/login', '/login.html', '/login.js', '/app.css', '/iconos.js', '/favicon.svg']);
 
 // ---------- Rutas /auth y middleware ----------
 // db: pool de pg; auditar(accion, usuario, rol, detalle, ip)

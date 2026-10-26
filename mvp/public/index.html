@@ -4,23 +4,35 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>IPAM</title>
+<link id="favicon" rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/app.css">
 <link rel="stylesheet" href="/brand.css">
 </head>
 <body>
-<div class="top"><b id="marca"><img id="logo" alt="" hidden><span id="nombre">IPAM</span> <span id="subtitulo" class="muted" style="color:#9fb0cf"></span></b>
-  <div class="nav" id="nav">
-    <button data-t="pools" class="on">Pools</button><button data-t="asig">Asignaciones</button><button data-t="sol">Solicitar</button><button data-t="jira">Jira</button><button data-t="usuarios" hidden>Usuarios</button><button data-t="audit" hidden>Auditoría</button> <span id="yo" class="muted" style="color:#9fb0cf;margin-left:18px"></span>
-  </div></div>
+<a class="saltar" href="#contenido">Saltar al contenido</a>
+<header class="top">
+  <h1 id="marca"><img id="logo" alt="" hidden><span id="nombre">IPAM</span> <span id="subtitulo" class="muted"></span></h1>
+  <nav class="nav" id="nav" aria-label="Secciones">
+    <button type="button" data-t="pools" data-ic="capas" aria-current="page">Pools</button>
+    <button type="button" data-t="asig" data-ic="lista">Asignaciones</button>
+    <button type="button" data-t="sol" data-ic="mas">Solicitar</button>
+    <button type="button" data-t="jira" data-ic="flujo">Jira</button>
+    <button type="button" data-t="usuarios" data-ic="usuarios" hidden>Usuarios</button>
+    <button type="button" data-t="audit" data-ic="auditoria" hidden>Auditoría</button>
+    <span id="yo"></span>
+  </nav>
+</header>
 
-<div class="wrap" id="pools"></div>
-<div class="wrap hide" id="asig"></div>
-<div class="wrap hide" id="sol"></div>
-<div class="wrap hide" id="jira"></div>
-<div class="wrap hide" id="usuarios"></div>
-<div class="wrap hide" id="audit"></div>
+<main id="contenido" tabindex="-1">
+  <section class="wrap" id="pools" aria-label="Pools"></section>
+  <section class="wrap hide" id="asig" aria-label="Asignaciones"></section>
+  <section class="wrap hide" id="sol" aria-label="Solicitar segmento"></section>
+  <section class="wrap hide" id="jira" aria-label="Jira"></section>
+  <section class="wrap hide" id="usuarios" aria-label="Usuarios"></section>
+  <section class="wrap hide" id="audit" aria-label="Auditoría"></section>
+</main>
 
-<footer id="pie" class="muted" style="text-align:center;padding:18px"></footer>
-<script src="/app.js"></script>
+<footer id="pie" class="muted"></footer>
+<script type="module" src="/app.js"></script>
 </body>
 </html>

@@ -389,7 +389,7 @@ test('/login es pública, sin scripts en línea, y el resto sigue exigiendo sesi
   assert.match(html, /Entrar con tu cuenta corporativa/);
   assert.match(html, /href="\/auth\/login"/);
   sinScriptsEnLinea(html);
-  for (const publico of ['/login.js', '/app.css', '/brand.css', '/api/config']) assert.equal((await n.pedir(base + publico)).status, 200, publico);
+  for (const publico of ['/login.js', '/app.css', '/brand.css', '/api/config', '/iconos.js', '/favicon.svg']) assert.equal((await n.pedir(base + publico)).status, 200, publico);
   for (const privado of ['/', '/index.html', '/app.js']) assert.equal((await n.pedir(base + privado)).status, 302, privado);
   assert.equal((await n.pedir(base + '/login?error=revocada&next=/x')).status, 200, 'con ?error= se muestra aunque haya cookie');
 });

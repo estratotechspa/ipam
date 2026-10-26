@@ -1,5 +1,8 @@
 // Pantalla de acceso: marca (nombre, logo, pie), enlace al proveedor conservando a dónde volver y aviso según ?error=.
+import { icono } from '/iconos.js';
+
 const $ = (id) => document.getElementById(id);
+$('ic-entrar').innerHTML = icono('entrar', 20);
 
 const AVISOS = {
   sesion: 'Tu sesión expiró. Entra de nuevo para continuar.',
@@ -21,6 +24,7 @@ if (next !== '/') $('entrar').href = '/auth/login?next=' + encodeURIComponent(ne
 const error = params.get('error');
 if (error) {
   $('aviso').textContent = AVISOS[error] || AVISO_GENERICO;
+  $('aviso').insertAdjacentHTML('afterbegin', icono('alerta') + ' ');
   $('aviso').hidden = false;
 }
 
@@ -29,5 +33,5 @@ fetch('/api/config').then((r) => r.json()).then((m) => {
   document.title = `Iniciar sesión · ${m.nombre}`;
   $('subtitulo').textContent = m.subtitulo || '';
   $('pie').textContent = m.pie || '';
-  if (m.logo) { $('logo').src = m.logo; $('logo').hidden = false; }
+  if (m.logo) { $('logo').src = m.logo; $('logo').hidden = false; $('favicon').href = m.logo; $('favicon').removeAttribute('type'); }
 }).catch(() => {}); // sin marca, la pantalla funciona con los textos por defecto

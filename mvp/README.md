@@ -80,6 +80,12 @@ El rol sale de: correos admin de la configuración (siempre) → rol asignado en
 - **Respaldos incrementales a GCS** (`postgres.backup.*`): completo semanal + incremental diario + WAL continuo (recuperación a cualquier instante), retención de 4 completos y prueba de restauración mensual. Imagen `mvp/postgres` (PostgreSQL + pgBackRest). Pasos, restauración y qué vigilar: **`docs/OPERACION.md`**.
 - **URL interna del cliente** (`ingress.*`, `httpRoute.*`, `config.publicUrl`): ver el mismo documento, que incluye el paso de la POC al tenant del cliente.
 
+## Interfaz: tokens, iconos y accesibilidad
+- **Tokens CSS** (`public/app.css`, bloque `:root`): escala tipográfica 12/14/16/20/28 px, espaciado 4/8/12/16/24 px, radios, colores semánticos (ambientes, alertas, umbrales de uso) y modo oscuro por `prefers-color-scheme`. La marca (`brand.css`) solo sobrescribe `--top`, `--blue` y `--accent`.
+- **Iconos:** un único set (Lucide, licencia ISC) en `public/iconos.js` como SVG en línea (`currentColor`, 16 o 20 px, `aria-hidden`); el significado siempre lo da el texto al lado. Favicon: `/favicon.svg` (cuatro bloques con el color de la marca) o el logo de la marca si lo hay.
+- **Contraste WCAG 2.2 AA** medido, no estimado: `src/ui.test.js` calcula las razones sobre el CSS real (claro y oscuro) y `e2e/accesibilidad.spec.js` sobre lo que pinta el navegador (texto ≥ 4,5:1; anillo de foco, borde de campos y barras ≥ 3:1). **Los colores de marca personalizados (`BRAND_COLOR*`) no se validan**: si usas uno claro, el texto blanco de los botones puede quedar bajo 4,5:1; comprueba tu color antes (p. ej. con la calculadora de contraste de WebAIM).
+- **Accesibilidad:** foco visible en todo lo interactivo, enlace «Saltar al contenido», `aria-current` en la navegación, `role="alert"` (errores) y `role="status"` (éxito), etiquetas asociadas a cada campo, tablas con `<thead>` y `<th scope>`, zonas táctiles de 44 px en pantallas táctiles, `prefers-reduced-motion` y sin desplazamiento horizontal a 320 px.
+
 ## Marca y dominio configurables
 Nada de «EstratoTech» está escrito en el código ni en la imagen: nombre, colores, logo y URL se cambian por configuración.
 - Variables: `BRAND_NAME`, `BRAND_SUBTITLE`, `BRAND_FOOTER`, `BRAND_COLOR` (botones), `BRAND_COLOR_TOP` (barra), `BRAND_COLOR_ACCENT`, `BRAND_LOGO_FILE` (ruta de un png/jpg/webp/svg ≤ 512 KB). Colores solo en formato `#rrggbb`.

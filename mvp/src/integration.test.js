@@ -131,6 +131,13 @@ test('respaldo JSON: exporta, restaura lo borrado y rechaza solapamientos sin im
   assert.equal((await post('/api/importar', { hola: 1 })).status, 400);
 });
 
+test('favicon por defecto y páginas con icono', opts, async () => {
+  const r = await fetch(base + '/favicon.svg');
+  assert.equal(r.status, 200);
+  assert.match(r.headers.get('content-type'), /image\/svg\+xml/);
+  assert.match(await r.text(), /<svg/);
+});
+
 test('marca por API y logo inexistente', opts, async () => {
   assert.equal((await (await fetch(base + '/api/config')).json()).nombre, 'IPAM');
   assert.match(await (await fetch(base + '/brand.css')).text(), /--top:/);
