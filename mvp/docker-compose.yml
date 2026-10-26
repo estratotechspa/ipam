@@ -26,6 +26,7 @@ services:
       DATABASE_URL: postgres://ipam:${DB_PASSWORD:-ipam-dev}@db:5432/ipam
       AUTH_MODE: ${AUTH_MODE:-}
       ENABLE_SIMULADOR: ${ENABLE_SIMULADOR:-}
+      DEMO: ${DEMO:-true}   # ayudas de demostración en la pantalla «Solicitar»
       APP_USER: ${APP_USER:-}
       APP_PASS: ${APP_PASS:-}
       JIRA_WEBHOOK_SECRET: ${JIRA_WEBHOOK_SECRET:-dev-secret-cambiar}

@@ -16,6 +16,7 @@ config:
   hsts: false                   # true si el acceso es siempre por HTTPS
   retencionDias: 365            # días que se conservan eventos y auditoría (0 = conservar todo)
   enableSimulador: false        # true = deja disponible POST /api/jira/simular (solo demos; la imagen corre con NODE_ENV=production)
+  demo: false                   # true = la pantalla «Solicitar» muestra ayudas de demostración (p. ej. probar un CIDR que choque)
 
 # Marca: todo opcional y sin reconstruir la imagen.
 branding:

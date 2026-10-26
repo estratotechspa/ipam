@@ -22,6 +22,7 @@ Pruebas unitarias: `npm test`.
 | `RETENCION_DIAS` | 365 | días que se conservan `eventos` y `auditoria`; se purga al arrancar y cada 24 h. `0` = conservar todo |
 | `JIRA_REINTENTOS` · `JIRA_REINTENTO_MS` | 3 · 2000 | intentos de la sincronización con Jira (en segundo plano) y espera base entre ellos (× n) |
 | `SHUTDOWN_TIMEOUT_MS` | 10000 | tiempo máximo para drenar peticiones al recibir SIGTERM/SIGINT |
+| `DEMO` | `false` | `true` muestra en la pantalla «Solicitar» la pista de demostración (probar un CIDR que choque). Helm: `config.demo` |
 | `NODE_ENV` | `production` en la imagen | en `production` la app exige autenticación y `JIRA_WEBHOOK_SECRET` propio, y oculta el simulador de Jira |
 | `AUTH_MODE` | se deduce | `oidc` · `basic` · `none`. Vacío: OIDC si hay `OIDC_ISSUER`, Basic si hay `APP_USER`+`APP_PASS`, si no abierto. **En producción el modo abierto hay que pedirlo con `AUTH_MODE=none`**; si no, la app no arranca |
 | `JIRA_WEBHOOK_SECRET` | — | secreto del webhook. En producción es obligatorio y no puede ser `dev-secret-cambiar` |
@@ -80,7 +81,14 @@ El rol sale de: correos admin de la configuración (siempre) → rol asignado en
 - **Respaldos incrementales a GCS** (`postgres.backup.*`): completo semanal + incremental diario + WAL continuo (recuperación a cualquier instante), retención de 4 completos y prueba de restauración mensual. Imagen `mvp/postgres` (PostgreSQL + pgBackRest). Pasos, restauración y qué vigilar: **`docs/OPERACION.md`**.
 - **URL interna del cliente** (`ingress.*`, `httpRoute.*`, `config.publicUrl`): ver el mismo documento, que incluye el paso de la POC al tenant del cliente.
 
-## Interfaz: tokens, iconos y accesibilidad
+## Interfaz
+La interfaz es HTML + JavaScript en módulos ES (`public/js/`: `api`, `pools`, `asignaciones`, `solicitar`, `jira`, `usuarios`, `auditoria`, más `ui` —diálogo y avisos—, `util` y `calculos` —lógica pura, con pruebas—). Sin framework ni paso de compilación; cumple la CSP (sin scripts en línea). La navegación usa `#pools`, `#pools/<pool>`, `#asig`, `#sol/<pool>`…, así que «atrás» y los enlaces directos funcionan.
+- **Pools:** barra de uso con el porcentaje en número y color por umbral (verde < 70 %, ámbar 70–90 %, rojo > 90 %; en uso alto además un icono); el detalle de un pool trae un mapa de hasta 256 bloques (libre, parcial rayado, ocupado) y la tabla de sus segmentos. Para quien no usa el ratón, la tabla tiene el mismo detalle que el mapa.
+- **Asignaciones:** búsqueda por texto, filtros por pool y ambiente, orden por columna (`aria-sort`) y paginación de 25 en 25 sobre `GET /api/asignaciones`.
+- **Solicitar:** valida el CIDR al escribir (formato, alineación con sugerencia y que quede dentro del pool); no pierde lo escrito al cambiar de pestaña.
+- **Confirmaciones y avisos:** un diálogo accesible (foco atrapado, Esc, foco de vuelta) y avisos temporales en lugar de `alert()`/`confirm()`.
+
+### Tokens, iconos y accesibilidad
 - **Tokens CSS** (`public/app.css`, bloque `:root`): escala tipográfica 12/14/16/20/28 px, espaciado 4/8/12/16/24 px, radios, colores semánticos (ambientes, alertas, umbrales de uso) y modo oscuro por `prefers-color-scheme`. La marca (`brand.css`) solo sobrescribe `--top`, `--blue` y `--accent`.
 - **Iconos:** un único set (Lucide, licencia ISC) en `public/iconos.js` como SVG en línea (`currentColor`, 16 o 20 px, `aria-hidden`); el significado siempre lo da el texto al lado. Favicon: `/favicon.svg` (cuatro bloques con el color de la marca) o el logo de la marca si lo hay.
 - **Contraste WCAG 2.2 AA** medido, no estimado: `src/ui.test.js` calcula las razones sobre el CSS real (claro y oscuro) y `e2e/accesibilidad.spec.js` sobre lo que pinta el navegador (texto ≥ 4,5:1; anillo de foco, borde de campos y barras ≥ 3:1). **Los colores de marca personalizados (`BRAND_COLOR*`) no se validan**: si usas uno claro, el texto blanco de los botones puede quedar bajo 4,5:1; comprueba tu color antes (p. ej. con la calculadora de contraste de WebAIM).
@@ -142,8 +150,8 @@ Código en `src/jira.js`. Se activa con `JIRA_ENABLED=true` más `JIRA_BASE_URL`
 - Los 6 pools y 12 asignaciones son datos de ejemplo.
 
 ## Guion de demo (5 min)
-1. **Pools:** estado y uso de cada pool.
-2. **Solicitar:** `gke-pods-prod` + `10.64.8.0/22` → solapamiento con NET-142, y sugeridos; «Usar» → asignado con ticket.
+1. **Pools:** totales (incluye «Pools sobre 80 %» y el espacio libre) y barras de uso por umbral; clic en un pool → mapa de bloques libres/ocupados y sus asignaciones.
+2. **Solicitar:** elige `gke-pods-prod`, escribe un proyecto y el CIDR `10.64.8.0/22` → solapamiento con NET-142 y sugeridos; «Usar» → asignado con ticket. (Los valores no vienen precargados; con `DEMO=true` la pantalla muestra esta pista.) Escribe `10.64.9.0/22` para ver la validación en vivo.
 3. **Solicitar sin CIDR** (solo máscara) → asigna el primer libre.
-4. **Jira:** «Enviar webhook» → se ve el evento recibido, la asignación y la actualización del ticket.
-5. **Asignaciones:** aparecen con origen `panel` / `jira`; «Liberar» devuelve el espacio.
+4. **Jira:** el estado real de la integración y sus eventos; en «Cómo funciona» está el diagrama y, fuera de producción, el simulador: «Enviar webhook» → se ve el evento recibido y la asignación.
+5. **Asignaciones:** buscar, filtrar por pool y ambiente, ordenar por columna y paginar; aparecen con origen `panel` / `jira`; «Liberar» (con confirmación) devuelve el espacio.

@@ -138,6 +138,16 @@ test('favicon por defecto y páginas con icono', opts, async () => {
   assert.match(await r.text(), /<svg/);
 });
 
+test('/api/config informa si es una demo (DEMO=true), sin tocar el resto de la marca', opts, async () => {
+  assert.equal((await (await fetch(base + '/api/config')).json()).demo, false);
+  process.env.DEMO = 'true';
+  try {
+    const c = await (await fetch(base + '/api/config')).json();
+    assert.equal(c.demo, true);
+    assert.equal(c.nombre, 'IPAM');
+  } finally { delete process.env.DEMO; }
+});
+
 test('marca por API y logo inexistente', opts, async () => {
   assert.equal((await (await fetch(base + '/api/config')).json()).nombre, 'IPAM');
   assert.match(await (await fetch(base + '/brand.css')).text(), /--top:/);

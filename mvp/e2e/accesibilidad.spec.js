@@ -27,6 +27,7 @@ for (const esquema of ['light', 'dark']) {
     await page.getByRole('button', { name: 'Solicitar', exact: true }).click();
     for (const c of await contrastes(page, 'label')) expect(c.ratio, `label «${c.texto}»`).toBeGreaterThanOrEqual(4.5);
     await page.selectOption('#s-pool', 'gke-pods-prod');
+    await page.fill('#s-vpc', 'vpc-contraste');
     await page.fill('#s-cidr', '10.64.8.0/22');
     await page.click('#s-go');
     await expect(page.locator('#s-res [role=alert]')).toBeVisible();

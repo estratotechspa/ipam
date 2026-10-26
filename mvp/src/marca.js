@@ -59,7 +59,8 @@ function favicon() {
 function montar(app) {
   app.get('/favicon.svg', (_q, res) => res.type('image/svg+xml').set('Cache-Control', 'no-cache').send(favicon()));
   app.get('/brand.css', (_q, res) => res.type('text/css').set('Cache-Control', 'no-cache').send(css()));
-  app.get('/api/config', (_q, res) => res.json(config()));
+  // `demo` (DEMO=true) activa en la interfaz las ayudas para probar el sistema (p. ej. «prueba un CIDR que choque»).
+  app.get('/api/config', (_q, res) => res.json({ ...config(), demo: env.DEMO === 'true' }));
   app.get('/brand/logo', (_q, res) => {
     const l = logo();
     if (!l) return res.status(404).end();

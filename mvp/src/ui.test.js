@@ -52,6 +52,8 @@ for (const [modo, t] of [['claro', claro], ['oscuro', oscuro]]) {
       ...['bajo', 'medio', 'alto'].map((u) => [`barra de uso ${u} sobre su pista`, v(`--uso-${u}`), v('--pista')]),
       ['icono de aviso', v('--aviso'), v('--card')], ['icono de éxito', v('--exito'), v('--card')],
     ];
+    // el porcentaje de uso se pinta con el color del umbral: es texto, así que exige 4,5:1 sobre la tarjeta
+    for (const u of ['bajo', 'medio', 'alto']) texto.push([`porcentaje de uso ${u}`, v(`--uso-${u}`), v('--card')]);
     for (const [que, fg, bg] of interfaz) assert.ok(ratio(fg, bg) >= 3, `${que}: ${ratio(fg, bg).toFixed(2)}:1 (${fg} sobre ${bg})`);
   });
 }
@@ -80,7 +82,8 @@ test('iconos usados en la interfaz existen, y no quedan glifos Unicode como icon
     const t = leer(f);
     for (const m of t.matchAll(/\b(?:I|icono)\('([\w-]+)'/g)) usados.add(m[1]);
     for (const m of t.matchAll(/data-ic="([\w-]+)"/g)) usados.add(m[1]);
-    assert.ok(!/[⬇⬆✔✓✗✘⚠→←↑↓▶▼▲✖]/u.test(f === 'iconos.js' ? '' : t), `${f}: glifo Unicode usado como icono`);
+    const sinComentarios = t.replace(/^\s*\/\/.*$/gm, '').replace(/\s\/\/ .*$/gm, '');
+    assert.ok(!/[⬇⬆✔✓✗✘⚠→←↑↓▶▼▲✖]/u.test(sinComentarios), `${f}: glifo Unicode usado como icono`);
   }
   assert.ok(usados.size >= 10);
   for (const n of usados) assert.ok(ICONOS[n], `falta el icono «${n}»`);
@@ -98,4 +101,20 @@ test('index.html: idioma, enlace para saltar, un h1, navegación con aria-curren
   assert.match(html, /data-t="pools"[^>]*aria-current="page"/);
   assert.match(html, /<link id="favicon" rel="icon" href="\/favicon\.svg"/);
   assert.ok(!/<script(?![^>]*\bsrc=)/i.test(html));
+});
+
+test('la interfaz está en módulos pequeños (api, pools, asignaciones, solicitar, jira, usuarios, auditoria) y no usa alert/confirm', () => {
+  const dir = path.join(PUBLICO, 'js');
+  const modulos = fs.readdirSync(dir);
+  for (const m of ['api', 'pools', 'asignaciones', 'solicitar', 'jira', 'usuarios', 'auditoria', 'ui', 'util', 'calculos', 'main']) assert.ok(modulos.includes(`${m}.js`), m);
+  assert.ok(!fs.existsSync(path.join(PUBLICO, 'app.js')), 'el monolito app.js ya no existe');
+  assert.match(leer('index.html'), /<script type="module" src="\/js\/main\.js">/);
+  for (const m of modulos) {
+    const t = leer(`js/${m}`);
+    const codigo = t.replace(/^\s*\/\/.*$/gm, '').replace(/\s\/\/ .*$/gm, '');
+    assert.ok(!/\b(alert|confirm|prompt)\(/.test(codigo), `${m}: diálogos nativos`);
+    assert.ok(t.split('\n').length < 200, `${m}: demasiado largo (${t.split('\n').length} líneas)`);
+    assert.ok(Math.max(...t.split('\n').map((l) => l.length)) < 200, `${m}: líneas ilegibles`);
+    assert.ok(!/eval\(|new Function|document\.write|\.on[a-z]+\s*=\s*['"]/.test(t), `${m}: patrones que la CSP no admite`);
+  }
 });
