@@ -2,6 +2,7 @@
 // La clave es la IP del cliente (req.ip): detrás de un ingress hay que definir TRUST_PROXY (nº de saltos) para que sea
 // la real y no la del proxy; si no, todos los usuarios compartirían un mismo contador.
 const { rateLimit } = require('express-rate-limit');
+const paginas = require('./paginas');
 const env = process.env;
 
 const entero = (v, defecto) => (Number.isInteger(Number(v)) && Number(v) > 0 && String(v).trim() !== '' ? Number(v) : defecto);
@@ -12,6 +13,8 @@ function crear({ ventanaMs, max, mensaje, ...extra }) {
     handler: (req, res) => {
       const seg = Math.max(1, Math.ceil((req.rateLimit.resetTime ? req.rateLimit.resetTime - Date.now() : ventanaMs) / 1000));
       res.set('Retry-After', String(seg));
+      // Una persona que navega (GET de una página) ve un aviso con el estilo de la app; las APIs reciben JSON.
+      if (req.method === 'GET' && req.accepts(['json', 'html']) === 'html') return paginas.enviar(res, 'demasiados', { segundos: seg });
       res.status(429).json({ error: 'demasiados_intentos', mensaje, reintentar_en_segundos: seg });
     },
   });

@@ -44,7 +44,7 @@ class Navegador {
     return { res, url };
   }
   // Inicia sesión como `email` contra el IdP de pruebas; devuelve la respuesta final del callback.
-  async entrar(email, next = '/') {
+  async entrar(email, next = '/', modificar = (u) => u) {
     let { res, url } = await this.seguir(`${base}/auth/login?next=${encodeURIComponent(next)}`);
     const formulario = async (extra) => {
       const html = await res.text();
@@ -56,7 +56,7 @@ class Navegador {
     ({ res, url } = await formulario({ login: email, password: 'x' }));
     if (res.status === 200) ({ res, url } = await formulario({}));
     // `url` es ahora la URL de retorno hacia /auth/callback
-    return this.pedir(url);
+    return this.pedir(modificar(url));
   }
   api(ruta, init = {}) { return this.pedir(base + ruta, { ...init, headers: { ...H, ...(init.headers || {}) } }); }
 }
@@ -83,7 +83,7 @@ test.before(async () => {
   const emisor = `http://127.0.0.1:${srvIdp.address().port}`;
   const provider = new Provider(emisor, {
     clients: [{ client_id: 'ipam', client_secret: 's3cret', redirect_uris: [`${base}/auth/callback`], grant_types: ['authorization_code'], response_types: ['code'] }],
-    findAccount: async (_c, id) => ({ accountId: id, claims: async () => ({ sub: id, email: id, email_verified: true, name: id.split('@')[0], groups: GRUPOS[id] || [] }) }),
+    findAccount: async (_c, id) => ({ accountId: id, claims: async () => ({ sub: id, email: id, email_verified: !id.startsWith('noverif'), name: id.split('@')[0], groups: GRUPOS[id] || [] }) }),
     claims: { openid: ['sub'], email: ['email', 'email_verified'], profile: ['name'], groups: ['groups'] },
     conformIdTokenClaims: false,
     features: { devInteractions: { enabled: true } },
@@ -98,9 +98,10 @@ test('sin sesión: la página redirige al login y la API responde 401; salud abi
   const n = new Navegador();
   const r = await n.pedir(base + '/');
   assert.equal(r.status, 302);
-  assert.match(r.headers.get('location'), /^\/auth\/login\?next=/);
+  assert.match(r.headers.get('location'), /^\/login\?next=/, 'sin sesión se va a la pantalla de acceso, no directo al proveedor');
   const a = await n.api('/api/pools');
   assert.equal(a.status, 401);
+  assert.equal((await a.json()).login, '/login');
   assert.equal((await n.api('/api/health')).status, 200);
 });
 
@@ -231,18 +232,23 @@ test('la sesión dura 4 horas por defecto y la cookie guarda el rol base, no el 
 });
 
 test('revocación: un usuario dado de baja pierde el acceso (con caché de 5 min, hasta olvidarla)', opts, async () => {
-  const n = new Navegador();
-  await n.entrar('baja@empresa.cl');
-  assert.equal((await n.api('/api/pools')).status, 200);
+  const api = new Navegador(), web = new Navegador(); // dos dispositivos con la misma cuenta
+  await api.entrar('baja@empresa.cl');
+  await web.entrar('baja@empresa.cl');
+  assert.equal((await api.api('/api/pools')).status, 200);
   await db.query("delete from usuarios where email = 'baja@empresa.cl'");
-  assert.equal((await n.api('/api/pools')).status, 200, 'dentro de la caché sigue valiendo');
+  assert.equal((await api.api('/api/pools')).status, 200, 'dentro de la caché sigue valiendo');
   auth.olvidarTodos(); // equivale a que venza la caché
-  const r = await n.api('/api/pools');
+  const r = await api.api('/api/pools');
   assert.equal(r.status, 401);
-  assert.equal((await r.json()).error, 'sesión revocada');
+  const d = await r.json();
+  assert.equal(d.error, 'sesión revocada');
+  assert.equal(d.login, '/login');
   assert.ok(r.headers.getSetCookie().some((c) => /^ipam_sesion=;/.test(c) || /Max-Age=0/.test(c)), 'se borra la cookie');
-  // una página (no la API) redirige al login
-  assert.equal((await n.pedir(base + '/')).status, 302);
+  // una página (no la API) lleva al acceso con el aviso de acceso revocado
+  const pagina = await web.pedir(base + '/');
+  assert.equal(pagina.status, 302);
+  assert.match(pagina.headers.get('location'), /^\/login\?error=revocada&next=/);
 });
 
 test('revocación sin caché (SESSION_REVALIDAR_SEG=0): la baja rige en la petición siguiente', opts, async () => {
@@ -356,4 +362,122 @@ test('modo basic: bloqueo por IP tras intentos fallidos; los correctos y los sin
     // bloqueada la IP, ni siquiera las credenciales correctas entran durante el bloqueo
     assert.equal((await g(cred('admin', 'buena'))).status, 429);
   });
+});
+
+// ---------- Fase 3 · pantalla de acceso y páginas de error ----------
+const sinScriptsEnLinea = (html) => assert.ok(!/<script(?![^>]*\bsrc=)/i.test(html) && !/\son[a-z]+\s*=/i.test(html), 'sin scripts ni manejadores en línea');
+const esPaginaDeAviso = async (res, { status, titulo, contiene = [] }) => {
+  assert.equal(res.status, status);
+  assert.match(res.headers.get('content-type'), /text\/html/);
+  const html = await res.text();
+  assert.match(html, new RegExp(`<h1>${titulo}</h1>`));
+  assert.match(html, /<a class="btn" href="\/login">/, 'botón para volver al acceso');
+  assert.match(html, /href="\/app\.css"/, 'con el estilo de la app');
+  assert.match(html, /Qué puedes hacer|Cerraste la sesión/);
+  sinScriptsEnLinea(html);
+  for (const c of contiene) assert.ok(html.includes(c), c);
+  return html;
+};
+
+test('/login es pública, sin scripts en línea, y el resto sigue exigiendo sesión', opts, async () => {
+  const n = new Navegador();
+  const r = await n.pedir(base + '/login');
+  assert.equal(r.status, 200);
+  assert.match(r.headers.get('content-type'), /text\/html/);
+  assert.match(r.headers.get('content-security-policy'), /script-src 'self'/);
+  const html = await r.text();
+  assert.match(html, /Entrar con tu cuenta corporativa/);
+  assert.match(html, /href="\/auth\/login"/);
+  sinScriptsEnLinea(html);
+  for (const publico of ['/login.js', '/app.css', '/brand.css', '/api/config']) assert.equal((await n.pedir(base + publico)).status, 200, publico);
+  for (const privado of ['/', '/index.html', '/app.js']) assert.equal((await n.pedir(base + privado)).status, 302, privado);
+  assert.equal((await n.pedir(base + '/login?error=revocada&next=/x')).status, 200, 'con ?error= se muestra aunque haya cookie');
+});
+
+test('/login con sesión vigente devuelve a la aplicación; con next inseguro, a la raíz', opts, async () => {
+  const n = new Navegador();
+  await n.entrar('root@empresa.cl');
+  const r = await n.pedir(base + '/login?next=' + encodeURIComponent('/pools'));
+  assert.equal(r.status, 302);
+  assert.equal(r.headers.get('location'), '/pools');
+  assert.equal((await n.pedir(base + '/login?next=//evil.example.com')).headers.get('location'), '/');
+});
+
+test('error de dominio: página con título, qué pasó, qué hacer y botón; el correo va escapado', opts, async () => {
+  const n = new Navegador();
+  const cb = await n.entrar('intruso@gmail.com');
+  const html = await esPaginaDeAviso(cb, { status: 403, titulo: 'Tu correo no tiene acceso', contiene: ['intruso@gmail.com', 'Pide acceso a un administrador'] });
+  assert.match(html, /Entrar con otra cuenta/);
+  const xss = await new Navegador().entrar('<b>x</b>@gmail.com');
+  const h2 = await xss.text();
+  assert.equal(xss.status, 403);
+  assert.ok(!h2.includes('<b>x</b>'), 'el correo no entra como HTML');
+  assert.ok(h2.includes('&lt;b&gt;x&lt;/b&gt;@gmail.com'));
+});
+
+test('sin rol asignado: página de aviso (OIDC_DEFAULT_ROLE=ninguno)', opts, async () => {
+  await conEnv({ OIDC_DEFAULT_ROLE: 'ninguno' }, async () => {
+    const cb = await new Navegador().entrar('sinrol@empresa.cl');
+    await esPaginaDeAviso(cb, { status: 403, titulo: 'Tu cuenta aún no tiene un rol', contiene: ['sinrol@empresa.cl'] });
+  });
+  const aud = await (await (async () => { const r = new Navegador(); await r.entrar('root@empresa.cl'); return r.api('/api/auditoria'); })()).json();
+  assert.ok(aud.some((x) => x.accion === 'login_rechazado' && x.usuario === 'sinrol@empresa.cl'));
+});
+
+test('correo no verificado: página de aviso y queda en auditoría', opts, async () => {
+  const cb = await new Navegador().entrar('noverif@empresa.cl');
+  await esPaginaDeAviso(cb, { status: 403, titulo: 'Correo sin verificar' });
+});
+
+test('solicitud de inicio de sesión expirada y sesión cerrada: páginas con el mismo estilo', opts, async () => {
+  const n = new Navegador();
+  await esPaginaDeAviso(await n.pedir(base + '/auth/callback?code=x&state=y'), { status: 400, titulo: 'La solicitud de inicio de sesión expiró' });
+  await esPaginaDeAviso(await n.pedir(base + '/auth/sesion-cerrada'), { status: 200, titulo: 'Sesión cerrada' });
+});
+
+test('el proveedor rechaza o el intercambio falla: se vuelve a /login con ?error=', opts, async () => {
+  const n = new Navegador();
+  await n.pedir(base + '/auth/login'); // deja la cookie de inicio de sesión en curso
+  const denegado = await n.pedir(base + '/auth/callback?error=access_denied&state=x');
+  assert.equal(denegado.status, 302);
+  assert.equal(denegado.headers.get('location'), '/login?error=denegado');
+  const log = console.error;
+  console.error = () => {};
+  try {
+    const roto = await new Navegador().entrar('root@empresa.cl', '/', (u) => u.replace(/state=[^&]+/, 'state=manipulado'));
+    assert.equal(roto.status, 302);
+    assert.equal(roto.headers.get('location'), '/login?error=fallo');
+  } finally { console.error = log; }
+});
+
+test('demasiados intentos en el acceso: una persona ve la página; una API recibe JSON', opts, async () => {
+  await appPrueba({ RATE_LIMIT_AUTH_MAX: '1' }, async (url) => {
+    await fetch(url + '/auth/login', { redirect: 'manual' });
+    const html = await fetch(url + '/auth/login', { redirect: 'manual', headers: { Accept: 'text/html,application/xhtml+xml' } });
+    await esPaginaDeAviso(html, { status: 429, titulo: 'Demasiados intentos' });
+    assert.ok(Number(html.headers.get('retry-after')) >= 1);
+    const json = await fetch(url + '/auth/login', { redirect: 'manual', headers: { Accept: 'application/json' } });
+    assert.equal(json.status, 429);
+    assert.equal((await json.json()).error, 'demasiados_intentos');
+  });
+});
+
+test('login.js en un navegador real: marca, enlace con next y aviso según ?error=', opts, async (t) => {
+  const { chromium } = require('@playwright/test');
+  let nav;
+  try { nav = await chromium.launch(); } catch { return t.skip('Chromium no está instalado (npx playwright install chromium)'); }
+  try {
+    const page = await nav.newPage();
+    await page.goto(`${base}/login?error=revocada&next=${encodeURIComponent('/asignaciones?x=1')}`);
+    await page.waitForFunction(() => document.getElementById('nombre').textContent !== 'IPAM' || document.title.includes('·'));
+    assert.equal(await page.textContent('#nombre'), 'IPAM');
+    assert.equal(await page.getAttribute('#entrar', 'href'), '/auth/login?next=' + encodeURIComponent('/asignaciones?x=1'));
+    assert.match(await page.textContent('#aviso'), /ya no está vigente/);
+    assert.equal(await page.getAttribute('#aviso', 'role'), 'alert');
+    await page.goto(`${base}/login?error=otracosa&next=//evil.example.com`);
+    assert.match(await page.textContent('#aviso'), /No se pudo iniciar sesión/);
+    assert.equal(await page.getAttribute('#entrar', 'href'), '/auth/login', 'un next externo se descarta');
+    await page.goto(`${base}/login`);
+    assert.equal(await page.isHidden('#aviso'), true);
+  } finally { await nav.close(); }
 });

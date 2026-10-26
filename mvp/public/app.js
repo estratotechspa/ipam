@@ -8,7 +8,7 @@ const CAB={'X-Requested-With':'ipam'};
 async function api(url,opt){
   const init=opt&&opt.body!==undefined?{method:opt.method||'POST',headers:{'Content-Type':'application/json',...CAB},body:JSON.stringify(opt.body)}:{headers:CAB,method:(opt&&opt.method)||'GET'};
   const r=await fetch(url,init);
-  if(r.status===401&&YO.modo==='oidc'){location.href='/auth/login?next='+encodeURIComponent(location.pathname);return {ok:false,status:401,data:null}}
+  if(r.status===401&&YO.modo==='oidc'){location.href='/login?error=sesion&next='+encodeURIComponent(location.pathname);return {ok:false,status:401,data:null}}
   let j=null;try{j=await r.json()}catch(e){}
   return {ok:r.ok,status:r.status,data:j,total:Number(r.headers.get('X-Total-Count'))};
 }
@@ -108,7 +108,7 @@ async function marca(){
 async function iniciar(){
   marca();
   const r=await fetch('/api/me',{headers:CAB});
-  if(r.status===401){location.href='/auth/login?next='+encodeURIComponent(location.pathname);return}
+  if(r.status===401){location.href='/login?next='+encodeURIComponent(location.pathname);return}
   YO=await r.json();
   const nav=$('nav');
   nav.querySelector('[data-t="sol"]').hidden=!puede('solicitante');

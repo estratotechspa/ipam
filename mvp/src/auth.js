@@ -8,7 +8,9 @@
 // La sesión es una cookie firmada (HMAC); el rol y la existencia del usuario se revalidan contra la base cada pocos
 // minutos (SESSION_REVALIDAR_SEG), así que un cambio de rol o una baja rigen sin esperar a que expire la cookie.
 const crypto = require('crypto');
+const path = require('path');
 const limites = require('./limites');
+const paginas = require('./paginas');
 const env = process.env;
 
 const ROLES = ['lector', 'solicitante', 'admin'];
@@ -22,6 +24,7 @@ const modo = () => {
   return env.OIDC_ISSUER ? 'oidc' : env.APP_USER && env.APP_PASS ? 'basic' : 'none';
 };
 
+const PUBLICO = path.join(__dirname, '..', 'public');
 const SESION = 'ipam_sesion';
 const LOGIN = 'ipam_login';
 const b64 = (b) => Buffer.from(b).toString('base64url');
@@ -158,6 +161,10 @@ async function rolVigente(db, sesion) {
   return ROLES.includes(rol) ? rol : null;
 }
 
+// Rutas que no exigen sesión: salud, webhook (va firmado), marca, y la pantalla de acceso con sus recursos.
+const PUBLICAS = new Set(['/api/health', '/webhook/jira', '/api/config', '/brand.css', '/brand/logo',
+  '/login', '/login.html', '/login.js', '/app.css']);
+
 // ---------- Rutas /auth y middleware ----------
 // db: pool de pg; auditar(accion, usuario, rol, detalle, ip)
 function montar(app, { db, auditar }) {
@@ -190,17 +197,22 @@ function montar(app, { db, auditar }) {
       if (modo() !== 'oidc') return res.redirect('/');
       const previo = abrir(cookies(req)[LOGIN]);
       borrarCookie(res, LOGIN);
-      if (!previo) return res.status(400).send('La solicitud de inicio de sesión expiró. <a href="/auth/login">Reintentar</a>');
+      // El proveedor avisa de un rechazo (p. ej. la persona canceló) con ?error=…: se vuelve a la pantalla de acceso.
+      if (req.query.error) return res.redirect('/login?error=denegado');
+      if (!previo) return paginas.enviar(res, 'expirada');
       const { lib, config } = await cliente();
       const tokens = await lib.authorizationCodeGrant(config, new URL(publicUrl() + req.originalUrl), {
         pkceCodeVerifier: previo.verificador, expectedState: previo.state, expectedNonce: previo.nonce,
       });
       const claims = tokens.claims();
       const email = String(claims.email || '').toLowerCase();
-      if (!email || claims.email_verified === false) return res.status(403).send('El proveedor no entregó un correo verificado.');
+      if (!email || claims.email_verified === false) {
+        await auditar('login_rechazado', email || 'desconocido', null, { motivo: 'correo no verificado' }, req.ip);
+        return paginas.enviar(res, 'correo_no_verificado');
+      }
       if (!dominioPermitido(claims)) {
         await auditar('login_rechazado', email, null, { motivo: 'dominio no permitido' }, req.ip);
-        return res.status(403).send('Tu dominio de correo no tiene acceso a este IPAM.');
+        return paginas.enviar(res, 'dominio', { email });
       }
       const fila = (await db.query(
         `insert into usuarios (email, nombre, ultimo_acceso) values ($1,$2,now())
@@ -209,7 +221,7 @@ function montar(app, { db, auditar }) {
       const rol = resolverRol({ ...claims, email }, fila);
       if (!rol) {
         await auditar('login_rechazado', email, null, { motivo: 'sin rol asignado' }, req.ip);
-        return res.status(403).send('Tu cuenta no tiene un rol asignado. Pide acceso a un administrador.');
+        return paginas.enviar(res, 'sin_rol', { email });
       }
       // La cookie no guarda el rol efectivo sino el que dan el proveedor y la configuración (sin la asignación de la base):
       // el rol vigente se calcula en cada revalidación, con el cambio que haya hecho un administrador.
@@ -217,7 +229,11 @@ function montar(app, { db, auditar }) {
       ponerCookie(res, SESION, sellar({ v: 2, email, nombre: claims.name || email, rolBase, exp: Date.now() / 1000 + horas * 3600 }), horas * 3600);
       await auditar('login', email, rol, {}, req.ip);
       res.redirect(rutaSegura(previo.next));
-    } catch (e) { next(e); }
+    } catch (e) {
+      // Estado distinto, código ya usado, proveedor caído…: se registra y se invita a reintentar desde el acceso.
+      console.error('auth/callback:', e.message);
+      res.redirect('/login?error=fallo');
+    }
   });
 
   app.post('/auth/logout', async (req, res) => {
@@ -227,14 +243,20 @@ function montar(app, { db, auditar }) {
     if (s) await auditar('logout', s.email, s.rol, {}, req.ip);
     res.json({ ok: true, redirect: '/auth/sesion-cerrada' });
   });
-  app.get('/auth/sesion-cerrada', (_q, res) => {
-    res.type('html').send('<!doctype html><meta charset="utf-8"><title>Sesión cerrada</title><link rel="stylesheet" href="/brand.css"><body style="font:16px system-ui;margin:3rem"><h2>Sesión cerrada</h2><p><a href="/auth/login">Volver a entrar</a></p>');
+  app.get('/auth/sesion-cerrada', (_q, res) => paginas.enviar(res, 'sesion_cerrada'));
+
+  // Pantalla de acceso propia: con OIDC, quien no tiene sesión llega aquí en vez de saltar directo al proveedor.
+  app.get('/login', (req, res) => {
+    if (modo() !== 'oidc') return res.redirect('/');
+    const s = abrir(cookies(req)[SESION]);
+    if (s && s.v === 2 && !req.query.error) return res.redirect(rutaSegura(req.query.next)); // ya tiene sesión
+    res.set('Cache-Control', 'no-store').sendFile(path.join(PUBLICO, 'login.html'));
   });
 
   // Middleware de acceso: todo exige sesión salvo salud, webhook (firmado) y /auth.
   app.use(async (req, res, next) => {
     try {
-      if (req.path === '/api/health' || req.path === '/webhook/jira' || req.path.startsWith('/auth/') || req.path === '/api/config' || req.path === '/brand.css' || req.path === '/brand/logo') return next();
+      if (PUBLICAS.has(req.path) || req.path.startsWith('/auth/')) return next();
       const m = modo();
       if (m === 'none') { req.usuario = 'anonimo'; req.rol = 'admin'; }
       else if (m === 'basic') {
@@ -253,8 +275,8 @@ function montar(app, { db, auditar }) {
         const rol = s && s.v === 2 ? await rolVigente(db, s) : null; // cookies anteriores a la revalidación obligan a entrar de nuevo
         if (!rol) {
           if (s) borrarCookie(res, SESION); // sesión revocada: usuario dado de baja o sin rol
-          if (req.path.startsWith('/api/')) return res.status(401).json({ error: s ? 'sesión revocada' : 'no autenticado', login: '/auth/login' });
-          return res.redirect('/auth/login?next=' + encodeURIComponent(req.originalUrl));
+          if (req.path.startsWith('/api/')) return res.status(401).json({ error: s ? 'sesión revocada' : 'no autenticado', login: '/login' });
+          return res.redirect('/login?' + (s ? 'error=revocada&' : '') + 'next=' + encodeURIComponent(req.originalUrl));
         }
         req.usuario = s.email; req.nombre = s.nombre; req.rol = rol;
       }
