@@ -3,6 +3,9 @@ const { test, expect } = require('@playwright/test');
 // Login real con un proveedor OIDC de prueba (e2e/idp.js). Verifica que la interfaz respeta el rol.
 async function entrar(page, email) {
   await page.goto('/');
+  // Sin sesión se llega a la pantalla de acceso propia (no directo al proveedor): hay que pulsar el botón.
+  await page.waitForURL(/127\.0\.0\.1:8097\/login\?next=/);
+  await page.getByRole('link', { name: 'Entrar con tu cuenta corporativa' }).click();
   await page.waitForURL(/127\.0\.0\.1:8098\/interaction\//);
   await page.fill('input[name="login"]', email);
   await page.fill('input[name="password"]', 'cualquiera');

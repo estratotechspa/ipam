@@ -8,7 +8,23 @@ const contexto = require('../http/contexto');
 const { igualConstante, verificar } = require('./contrasena');
 
 // Rutas que no exigen sesión: salud, webhook (va firmado), /auth y la marca.
-const PUBLICAS = new Set(['/healthz', '/readyz', '/api/health', '/webhook/jira', '/api/config', '/brand.css', '/brand/logo', '/metrics']);
+const PUBLICAS = new Set([
+  '/healthz',
+  '/readyz',
+  '/api/health',
+  '/webhook/jira',
+  '/api/config',
+  '/brand.css',
+  '/brand/logo',
+  '/metrics',
+  // Pantalla de acceso (con SSO) y los recursos que necesita para dibujarse sin sesión.
+  '/login',
+  '/login.html',
+  '/login.js',
+  '/app.css',
+  '/iconos.js',
+  '/favicon.svg',
+]);
 const esPublica = (p) => PUBLICAS.has(p) || p.startsWith('/auth/');
 
 // Caché local (solo rendimiento) de contraseñas ya verificadas: evita repetir scrypt en cada petición Basic.
@@ -59,8 +75,8 @@ async function sesionOidc(req, res, { revalidador, rechazo }) {
   if (rol) return { sesion: s, rol };
   rechazo(s ? 'sesion_revocada' : 'sesion_invalida', req);
   if (s) S.borrarCookie(req, res, S.SESION);
-  if (req.path.startsWith('/api/')) res.status(401).json({ error: s ? 'sesion_revocada' : 'no autenticado', login: '/auth/login' });
-  else res.redirect('/auth/login?next=' + encodeURIComponent(req.originalUrl));
+  if (req.path.startsWith('/api/')) res.status(401).json({ error: s ? 'sesion_revocada' : 'no autenticado', login: '/login' });
+  else res.redirect('/login?' + (s ? 'error=revocada&' : '') + 'next=' + encodeURIComponent(req.originalUrl)); // pantalla propia, no directo al proveedor
   return null;
 }
 

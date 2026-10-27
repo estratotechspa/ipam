@@ -1,4 +1,15 @@
+import { icono } from '/iconos.js';
+import { fmt as _fmt, nivelUso, parseCidr, validarCidr, mapaBloques, tamanoCidr } from '/calculos.js';
+
 const $ = (id) => document.getElementById(id);
+const I = icono;
+/** Icono como elemento (para el constructor h()): el SVG es de este código, no de datos del usuario. */
+const ico = (nombre, tam) => {
+  const e = document.createElement('span');
+  e.className = 'ic-envoltorio';
+  e.innerHTML = icono(nombre, tam);
+  return e;
+};
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const fmt = (n) => Number(n).toLocaleString('es-CL');
 const fecha = (s) => new Date(s).toLocaleDateString('es-CL');
@@ -60,9 +71,11 @@ function show(t) {
   render(t);
 }
 $('nav').onclick = (e) => {
-  if (e.target.dataset.t) show(e.target.dataset.t);
+  const b = e.target.closest('[data-t]');
+  if (b) show(b.dataset.t);
 };
-const fail = (id, e) => ($(id).innerHTML = `<div class="alert">No se pudo cargar: ${esc(e.message)}</div>`);
+document.querySelectorAll('#nav [data-ic]').forEach((b) => b.prepend(ico(b.dataset.ic)));
+const fail = (id, e) => ($(id).innerHTML = `<div class="alert" role="alert">${I('error')} No se pudo cargar: ${esc(e.message)}</div>`);
 
 // Filtro global por ambiente y proveedor: vale para Pools, Asignaciones y Reservas (se conserva al cambiar de pestaña).
 const FILTRO = { ambiente: '', proveedor: '' };
@@ -121,37 +134,49 @@ const barraFiltro = (todos, recargar) =>
 const pct = (x) => (x * 100).toFixed(1).replace('.', ',') + ' %';
 const anchoUso = (x) => (x > 0 ? Math.max(x * 100, 1) : 0);
 const textoUso = (asig, res) => `Asignado ${pct(asig)} · reservado ${pct(res)}`;
-const barraUsoHtml = (asig, res) =>
-  `<span class="uso"><span class="bar" role="img" aria-label="${textoUso(asig, res)}" title="${textoUso(asig, res)}"><i style="width:${anchoUso(asig)}%"></i><i class="res" style="width:${anchoUso(res)}%"></i></span>${pct(asig + res)}</span>`;
-const barraUso = (asig, res) =>
-  h(
+/** Barra de uso: verde < 70 %, ámbar 70–90 %, rojo > 90 % (sobre lo asignado + lo reservado), con el porcentaje en número. En uso alto
+ *  lleva además un icono: el color no es lo único que informa. */
+const textoNivel = { bajo: 'uso bajo', medio: 'uso medio', alto: 'uso alto' };
+const barraUsoHtml = (asig, res) => {
+  const nivel = nivelUso(asig + res);
+  const detalle = `${textoUso(asig, res)}, ${textoNivel[nivel]}`;
+  return `<span class="uso"><span class="bar" role="img" aria-label="${detalle}" title="${detalle}"><i class="uso-${nivel}" style="width:${anchoUso(asig)}%"></i><i class="res" style="width:${anchoUso(res)}%"></i></span><span class="uso-pct uso-txt-${nivel} num">${nivel === 'alto' ? I('alerta') : ''}${pct(asig + res)}</span></span>`;
+};
+const barraUso = (asig, res) => {
+  const nivel = nivelUso(asig + res);
+  const detalle = `${textoUso(asig, res)}, ${textoNivel[nivel]}`;
+  return h(
     'span',
     { class: 'uso' },
     h(
       'span',
-      { class: 'bar', role: 'img', 'aria-label': textoUso(asig, res), title: textoUso(asig, res) },
-      h('i', { style: `width:${anchoUso(asig)}%` }),
+      { class: 'bar', role: 'img', 'aria-label': detalle, title: detalle },
+      h('i', { class: `uso-${nivel}`, style: `width:${anchoUso(asig)}%` }),
       h('i', { class: 'res', style: `width:${anchoUso(res)}%` }),
     ),
-    pct(asig + res),
+    h('span', { class: `uso-pct uso-txt-${nivel} num` }, nivel === 'alto' ? ico('alerta') : null, pct(asig + res)),
   );
+};
 
 async function renderPools() {
   try {
-    const [todos, r] = await Promise.all([get('/api/pools'), get('/api/resumen')]);
+    const todos = await get('/api/pools');
     const pools = todos.filter(pasaFiltro);
     // Uso total ponderado por tamaño: direcciones ocupadas (asignadas + reservadas) de todos los pools ÷ direcciones totales.
     const total = pools.reduce((n, p) => n + size(p.cidr), 0);
     const ocupadas = pools.reduce((n, p) => n + (p.uso + (p.uso_reservado || 0)) * size(p.cidr), 0);
+    const sobre80 = pools.filter((p) => p.uso + (p.uso_reservado || 0) > 0.8).length;
     $('pools').innerHTML =
-      `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h2>Estado de pools</h2><span class="acciones">${puede('admin') ? '<button type="button" class="btn" id="btn-importar">⬆ Importar segmentos</button>' : ''}<a class="btn sec" href="/api/exportar.xlsx" download>⬇ Exportar a Excel</a></span></div>
-  <div class="row"><div class="card"><div class="kpi">${pools.length}</div><div class="sub">Pools</div></div>
+      `<div class="cabecera"><h2 tabindex="-1">Estado de pools</h2><span class="acciones">${puede('admin') ? `<button type="button" class="btn" id="btn-importar">${I('subir')}Importar segmentos</button>` : ''}<a class="btn sec" href="/api/exportar.xlsx" download>${I('descargar')}Exportar a Excel</a></span></div>
+  <div class="kpis"><div class="card"><div class="kpi">${pools.length}</div><div class="sub">Pools</div></div>
   <div class="card"><div class="kpi">${pools.reduce((n, p) => n + p.asignaciones, 0)}</div><div class="sub">Asignaciones activas</div></div>
-  <div class="card"><div class="kpi">${pct(total ? ocupadas / total : 0)}</div><div class="sub">Uso total (asignado + reservado, sobre todas las direcciones)</div></div>
-  <div class="card"><div class="kpi">${r.solapamientos}</div><div class="sub">Solapamientos (la base de datos los impide)</div></div></div>
+  <div class="card"><div class="kpi">${pct(total ? ocupadas / total : 0)}</div><div class="sub">Uso total (asignado + reservado)</div></div>
+  <div class="card"><div class="kpi ${sobre80 ? 'uso-txt-alto' : ''}">${sobre80}</div><div class="sub">Pools sobre 80 %</div></div>
+  <div class="card"><div class="kpi">${_fmt(Math.max(0, Math.round(total - ocupadas)))}</div><div class="sub">Espacio libre (direcciones)</div></div></div>
+  <p class="nota">${I('info')} Los solapamientos no son un indicador: la base de datos los impide con una restricción de exclusión.</p>
   <div id="pool-nuevo"></div><div id="pools-msg" aria-live="polite"></div>
   <p class="muted leyenda"><span class="muestra asig"></span> asignado <span class="muestra res"></span> reservado · Haz clic en un pool para ver su ficha.</p>
-  <div class="card tablewrap"><table><tr><th>Pool</th><th>Tipo</th><th>Ambiente</th><th>Proveedor</th><th>CIDR base</th><th>Asig.</th><th>Reservas</th><th>Uso</th></tr>
+  <div class="card tablewrap" tabindex="0" role="region" aria-label="Pools"><table><thead><tr><th scope="col">Pool</th><th scope="col">Tipo</th><th scope="col">Ambiente</th><th scope="col">Proveedor</th><th scope="col">CIDR base</th><th scope="col">Asig.</th><th scope="col">Reservas</th><th scope="col">Uso</th></tr></thead><tbody>
   ${pools
     .map(
       (
@@ -159,7 +184,7 @@ async function renderPools() {
       ) => `<tr><td><button type="button" class="enlace" data-ficha-pool="${esc(p.id)}">${esc(p.id)}</button></td><td>${esc(p.tipo)}</td><td>${tag(p.ambiente)}</td><td>${esc(p.proveedor)}</td><td><code>${esc(p.cidr)}</code></td><td>${p.asignaciones}</td><td>${p.reservas_vigentes || 0}</td>
   <td>${barraUsoHtml(p.uso, p.uso_reservado || 0)}</td></tr>`,
     )
-    .join('')}</table></div>`;
+    .join('')}</tbody></table></div>`;
     $('pools').prepend(barraFiltro(todos, renderPools));
     $('pools')
       .querySelectorAll('[data-ficha-pool]')
@@ -177,6 +202,57 @@ async function renderPools() {
 }
 
 let busquedaAsig = ''; // texto del buscador de Asignaciones
+// Orden por columna y paginación de Asignaciones (en el navegador, sobre la lista ya filtrada). Se conservan al cambiar de pestaña.
+const POR_PAGINA = 25;
+const ORDEN_ASIG = { col: 'fecha', dir: 'desc', pagina: 0 };
+const COLUMNAS_ASIG = [
+  ['codigo', 'ID'],
+  ['cidr', 'Segmento'],
+  ['pool', 'Pool'],
+  ['vpc', 'Proyecto / VPC'],
+  ['vlan', 'VLAN'],
+  ['dir', 'Direcciones'],
+  ['sol', 'Solicitó'],
+  ['origen', 'Origen'],
+  ['ticket', 'Ticket'],
+  ['fecha', 'Fecha'],
+];
+const claveAsig = {
+  codigo: (x) => Number(x.id),
+  cidr: (x) => {
+    const c = parseCidr(x.cidr);
+    return c ? c.ip * 64 + c.len : 0;
+  },
+  pool: (x) => x.pool_id,
+  vpc: (x) => x.vpc,
+  vlan: (x) => (x.vlan ? Number(x.vlan) : Infinity),
+  dir: (x) => tamanoCidr(x.cidr),
+  sol: (x) => x.solicitante,
+  origen: (x) => x.origen,
+  ticket: (x) => x.ticket,
+  fecha: (x) => new Date(x.creado_en).getTime(),
+};
+const comparar = (col, dir) => (x, y) => {
+  const a = claveAsig[col](x);
+  const b = claveAsig[col](y);
+  const c = typeof a === 'string' ? a.localeCompare(b, 'es', { numeric: true, sensitivity: 'base' }) : a - b;
+  return (dir === 'asc' ? c : -c) || Number(y.id) - Number(x.id);
+};
+const encabezadoAsig = () =>
+  COLUMNAS_ASIG.map(([col, texto]) => {
+    const activa = ORDEN_ASIG.col === col;
+    const sentido = activa ? (ORDEN_ASIG.dir === 'asc' ? 'ascending' : 'descending') : 'none';
+    return `<th scope="col" aria-sort="${sentido}"><button type="button" class="orden" data-orden="${col}">${texto}${activa ? I(ORDEN_ASIG.dir === 'asc' ? 'arriba' : 'abajo') : ''}</button></th>`;
+  }).join('') + '<th scope="col"><span class="sr-only">Acciones</span></th>';
+const paginacionAsig = (total) => {
+  const paginas = Math.max(1, Math.ceil(total / POR_PAGINA));
+  const desde = total === 0 ? 0 : ORDEN_ASIG.pagina * POR_PAGINA + 1;
+  const hasta = Math.min(total, (ORDEN_ASIG.pagina + 1) * POR_PAGINA);
+  return `<nav class="paginacion" aria-label="Paginación"><span class="muted" role="status">${total === 0 ? 'Sin resultados' : `Mostrando ${_fmt(desde)}–${_fmt(hasta)} de ${_fmt(total)}`}</span>
+    <span class="paginacion-botones"><button type="button" class="btn sec" id="a-ant" ${ORDEN_ASIG.pagina === 0 ? 'disabled' : ''}>${I('izquierda')}Anterior</button>
+    <span class="num">Página ${_fmt(ORDEN_ASIG.pagina + 1)} de ${_fmt(paginas)}</span>
+    <button type="button" class="btn sec" id="a-sig" ${ORDEN_ASIG.pagina >= paginas - 1 ? 'disabled' : ''}>Siguiente${I('derecha')}</button></span></nav>`;
+};
 const ASIG = { formAbierto: false, aviso: null };
 const textoVlan = (x) => (x.vlan ? `${x.vlan}${x.vlan_nombre ? ' · ' + x.vlan_nombre : ''}` : x.vlan_nombre || '—');
 async function renderAsig() {
@@ -187,16 +263,51 @@ async function renderAsig() {
     const a = todasAsig
       .filter((x) => deEsePool.has(x.pool_id) && pasaFiltro(deEsePool.get(x.pool_id)))
       .filter((x) => !q || [x.codigo, x.cidr, x.vpc, x.ticket, x.solicitante, x.pool_id, x.origen, x.vlan, x.vlan_nombre].join(' ').toLowerCase().includes(q));
+    const total = a.length;
+    a.sort(comparar(ORDEN_ASIG.col, ORDEN_ASIG.dir));
+    ORDEN_ASIG.pagina = Math.min(ORDEN_ASIG.pagina, Math.max(0, Math.ceil(total / POR_PAGINA) - 1));
+    const pagina = a.slice(ORDEN_ASIG.pagina * POR_PAGINA, (ORDEN_ASIG.pagina + 1) * POR_PAGINA);
     $('asig').innerHTML =
-      `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h2>Asignaciones</h2><span><a class="btn" href="/api/exportar.xlsx" download>⬇ Exportar a Excel</a> ${puede('admin') ? '<a class="btn sec" href="/api/exportar.json" download title="Respaldo completo para llevar el IPAM a otra infraestructura">⬇ Respaldo JSON</a>' : ''}</span></div><div class="card tablewrap"><table><tr><th>ID</th><th>Segmento</th><th>Pool</th><th>Proyecto / VPC</th><th>VLAN</th><th>Direcciones</th><th>Solicitó</th><th>Origen</th><th>Ticket</th><th>Fecha</th><th></th></tr>
-  ${a
+      `<div class="cabecera"><h2 tabindex="-1">Asignaciones</h2><span class="acciones"><a class="btn" href="/api/exportar.xlsx" download>${I('descargar')}Exportar a Excel</a>${puede('admin') ? `<a class="btn sec" href="/api/exportar.json" download title="Respaldo completo para llevar el IPAM a otra infraestructura">${I('archivo')}Respaldo JSON</a>` : ''}</span></div>${
+        total === 0
+          ? `<div class="card vacio">${I('buscar', 20)}<p><b>${q || FILTRO.ambiente || FILTRO.proveedor ? 'Ninguna asignación coincide con la búsqueda.' : 'Aún no hay asignaciones.'}</b></p><p class="muted">${q || FILTRO.ambiente || FILTRO.proveedor ? 'Prueba con otro texto o quita los filtros.' : 'Cuando se asigne un segmento aparecerá aquí.'}</p></div>`
+          : `<div class="card tablewrap" tabindex="0" role="region" aria-label="Asignaciones"><table><thead><tr>${encabezadoAsig()}</tr></thead><tbody>
+  ${pagina
     .map(
       (
         x,
       ) => `<tr><td><button type="button" class="enlace" data-ficha-asig="${esc(x.id)}"><code>${esc(x.codigo || x.id)}</code></button></td><td><code>${esc(x.cidr)}</code></td><td>${esc(x.pool_id)}</td><td>${esc(x.vpc)}</td><td>${esc(textoVlan(x))}</td><td>${fmt(size(x.cidr))}</td><td>${esc(x.solicitante)}</td><td>${esc(x.origen)}</td><td>${esc(x.ticket)}</td><td>${fecha(x.creado_en)}</td>
-  <td>${puede('admin') ? `<button class="btn sec" data-del="${x.id}" data-c="${esc(x.cidr)}">Liberar</button>` : ''}</td></tr>`,
+  <td>${puede('admin') ? `<button type="button" class="btn sec pequeno" data-del="${x.id}" data-c="${esc(x.cidr)}">${I('liberar')}Liberar</button>` : ''}</td></tr>`,
     )
-    .join('')}</table></div>`;
+    .join('')}</tbody></table></div>`
+      }${paginacionAsig(total)}`;
+    $('asig')
+      .querySelectorAll('[data-orden]')
+      .forEach(
+        (b) =>
+          (b.onclick = async () => {
+            const col = b.dataset.orden;
+            if (ORDEN_ASIG.col === col) ORDEN_ASIG.dir = ORDEN_ASIG.dir === 'asc' ? 'desc' : 'asc';
+            else Object.assign(ORDEN_ASIG, { col, dir: col === 'fecha' ? 'desc' : 'asc' });
+            ORDEN_ASIG.pagina = 0;
+            await renderAsig();
+            const otra = $('asig').querySelector(`[data-orden="${col}"]`);
+            if (otra) otra.focus();
+          }),
+      );
+    for (const [id, paso] of [
+      ['a-ant', -1],
+      ['a-sig', 1],
+    ]) {
+      const b = $(id);
+      if (b)
+        b.onclick = async () => {
+          ORDEN_ASIG.pagina += paso;
+          await renderAsig();
+          const sigue = $(id);
+          (sigue && !sigue.disabled ? sigue : $('asig').querySelector('.paginacion .btn:not([disabled])'))?.focus();
+        };
+    }
     const buscador = h('input', {
       id: 'f-buscar',
       type: 'search',
@@ -204,6 +315,7 @@ async function renderAsig() {
       placeholder: 'ID, segmento, proyecto, VLAN, ticket…',
       oninput: async (e) => {
         busquedaAsig = e.target.value;
+        ORDEN_ASIG.pagina = 0;
         await renderAsig();
         const el = document.getElementById('f-buscar');
         if (el) {
@@ -235,14 +347,17 @@ async function renderAsig() {
 
 /** Libera una asignación pidiendo el motivo (queda en el historial). Devuelve true si se liberó. */
 async function liberarAsignacion(id, cidr, despues) {
-  const motivo = prompt('¿Por qué se libera ' + cidr + '? (queda en el historial)');
-  if (motivo === null) return false;
-  if (!motivo.trim()) {
-    alert('Indica el motivo: queda registrado en el historial.');
-    return false;
-  }
-  const r = await api('/api/asignaciones/' + id, { method: 'DELETE', body: { motivo: motivo.trim() } });
-  if (!r.ok) alert((r.data && (r.data.mensaje || r.data.error)) || 'No se pudo liberar');
+  const { aceptado, valor: motivo } = await dialogoSimple({
+    titulo: `¿Liberar ${cidr}?`,
+    mensaje: 'El segmento quedará disponible para otras solicitudes. Indica por qué se libera: queda en el historial.',
+    confirmar: 'Liberar segmento',
+    peligro: true,
+    campo: { etiqueta: 'Motivo', obligatorio: true },
+  });
+  if (!aceptado) return false;
+  const r = await api('/api/asignaciones/' + id, { method: 'DELETE', body: { motivo } });
+  if (r.ok) toast(`Segmento ${cidr} liberado.`);
+  else toast((r.data && (r.data.mensaje || r.data.error)) || 'No se pudo liberar', 'error');
   if (despues) await despues();
   return r.ok;
 }
@@ -283,6 +398,8 @@ function formularioNuevaAsignacion(pools, recargar) {
   const cidr = h('input', { id: 'na-cidr', placeholder: 'opcional: vacío = el primer libre' });
   const vl = camposVlan('na');
   const boton = h('button', { class: 'btn', type: 'submit', id: 'na-go' }, 'Asignar');
+  const revisarCidr = vincularCidr(cidr, boton, () => (pools.find((x) => x.id === pool.value) || {}).cidr);
+  pool.addEventListener('change', revisarCidr);
   const res = h('div', { id: 'na-res', 'aria-live': 'polite', style: 'flex:1 1 100%' });
   const enviar = async (e) => {
     e.preventDefault();
@@ -299,7 +416,7 @@ function formularioNuevaAsignacion(pools, recargar) {
     boton.disabled = false;
     const d = r.data || {};
     if (r.ok) {
-      ASIG.aviso = `✔ Asignado ${d.cidr} (${d.codigo || 'sin ID'}) en ${d.pool_id} para ${d.vpc}. Ticket ${d.ticket}.`;
+      ASIG.aviso = `Asignado ${d.cidr} (${d.codigo || 'sin ID'}) en ${d.pool_id} para ${d.vpc}. Ticket ${d.ticket}.`;
       ASIG.formAbierto = false;
       return recargar();
     }
@@ -309,7 +426,7 @@ function formularioNuevaAsignacion(pools, recargar) {
         h(
           'div',
           { class: 'alert', role: 'alert' },
-          h('b', null, '⚠ Solapamiento detectado'),
+          h('b', null, ico('alerta'), ' Solapamiento detectado'),
           h('br'),
           `${body.cidr} se cruza con ${x.cidr} de ${x.vpc} (pidió ${x.solicitante}, ticket ${x.ticket}). No se asignó nada.`,
         ),
@@ -355,49 +472,86 @@ function formularioNuevaAsignacion(pools, recargar) {
   return h(
     'details',
     { class: 'card', style: 'margin:0 0 14px', open: ASIG.formAbierto, ontoggle: (e) => (ASIG.formAbierto = e.target.open) },
-    h('summary', { style: 'cursor:pointer;font-weight:600' }, '＋ Nueva asignación (directa, solo admin)'),
+    h('summary', { style: 'cursor:pointer;font-weight:600' }, ico('mas'), 'Nueva asignación (directa, solo admin)'),
     h(
       'p',
       { class: 'muted', style: 'max-width:760px' },
       'Entrega el segmento ',
       h('b', null, 'de inmediato y de forma definitiva'),
-      ', sin reserva ni aprobación de otra persona; queda en el historial a tu nombre. Para el flujo normal (pedir, aprobar, asignar) usa Reservas → Nueva reserva.',
+      ', sin reserva ni aprobación de otra persona; queda en el historial a tu nombre. Para el flujo normal (pedir, aprobar, asignar) usa Reservas, «Nueva reserva».',
     ),
     form,
   );
 }
 
 let ultimoJira = null; // resultado de la última simulación (se muestra tras recargar la pestaña)
+
+// tipo de evento → [texto para personas, tono]. Los errores son lo que conviene revisar.
+const EVENTOS_JIRA = {
+  jira_ticket_creado: ['Ticket creado en Jira', 'ok'],
+  jira_ticket_actualizado: ['Ticket de Jira actualizado', 'ok'],
+  jira_actualiza_ticket: ['Ticket actualizado (simulado)', 'ok'],
+  jira_pendiente_aprobacion: ['Reserva pendiente de aprobación', 'info'],
+  jira_webhook_recibido: ['Webhook recibido (simulado)', 'info'],
+  jira_rechazo: ['Solicitud de Jira rechazada', 'error'],
+  jira_firma_invalida: ['Webhook con firma inválida', 'error'],
+  jira_error: ['Error al hablar con Jira', 'error'],
+};
+const ICONO_TONO = { ok: 'ok', info: 'info', error: 'alerta' };
+const filaEventoJira = (e) => {
+  const [texto, tono] = EVENTOS_JIRA[e.tipo] || [e.tipo, 'info'];
+  const d = e.detalle || {};
+  const detalle = d.motivo || d.rango || [d.ambiente, d.tipo, d.mascara && `/${d.mascara}`, d.vpc].filter(Boolean).join(' · ') || '';
+  return `<tr><td class="num">${new Date(e.ts).toLocaleTimeString('es-CL')}</td><td><span class="evento evento-${tono}">${I(ICONO_TONO[tono])} ${esc(texto)}</span></td><td>${esc(d.ticket || '')}</td><td>${esc(detalle)}</td></tr>`;
+};
+const cajaJira = (texto, clase = '') => `<div class="box ${clase}">${texto}</div>`;
+const flujoJira = (pasos) => `<div class="flow">${pasos.map(([t, c]) => cajaJira(t, c)).join(`<span class="arrow">${I('flecha', 20)}</span>`)}</div>`;
+
 async function renderJira() {
   let ev = [],
-    je = { activa: false };
+    je = { activa: false, faltantes: [] };
   try {
     ev = await get('/api/eventos');
     je = await get('/api/jira/estado');
   } catch (e) {}
-  const estado = je.activa
-    ? je.faltantes.length
-      ? `<span class="tag prod">Activa · faltan: ${esc(je.faltantes.join(', '))}</span>`
-      : '<span class="tag dev">Activa</span>'
-    : '<span class="tag qa">Desactivada (simulada)</span>';
-  const linea = (e) => `${new Date(e.ts).toLocaleTimeString('es-CL')}  ${e.tipo}  ${JSON.stringify(e.detalle)}`;
-  $('jira').innerHTML = `<h2>Integración bidireccional con Jira ${estado}</h2>
-  <div class="card"><b>Sentido 1 · IPAM → Jira</b><div class="flow"><div class="box">Panel / API<br>solicita segmento</div><span class="arrow">→</span><div class="box">IPAM<br>valida y asigna</div><span class="arrow">→</span><div class="box jira">Jira crea ticket<br>NET-1xx</div><span class="arrow">→</span><div class="box">Guarda<br>ticket_jira_id</div></div>
-  <span class="muted">Con la integración desactivada, el número de ticket lo genera el IPAM (secuencia NET-xxx). Al activarla (JIRA_ENABLED=true) se crea el ticket real en Jira.</span></div>
-  <div class="card" style="margin-top:16px"><b>Sentido 2 · Jira → IPAM</b><div class="flow"><div class="box jira">Ticket «Solicitud de Segmento IPAM»<br>ambiente, tipo, pool, máscara, VPC</div><span class="arrow">→</span><div class="box">Webhook<br>(firmado HMAC)</div><span class="arrow">→</span><div class="box">IPAM calcula<br>y <b>reserva</b> (24 h)</div><span class="arrow">→</span><div class="box aprob">✋ Aprobación manual<br>de un admin (Reservas)</div><span class="arrow">→</span><div class="box">IPAM<br>asigna el CIDR</div><span class="arrow">→</span><div class="box jira">Actualiza ticket<br>con el rango</div></div><p class="muted" style="margin:10px 0 0">Nada se asigna sin aprobación humana: si nadie aprueba, la reserva <b>expira sola</b> y el rango vuelve al pool.</p>
-  <div class="row"><div style="flex:1;min-width:240px"><b>Simular ticket entrante</b>
-   <label>Ambiente</label><select id="j-amb"><option>prod</option><option>qa</option><option>dev</option></select>
-   <label>Tipo</label><select id="j-tipo"><option>Nodos</option><option selected>Pods</option><option>Servicios</option><option>Control plane</option></select>
-   <label>Máscara</label><select id="j-len">${MASCARAS.map((n) => `<option ${n === 22 ? 'selected' : ''} value="${n}">/${n}</option>`).join('')}</select>
-   <label>VPC</label><input id="j-vpc" value="vpc-nueva"><p><button class="btn" id="j-go">Enviar webhook</button></p><div id="j-res" role="status"></div></div>
-  <div style="flex:2;min-width:260px"><b>Registro de eventos</b><div class="log">${esc(ev.map(linea).join('\n')) || '(sin eventos)'}</div></div></div></div>`;
-  if (je.simulador === false) {
-    // En producción el simulador no está disponible (se habilita con ENABLE_SIMULADOR=true): se explica en vez de ofrecer un botón que falla.
-    $('j-go').closest('div[style*="flex:1"]').innerHTML =
-      '<b>Simular ticket entrante</b><p class="muted">El simulador está deshabilitado en este entorno (producción). Se habilita con ENABLE_SIMULADOR=true.</p>';
-    return;
-  }
+  const incompleta = je.activa && je.faltantes.length > 0;
+  const insignia = !je.activa
+    ? `<span class="tag qa">${I('info')} Desactivada</span>`
+    : incompleta
+      ? `<span class="tag prod">${I('alerta')} Activa, incompleta</span>`
+      : `<span class="tag dev">${I('ok')} Activa</span>`;
+  const textoEstado = !je.activa
+    ? `<p>La integración saliente está <b>desactivada</b>: el número de ticket (<code>NET-xxx</code>) lo genera el propio IPAM y no se llama a Jira. Para activarla define <code>JIRA_ENABLED=true</code> y las variables de conexión.</p><p class="muted">El webhook de entrada (de Jira al IPAM) funciona igual, con o sin esta integración.</p>`
+    : incompleta
+      ? `<div class="alert" role="alert">${I('alerta')} La integración está activada pero faltan variables, así que no se crean tickets en Jira:<ul>${je.faltantes.map((v) => `<li><code>${esc(v)}</code></li>`).join('')}</ul></div>`
+      : '<p>La integración está <b>activa</b>: cada asignación crea su ticket en Jira en segundo plano (con reintentos), y los tickets que llegan por webhook se comentan y se cierran al aprobar la reserva.</p>';
+  const eventos = ev.filter((e) => e.tipo.startsWith('jira')).slice(0, 15);
+  const simulador =
+    je.simulador === false
+      ? `<h3>Simular un ticket entrante</h3><p class="muted">${I('info')} El simulador está deshabilitado en este entorno (producción). Se habilita con ENABLE_SIMULADOR=true.</p>`
+      : `<h3>Simular un ticket entrante</h3><p class="muted">Arma un ticket, lo firma como lo haría Jira y lo procesa por el mismo camino del webhook. Crea una reserva real que un admin debe aprobar.</p>
+   <div class="row"><div><label for="j-amb">Ambiente</label><select id="j-amb"><option>prod</option><option>qa</option><option>dev</option></select></div>
+   <div><label for="j-tipo">Tipo</label><select id="j-tipo"><option>Nodos</option><option selected>Pods</option><option>Servicios</option><option>Control plane</option></select></div>
+   <div><label for="j-len">Máscara</label><select id="j-len">${MASCARAS.map((n) => `<option ${n === 22 ? 'selected' : ''} value="${n}">/${n}</option>`).join('')}</select></div>
+   <div><label for="j-vpc">VPC</label><input id="j-vpc" value="vpc-nueva" maxlength="100"></div></div>
+   <p><button type="button" class="btn" id="j-go">${I('flujo')}Enviar webhook</button></p><div id="j-res" role="status"></div>`;
+  $('jira').innerHTML =
+    `<div class="cabecera"><h2 tabindex="-1">Integración con Jira</h2><button type="button" class="btn sec" id="j-actualizar">${I('reintentar')}Actualizar</button></div>
+  <div class="card"><h3 style="margin-top:0">Estado ${insignia}</h3>${textoEstado}</div>
+  <div class="card tablewrap" style="margin-top:var(--sp-4)" tabindex="0" role="region" aria-label="Últimos eventos de Jira"><h3 style="margin-top:0">Últimos eventos</h3>${
+    eventos.length
+      ? `<table><thead><tr><th scope="col">Hora</th><th scope="col">Evento</th><th scope="col">Ticket</th><th scope="col">Detalle</th></tr></thead><tbody>${eventos.map(filaEventoJira).join('')}</tbody></table>`
+      : '<p class="muted">Todavía no hay eventos de Jira. Aparecerán aquí cuando se cree un ticket o llegue un webhook.</p>'
+  }</div>
+  <details class="plegable" id="j-como"><summary>${I('ayuda')} Cómo funciona</summary>
+    <h3>Sentido 1 · IPAM ${I('flecha')} Jira</h3>${flujoJira([['Panel / API<br>asigna un segmento'], ['IPAM<br>valida y asigna'], ['Jira crea el ticket<br>(en segundo plano)', 'jira'], ['Guarda la clave<br>del ticket']])}
+    <p class="muted">Con la integración desactivada, el número de ticket lo genera el IPAM (secuencia NET-xxx). Al activarla (JIRA_ENABLED=true) se crea el ticket real en Jira, con reintentos.</p>
+    <h3>Sentido 2 · Jira ${I('flecha')} IPAM</h3>${flujoJira([['Ticket «Solicitud de Segmento IPAM»<br>ambiente, tipo, máscara, VPC', 'jira'], ['Webhook<br>(firmado con HMAC y hora)'], ['IPAM calcula<br>y reserva'], ['Aprobación manual<br>de un admin (Reservas)', 'aprob'], ['Se asigna y se<br>actualiza el ticket', 'jira']])}
+    ${simulador}</details>`;
+  $('j-actualizar').onclick = renderJira;
+  if (je.simulador === false) return;
   if (ultimoJira) {
+    $('j-como').open = true;
     $('j-res').className = ultimoJira.ok ? 'ok' : 'alert';
     $('j-res').textContent = ultimoJira.texto;
   }
@@ -570,7 +724,7 @@ async function renderUsuarios() {
     };
 
     const accion = async (ruta, metodo, confirmacion, alTerminar) => {
-      if (confirmacion && !confirm(confirmacion)) return;
+      if (confirmacion && !(await confirmar({ titulo: 'Confirma la acción', mensaje: confirmacion, peligro: true }))) return;
       const r = await api(ruta, { method: metodo, body: {} });
       if (!r.ok) return msg(estado, errorApi(r), 'error');
       if (alTerminar) alTerminar(r.data);
@@ -645,7 +799,7 @@ async function renderUsuarios() {
       h(
         'details',
         { class: 'card', style: 'margin:0 0 14px' },
-        h('summary', { style: 'cursor:pointer;font-weight:600' }, local ? '＋ Nueva cuenta local' : '＋ Pre-registrar a una persona'),
+        h('summary', { style: 'cursor:pointer;font-weight:600' }, ico('mas'), local ? 'Nueva cuenta local' : 'Pre-registrar a una persona'),
         h(
           'form',
           { class: 'filtros', style: 'margin-top:12px', onsubmit: crear, 'aria-label': 'Nuevo usuario' },
@@ -681,9 +835,9 @@ const IMP = { archivo: null, sim: null, aprobadas: new Set(), filtro: '', defect
 const ESTADO_IMP = {
   ok: ['imp-ok', 'Listo para importar'],
   ya_existe: ['imp-omitida', 'Ya registrado (se omite)'],
-  solapa_otro_pool: ['imp-aviso', '⚠ Solapa con otro pool: requiere aprobación'],
-  choca_mismo_pool: ['imp-error', '✖ Choca dentro del mismo pool'],
-  invalida: ['imp-error', '✖ Inválida'],
+  solapa_otro_pool: ['imp-aviso', 'Solapa con otro pool: requiere aprobación'],
+  choca_mismo_pool: ['imp-error', 'Choca dentro del mismo pool'],
+  invalida: ['imp-error', 'Inválida'],
 };
 const aBase64 = (buf) => {
   let bin = '';
@@ -732,7 +886,7 @@ async function renderImportar() {
   };
 
   const partes = [
-    h('p', null, h('button', { type: 'button', class: 'btn sec', id: 'imp-volver', onclick: () => show('pools') }, '← Volver a Pools')),
+    h('p', null, h('button', { type: 'button', class: 'btn sec', id: 'imp-volver', onclick: () => show('pools') }, ico('volver'), 'Volver a Pools')),
     h('h2', null, 'Importar segmentos que ya existen'),
     h(
       'p',
@@ -768,12 +922,8 @@ function resultadoSimulacion(estado) {
   const chip = (clave) => h('span', { class: 'tag ' + ESTADO_IMP[clave][0], style: 'margin-right:8px' }, `${r[clave]} · ${ESTADO_IMP[clave][1]}`);
   const filas = sim.filas.filter((f) => !IMP.filtro || f.estado === IMP.filtro);
   const aplicar = async () => {
-    if (
-      !confirm(
-        `¿Importar ${aplicables} segmento${aplicables === 1 ? '' : 's'}${sim.pools_a_crear.length ? ` y crear ${sim.pools_a_crear.length} pool${sim.pools_a_crear.length === 1 ? '' : 's'}` : ''}? Queda registrado a tu nombre.`,
-      )
-    )
-      return;
+    const resumen = `${aplicables} segmento${aplicables === 1 ? '' : 's'}${sim.pools_a_crear.length ? ` y crear ${sim.pools_a_crear.length} pool${sim.pools_a_crear.length === 1 ? '' : 's'}` : ''}`;
+    if (!(await confirmar({ titulo: 'Importar segmentos', mensaje: `¿Importar ${resumen}? Queda registrado a tu nombre.`, confirmar: 'Importar' }))) return;
     const res = await api('/api/v1/importaciones/aplicar', { body: { ...cuerpoImportacion(), aprobar: [...IMP.aprobadas] } });
     if (!res.ok) return msg(estado, errorApi(res), 'error');
     const d = res.data;
@@ -907,9 +1057,106 @@ const h = (tag, attrs, ...hijos) => {
 };
 const fechaHora = (s) => (s ? new Date(s).toLocaleString('es-CL') : '—');
 const msg = (el, texto, tipo) => {
-  el.replaceChildren(texto ? h('div', { class: tipo === 'ok' ? 'ok' : 'alert', role: tipo === 'ok' ? 'status' : 'alert' }, texto) : '');
+  el.replaceChildren(
+    texto ? h('div', { class: tipo === 'ok' ? 'ok' : 'alert', role: tipo === 'ok' ? 'status' : 'alert' }, ico(tipo === 'ok' ? 'ok' : 'error'), ' ', texto) : '',
+  );
 };
 const errorApi = (r) => (r.data && (r.data.mensaje || r.data.error)) || 'Error ' + r.status;
+
+/** Aviso breve (reemplaza a alert()): desaparece solo (los errores tardan más) y se puede cerrar. Los errores usan role="alert". */
+function toast(texto, tipo = 'ok') {
+  const caja = $('toasts');
+  while (caja.children.length >= 4) caja.firstElementChild.remove();
+  const el = h(
+    'div',
+    { class: `toast toast-${tipo}`, role: tipo === 'error' ? 'alert' : 'status' },
+    ico(tipo === 'error' ? 'error' : tipo === 'info' ? 'info' : 'ok', 20),
+    h('span', { class: 'toast-texto' }, texto),
+    h('button', { type: 'button', class: 'toast-cerrar', 'aria-label': 'Cerrar aviso', onclick: () => el.remove() }, ico('cerrar')),
+  );
+  caja.append(el);
+  let t;
+  const programar = () => {
+    t = setTimeout(() => el.remove(), tipo === 'error' ? 9000 : 5000);
+  };
+  el.addEventListener('mouseenter', () => clearTimeout(t));
+  el.addEventListener('mouseleave', programar);
+  programar();
+}
+
+/**
+ * Valida el CIDR mientras se escribe (formato, alineación con sugerencia y que quede dentro del pool) y deshabilita el envío si hay
+ * un error. El servidor sigue siendo quien decide: esto solo anticipa el error. `cidrDePool()` devuelve el CIDR del pool elegido
+ * (o nada); `soloBase` exige además que sea un bloque base válido (/8 a /30).
+ */
+function vincularCidr(input, boton, cidrDePool = () => undefined, { soloBase = false } = {}) {
+  const aviso = h('p', { class: 'campo-msg', id: input.id + '-msg', 'aria-live': 'polite' });
+  input.setAttribute('aria-describedby', aviso.id);
+  const revisar = () => {
+    if (!aviso.isConnected && input.parentNode) input.after(aviso); // el campo se crea antes de entrar a la página: se inserta al primer uso
+    let v = validarCidr(input.value, cidrDePool());
+    const len = Number(input.value.split('/')[1]);
+    if (soloBase && v.estado === 'ok' && (len < 8 || len > 30)) v = { estado: 'error', mensaje: 'Un bloque base va de /8 a /30.' };
+    aviso.className = 'campo-msg' + (v.estado === 'error' ? ' campo-error' : v.estado === 'ok' ? ' campo-ok' : '');
+    aviso.replaceChildren(...(v.estado === 'vacio' ? [] : [ico(v.estado === 'error' ? 'error' : 'ok'), ' ' + v.mensaje]));
+    if (v.estado === 'error') input.setAttribute('aria-invalid', 'true');
+    else input.removeAttribute('aria-invalid');
+    boton.disabled = v.estado === 'error';
+  };
+  input.addEventListener('input', revisar);
+  return revisar; // para volver a revisar cuando cambia el pool elegido
+}
+
+/**
+ * Diálogo de confirmación accesible (reemplaza a confirm() y prompt()): usa <dialog> con showModal(), así el foco queda atrapado,
+ * Esc cancela y el foco vuelve a quien lo abrió. Con `peligro` el foco inicial va a «Cancelar». Con `campo` pide un texto
+ * (obligatorio si se indica). Devuelve { aceptado, valor }.
+ */
+function dialogoSimple({ titulo, mensaje, confirmar: textoOk = 'Aceptar', cancelar: textoNo = 'Cancelar', peligro = false, campo = null }) {
+  return new Promise((resolver) => {
+    const id = 'dlg-' + Math.random().toString(36).slice(2, 8);
+    const entrada = campo ? h('input', { id: id + '-c', maxlength: 200, autocomplete: 'off', 'aria-describedby': id + '-e' }) : null;
+    const error = h('p', { id: id + '-e', class: 'campo-msg campo-error', role: 'alert' });
+    const no = h('button', { type: 'button', class: 'btn sec' }, textoNo);
+    const si = h('button', { type: 'submit', class: 'btn' + (peligro ? ' peligro' : '') }, textoOk);
+    const d = h(
+      'dialog',
+      { class: 'confirmar', 'aria-labelledby': id + '-t', 'aria-describedby': id + '-m' },
+      h(
+        'form',
+        { method: 'dialog' },
+        h('h3', { id: id + '-t' }, titulo),
+        h('p', { id: id + '-m' }, mensaje),
+        campo && h('label', { for: id + '-c' }, campo.etiqueta),
+        entrada,
+        error,
+        h('div', { class: 'fila-botones' }, no, si),
+      ),
+    );
+    let aceptado = false;
+    d.querySelector('form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (campo && campo.obligatorio && !entrada.value.trim()) {
+        error.textContent = `Indica ${campo.etiqueta.toLowerCase()}: queda registrado.`;
+        entrada.setAttribute('aria-invalid', 'true');
+        entrada.focus();
+        return;
+      }
+      aceptado = true;
+      d.close();
+    });
+    no.addEventListener('click', () => d.close());
+    d.addEventListener('close', () => {
+      const valor = entrada ? entrada.value.trim() : '';
+      d.remove();
+      resolver({ aceptado, valor });
+    });
+    document.body.append(d);
+    d.showModal();
+    (entrada || (peligro ? no : si)).focus();
+  });
+}
+const confirmar = async (opciones) => (await dialogoSimple(opciones)).aceptado;
 function tabla(titulo, cabeceras, filas, vacio) {
   if (!filas.length) return h('div', { class: 'card vacio' }, vacio);
   return h(
@@ -1014,6 +1261,8 @@ function formularioNuevaReserva(pools, estado, recargar) {
   const vl = camposVlan('nr');
   const ttl = h('input', { id: 'nr-ttl', type: 'number', min: 1, max: 72, value: 24 });
   const boton = h('button', { class: 'btn', type: 'submit', id: 'nr-go' }, 'Reservar');
+  const revisarCidr = vincularCidr(cidr, boton, () => (pools.find((x) => x.id === pool.value) || {}).cidr);
+  pool.addEventListener('change', revisarCidr);
   const enviar = async (e) => {
     e.preventDefault();
     if (!pool.value) return msg(estado, 'Elige un pool.', 'error');
@@ -1035,7 +1284,7 @@ function formularioNuevaReserva(pools, estado, recargar) {
   return h(
     'details',
     { class: 'card', style: 'margin:0 0 14px' },
-    h('summary', { style: 'cursor:pointer;font-weight:600' }, '＋ Nueva reserva'),
+    h('summary', { style: 'cursor:pointer;font-weight:600' }, ico('mas'), 'Nueva reserva'),
     h(
       'form',
       { class: 'filtros', style: 'margin-top:12px', 'aria-label': 'Nueva reserva', onsubmit: enviar },
@@ -1057,7 +1306,7 @@ function formularioNuevaReserva(pools, estado, recargar) {
 const PROVEEDORES = ['GCP', 'On-prem', 'AWS', 'Azure'];
 function formularioNuevoPool(recargar) {
   const campo = (etiqueta, control) => h('label', null, etiqueta, control);
-  const id = h('input', { id: 'np-id', required: true, maxlength: 63, placeholder: 'lan-sucursal-prod', pattern: '[a-z0-9][a-z0-9-]{1,62}' });
+  const id = h('input', { id: 'np-id', required: true, maxlength: 63, placeholder: 'lan-sucursal-prod', pattern: '[a-z0-9][a-z0-9\\-]{1,62}' });
   const tipo = h('input', { id: 'np-tipo', required: true, maxlength: 40, placeholder: 'Nodos, Pods, LAN, Gestión…' });
   const ambiente = h(
     'select',
@@ -1074,6 +1323,7 @@ function formularioNuevoPool(recargar) {
   const cidr = h('input', { id: 'np-cidr', required: true, placeholder: '10.40.0.0/16' });
   const estado = h('div', { id: 'np-msg', 'aria-live': 'polite', style: 'flex:1 1 100%' });
   const boton = h('button', { class: 'btn', type: 'submit', id: 'np-go' }, 'Crear pool');
+  vincularCidr(cidr, boton, () => undefined, { soloBase: true });
   const enviar = async (e) => {
     e.preventDefault();
     boton.disabled = true;
@@ -1082,13 +1332,13 @@ function formularioNuevoPool(recargar) {
     });
     boton.disabled = false;
     if (!r.ok) return msg(estado, errorApi(r), 'error');
-    POOLS_AVISO = `✔ Pool ${r.data.id} (${r.data.cidr}) creado.`;
+    POOLS_AVISO = `Pool ${r.data.id} (${r.data.cidr}) creado.`;
     recargar();
   };
   return h(
     'details',
     { class: 'card', style: 'margin:0 0 14px' },
-    h('summary', { class: 'btn', style: 'display:inline-block;cursor:pointer' }, '＋ Nuevo pool'),
+    h('summary', { class: 'btn', style: 'display:inline-block;cursor:pointer' }, ico('mas'), 'Nuevo pool'),
     h(
       'p',
       { class: 'muted', style: 'max-width:760px' },
@@ -1124,7 +1374,13 @@ function accionesPool(p, cerrar) {
     fichaPool(p.id);
   };
   const eliminar = async () => {
-    if (!confirm(`¿Eliminar el pool ${p.id} (${p.cidr})? Solo se puede si no tiene segmentos, reservas vigentes ni IPs.`)) return;
+    const seguro = await confirmar({
+      titulo: `¿Eliminar el pool ${p.id}?`,
+      mensaje: `${p.cidr}. Solo se puede si no tiene segmentos, reservas vigentes ni IPs.`,
+      confirmar: 'Eliminar pool',
+      peligro: true,
+    });
+    if (!seguro) return;
     const r = await api('/api/v1/pools/' + encodeURIComponent(p.id), { method: 'DELETE' });
     if (!r.ok) return msg(estado, errorApi(r), 'error');
     POOLS_AVISO = `Pool ${p.id} eliminado.`;
@@ -1211,13 +1467,13 @@ function formularioDireccion({ prefijo, pool, pools, alGuardar }) {
       return msg(estado, errorApi(r) + ops, 'error');
     }
     const d = r.data;
-    alGuardar(`✔ ${d.ip} registrada${d.segmento ? ` en ${d.segmento_codigo || d.segmento}` : ' como excepción'}.${d.aviso ? ' ⚠ ' + d.aviso : ''}`);
+    alGuardar(`${d.ip} registrada${d.segmento ? ` en ${d.segmento_codigo || d.segmento}` : ' como excepción'}.${d.aviso ? ' Atención: ' + d.aviso : ''}`);
   };
   const campo = (t, el) => h('label', null, t, el);
   return h(
     'details',
     { class: 'card', style: 'margin:0 0 12px' },
-    h('summary', { style: 'cursor:pointer;font-weight:600' }, '＋ Registrar IP fija'),
+    h('summary', { style: 'cursor:pointer;font-weight:600' }, ico('mas'), 'Registrar IP fija'),
     h(
       'form',
       { class: 'filtros', style: 'margin-top:10px', 'aria-label': 'Registrar IP fija', onsubmit: enviar },
@@ -1278,9 +1534,11 @@ function editarDireccion(d, recargar) {
 /** Tabla de IPs fijas. `conSegmento` agrega la columna del segmento o la excepción. */
 function tablaDirecciones(lista, recargar, { conSegmento = true } = {}) {
   const eliminar = async (d) => {
-    if (!confirm(`¿Eliminar ${d.ip}${d.dispositivo ? ` (${d.dispositivo} ${d.interfaz || ''})` : ''}?`)) return;
+    const que = `${d.ip}${d.dispositivo ? ` (${d.dispositivo} ${d.interfaz || ''})` : ''}`;
+    if (!(await confirmar({ titulo: `¿Eliminar ${d.ip}?`, mensaje: `Se borra la IP fija ${que}.`, confirmar: 'Eliminar', peligro: true }))) return;
     const r = await api('/api/v1/direcciones/' + d.id, { method: 'DELETE' });
-    if (!r.ok) alert(errorApi(r));
+    if (r.ok) toast(`IP ${d.ip} eliminada.`);
+    else toast(errorApi(r), 'error');
     recargar();
   };
   return tabla(
@@ -1497,10 +1755,56 @@ function abrirPanel(titulo, subtitulo, pestanas) {
   });
 }
 
+/**
+ * Mapa de bloques de un pool: hasta 256 cuadros iguales; lleno = ocupado (asignado o reservado), rayado = parcial, vacío = libre.
+ * No depende solo del color y su detalle está también en la pestaña «Segmentos» (el mapa se explora con el cursor).
+ */
+const TEXTO_BLOQUE = { libre: 'libre', parcial: 'parcialmente ocupado', ocupado: 'ocupado' };
+function mapaDelPool(p, ocupantes) {
+  const { granularidad, bloques, resumen } = mapaBloques(p.cidr, ocupantes);
+  if (!bloques.length) return null;
+  const linea = h('p', { class: 'mapa-detalle', 'aria-live': 'polite' }, '\u00a0');
+  const celdas = bloques.map((b) => {
+    const quien = b.asignaciones.map((a) => `${a.vpc} (${a.cidr}${a.reserva ? ', reserva' : a.ticket ? ', ' + a.ticket : ''})`).join('; ');
+    const texto = `${b.cidr} · ${TEXTO_BLOQUE[b.estado]}${quien ? ' · ' + quien : ''}`;
+    return h('div', { class: `bloque bloque-${b.estado}`, title: texto, onmouseenter: () => (linea.textContent = texto) });
+  });
+  const tam = 2 ** (32 - granularidad);
+  return h(
+    'div',
+    null,
+    h('h3', null, 'Mapa del espacio'),
+    h(
+      'p',
+      { class: 'muted' },
+      `Cada cuadro es un bloque /${granularidad} (${fmt(tam)} ${tam === 1 ? 'dirección' : 'direcciones'}). Pasa el cursor para ver quién lo usa; la pestaña «Segmentos» tiene el mismo detalle.`,
+    ),
+    h(
+      'div',
+      {
+        class: 'mapa',
+        style: `--cols:${Math.min(16, bloques.length)}`,
+        role: 'img',
+        'aria-label': `Mapa de ${p.id}: ${bloques.length} bloques /${granularidad}: ${resumen.libre} libres, ${resumen.parcial} parciales, ${resumen.ocupado} ocupados`,
+        onmouseleave: () => (linea.textContent = '\u00a0'),
+      },
+      celdas,
+    ),
+    linea,
+    h(
+      'ul',
+      { class: 'leyenda-mapa' },
+      h('li', null, h('span', { class: 'bloque bloque-libre' }), ` Libre (${resumen.libre})`),
+      h('li', null, h('span', { class: 'bloque bloque-parcial' }), ` Parcial (${resumen.parcial})`),
+      h('li', null, h('span', { class: 'bloque bloque-ocupado' }), ` Ocupado (${resumen.ocupado})`),
+    ),
+  );
+}
+
 async function fichaPool(id) {
   const pools = await get('/api/v1/pools');
   const p = pools.find((x) => x.id === id);
-  if (!p) return alert('Ese pool ya no existe.');
+  if (!p) return toast('Ese pool ya no existe.', 'error');
   const r = rango(p.cidr);
   const res = p.uso_reservado || 0;
   abrirPanel(
@@ -1510,12 +1814,17 @@ async function fichaPool(id) {
       {
         nombre: 'Detalle',
         construir: async (cerrar) => {
-          const d = await get('/api/v1/pools/' + encodeURIComponent(id) + '/disponibilidad');
+          const [d, asig, reservas] = await Promise.all([
+            get('/api/v1/pools/' + encodeURIComponent(id) + '/disponibilidad'),
+            todasLasAsignaciones(),
+            get('/api/v1/reservas?' + new URLSearchParams({ pool: id, estado: 'reservada' })),
+          ]);
           const mayor = d.por_mascara.find((x) => x.bloques_libres > 0);
           return h(
             'div',
             null,
             h('p', { class: 'ficha-uso' }, barraUso(p.uso, res), ` ocupado (asignado ${pct(p.uso)} · reservado ${pct(res)})`),
+            mapaDelPool(p, [...asig.filter((a) => a.pool_id === id), ...reservas.map((x) => ({ ...x, reserva: true }))]),
             datos([
               ['Pool', p.id],
               ['CIDR base', h('code', null, p.cidr)],
@@ -1599,7 +1908,7 @@ async function fichaPool(id) {
 async function fichaAsignacion(id) {
   const [todas, pools] = await Promise.all([todasLasAsignaciones(), get('/api/v1/pools')]);
   const a = todas.find((x) => String(x.id) === String(id));
-  if (!a) return alert('Esa asignación ya no existe (¿se liberó?).');
+  if (!a) return toast('Esa asignación ya no existe (¿se liberó?).', 'error');
   const p = pools.find((x) => x.id === a.pool_id);
   const r = rango(a.cidr);
   abrirPanel(
@@ -1862,7 +2171,15 @@ async function accionReserva(r, que, zona) {
   const texto = confirmando
     ? `¿Confirmar la reserva ${r.cidr} (${r.vpc})? Pasará a asignación definitiva.`
     : `¿Liberar ${r.cidr}?${r.estado === 'confirmada' ? ' Como ya está confirmada, se borrará también la asignación definitiva.' : ''}`;
-  if (!confirm(texto)) return;
+  if (
+    !(await confirmar({
+      titulo: confirmando ? 'Confirmar reserva' : 'Liberar reserva',
+      mensaje: texto,
+      confirmar: confirmando ? 'Confirmar' : 'Liberar',
+      peligro: !confirmando,
+    }))
+  )
+    return;
   const x = confirmando ? await api(`/api/v1/reservas/${r.id}/confirmar`, { body: {} }) : await api(`/api/v1/reservas/${r.id}`, { method: 'DELETE', body: {} });
   await renderReservas();
   $('res-titulo').focus();
@@ -1923,7 +2240,13 @@ async function renderTokens() {
   }
 }
 async function revocarToken(t, zona) {
-  if (!confirm(`¿Revocar el token «${t.nombre}»? Los agentes que lo usen dejarán de funcionar de inmediato.`)) return;
+  const revocar = await confirmar({
+    titulo: `¿Revocar el token «${t.nombre}»?`,
+    mensaje: 'Los agentes que lo usen dejarán de funcionar de inmediato.',
+    confirmar: 'Revocar token',
+    peligro: true,
+  });
+  if (!revocar) return;
   const r = await api('/api/v1/tokens/' + t.id, { method: 'DELETE', body: {} });
   await renderTokens();
   $('tk-titulo').focus();
@@ -2062,6 +2385,8 @@ async function marca() {
     if (m.logo) {
       $('logo').src = m.logo;
       $('logo').hidden = false;
+      $('favicon').href = m.logo; // el logo de la marca también es el icono de la pestaña
+      $('favicon').removeAttribute('type');
     }
     $('pie').textContent = m.pie || '';
   } catch (e) {}
@@ -2088,12 +2413,12 @@ async function iniciar() {
   nav.querySelector('[data-t="usuarios"]').hidden = !puede('admin'); // sin cuentas habilitadas explica cómo habilitarlas
   $('yo').innerHTML =
     YO.modo === 'oidc'
-      ? `${esc(YO.nombre)} · <b>${esc(YO.rol)}</b> <button id="salir">Salir</button>`
+      ? `${esc(YO.nombre)} · <b>${esc(YO.rol)}</b> <button type="button" id="salir">${I('salir')}Salir</button>`
       : YO.modo === 'none'
-        ? '<span class="tag qa">Sin autenticación (demo)</span>'
-        : `${esc(YO.usuario)} · <b>${esc(YO.rol)}</b> <button type="button" id="salir">Salir</button>`;
+        ? `<span class="tag qa">${I('alerta')} Sin autenticación (demo)</span>`
+        : `${esc(YO.usuario)} · <b>${esc(YO.rol)}</b> <button type="button" id="salir">${I('salir')}Salir</button>`;
   if (YO.local) {
-    $('yo').append(' ', h('button', { id: 'mi-clave', type: 'button', onclick: () => dialogoCambioClave() }, 'Mi contraseña'));
+    $('yo').append(' ', h('button', { id: 'mi-clave', type: 'button', onclick: () => dialogoCambioClave() }, ico('llave'), 'Mi contraseña'));
   }
   const salir = $('salir');
   if (salir)

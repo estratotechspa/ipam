@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { aceptar, cancelar } = require('./ayudas');
 const AxeBuilder = require('@axe-core/playwright').default;
 
 const CAB = { 'X-Requested-With': 'ipam' };
@@ -55,14 +56,11 @@ test('crear un token: se muestra una sola vez, se copia al portapapeles y aparec
   expect((await page.request.get('/api/v1/me', { headers: { Authorization: `Bearer ${token}` } })).status()).toBe(200);
 
   // Revocar pide confirmación y deja de servir al instante.
-  page.once('dialog', (d) => {
-    expect(d.message()).toContain(nombre);
-    d.dismiss();
-  });
   await fila.getByRole('button', { name: /Revocar/ }).click();
+  await cancelar(page, { contiene: nombre });
   await expect(fila).toContainText('activo');
-  page.once('dialog', (d) => d.accept());
   await fila.getByRole('button', { name: /Revocar/ }).click();
+  await aceptar(page, 'Revocar token');
   await expect(page.locator('tr', { hasText: nombre })).toContainText('revocado');
   await expect(page.locator('tr', { hasText: nombre }).getByRole('button')).toHaveCount(0);
   expect((await page.request.get('/api/v1/me', { headers: { Authorization: `Bearer ${token}` } })).status()).toBe(401);
@@ -110,31 +108,25 @@ test('reservas: listar, filtrar, confirmar y liberar con confirmación y cuenta 
   await expect(page.locator('tr', { hasText: r.vpc })).toBeVisible();
 
   // Confirmar pide confirmación; al aceptar pasa a confirmada (definitiva).
-  page.once('dialog', (d) => {
-    expect(d.message()).toContain(r.cidr);
-    d.dismiss();
-  });
   await page
     .locator('tr', { hasText: r.vpc })
     .getByRole('button', { name: /Confirmar/ })
     .click();
+  await cancelar(page, { contiene: r.cidr });
   await expect(page.locator('tr', { hasText: r.vpc })).toContainText('reservada');
-  page.once('dialog', (d) => d.accept());
   await page
     .locator('tr', { hasText: r.vpc })
     .getByRole('button', { name: /Confirmar/ })
     .click();
+  await aceptar(page, 'Confirmar');
   await expect(page.getByRole('status')).toContainText('confirmada');
   const confirmada = page.locator('tr', { hasText: r.vpc });
   await expect(confirmada).toContainText('confirmada');
   expect((await (await page.request.get('/api/v1/asignaciones')).json()).some((a) => a.cidr === r.cidr && a.origen === 'agente')).toBe(true);
 
   // Liberar una confirmada avisa que borra la asignación y la libera.
-  page.once('dialog', (d) => {
-    expect(d.message()).toContain('asignación definitiva');
-    d.accept();
-  });
   await confirmada.getByRole('button', { name: /Liberar/ }).click();
+  await aceptar(page, 'Liberar', { contiene: 'asignación definitiva' });
   await expect(page.locator('tr', { hasText: r.vpc })).toContainText('liberada');
   expect((await (await page.request.get('/api/v1/asignaciones')).json()).some((a) => a.cidr === r.cidr)).toBe(false);
 });
@@ -193,6 +185,7 @@ test('accesibilidad (axe): las pestañas Reservas y Tokens y el diálogo no tien
 test('Jira → reserva → aprobación manual de un admin → asignación (nada se asigna sin aprobar)', async ({ page }) => {
   const vpc = `jira-e2e-${Date.now()}`;
   await irA(page, 'Jira');
+  await page.locator('#j-como summary').click(); // el diagrama y el simulador van dentro de «Cómo funciona»
   await expect(page.getByText('Aprobación manual')).toBeVisible();
   await page.selectOption('#j-amb', 'qa');
   await page.selectOption('#j-tipo', 'Nodos');
@@ -211,8 +204,8 @@ test('Jira → reserva → aprobación manual de un admin → asignación (nada 
   await expect(fila).toContainText('reservada');
 
   // Un admin la aprueba: recién entonces se asigna, con origen «jira».
-  page.once('dialog', (d) => d.accept());
   await fila.getByRole('button', { name: /Confirmar/ }).click();
+  await aceptar(page, 'Confirmar');
   await expect(page.locator('tr', { hasText: vpc })).toContainText('confirmada');
   const asignadas = await (await page.request.get('/api/v1/asignaciones')).json();
   const a = asignadas.find((x) => x.vpc === vpc);
@@ -236,8 +229,8 @@ test('Nueva reserva desde la interfaz: se crea, queda pendiente y un admin la ap
   const fila = page.locator('tr', { hasText: vpc });
   await expect(fila).toContainText('reservada');
   expect((await (await page.request.get('/api/v1/asignaciones')).json()).some((a) => a.vpc === vpc)).toBe(false);
-  page.once('dialog', (d) => d.accept());
   await fila.getByRole('button', { name: /Confirmar/ }).click();
+  await aceptar(page, 'Confirmar');
   await expect(page.locator('tr', { hasText: vpc })).toContainText('confirmada');
   const a = (await (await page.request.get('/api/v1/asignaciones')).json()).find((x) => x.vpc === vpc);
   expect(a.cidr).toMatch(/\/26$/);

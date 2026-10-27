@@ -1007,6 +1007,28 @@ function rutasDeSistema(p) {
   };
 }
 
+function rutasDePaginas(p) {
+  p['/login'] = {
+    get: op({
+      tag: 'Sesión',
+      summary: 'Página de entrada (SSO)',
+      ok: {
+        200: { description: 'HTML.', content: { 'text/html': { schema: { type: 'string' } } } },
+        302: { description: 'Sin SSO o con sesión válida: redirige a /.' },
+      },
+      seguridad: publico,
+    }),
+  };
+  p['/favicon.svg'] = {
+    get: op({
+      tag: 'Sesión',
+      summary: 'Icono de la pestaña (marca configurada)',
+      ok: { 200: { description: 'Imagen SVG.', content: { 'image/svg+xml': { schema: { type: 'string' } } } } },
+      seguridad: publico,
+    }),
+  };
+}
+
 function rutasDeListaDeAsignaciones(p) {
   p['/api/v1/asignaciones'] = {
     'x-alias-legado': '/api/asignaciones',
@@ -1541,6 +1563,7 @@ function rutasDeJira(p) {
 function rutas() {
   const p = {};
   rutasDeSistema(p);
+  rutasDePaginas(p);
   rutasDePoolsYAsignaciones(p);
   rutasDeListaDeAsignaciones(p);
   rutasDeEdicionDePools(p);

@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { aceptar } = require('./ayudas');
 const AxeBuilder = require('@axe-core/playwright').default;
 
 // Cuentas locales (AUTH_LOCAL, modo Basic): el admin crea la cuenta, la persona cambia la clave temporal y entra con su rol.
@@ -57,15 +58,15 @@ test('admin crea una cuenta local; la persona cambia la clave temporal y entra c
   expect((await q.request.get('/api/v1/usuarios')).status()).toBe(403);
 
   // El admin desactiva la cuenta: deja de entrar al instante.
-  page.once('dialog', (d) => d.accept());
   await fila.getByRole('button', { name: 'Desactivar' }).click();
+  await aceptar(page, 'Aceptar');
   await expect(page.locator('tr', { hasText: usuario })).toContainText('Desactivado');
   expect((await q.request.get('/api/v1/me')).status()).toBe(401);
   await ctxNueva.close();
 
   // Y se puede eliminar.
-  page.once('dialog', (d) => d.accept());
   await page.locator('tr', { hasText: usuario }).getByRole('button', { name: 'Eliminar' }).click();
+  await aceptar(page, 'Aceptar');
   await expect(page.locator('tr', { hasText: usuario })).toHaveCount(0);
   void root;
 });

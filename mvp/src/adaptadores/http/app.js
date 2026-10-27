@@ -105,7 +105,7 @@ function crearApp(deps) {
   sistema.montar(app, { db, estado, log });
   metricasRutas.montar(app, { metricas });
   marca.montar(app);
-  montarOidc(app, { repo, auditar, ruta });
+  montarOidc(app, { repo, auditar, ruta, log });
   montarBasic(app, { ruta });
 
   const revalidador = crearRevalidador({ buscar: (e) => repo.usuarioPorEmail(e) });

@@ -4,6 +4,10 @@
 const { config } = require('../../config');
 const { resolverRol, dominioPermitido } = require('../../dominio/roles');
 const S = require('./sesion');
+const paginas = require('../http/paginas');
+const path = require('node:path');
+
+const PUBLICO = path.join(__dirname, '..', '..', '..', 'public');
 
 let oidc; // { lib, config }
 async function cliente() {
@@ -23,7 +27,7 @@ async function cliente() {
 }
 
 /** @param {import('express').Express} app @param {{repo: any, auditar: Function, ruta: Function}} deps */
-function montarOidc(app, { repo, auditar, ruta }) {
+function montarOidc(app, { repo, auditar, ruta, log }) {
   const modoOidc = () => config.auth.modo === 'oidc';
 
   ruta(app, 'get', '/auth/login', async (req, res, next) => {
@@ -50,12 +54,14 @@ function montarOidc(app, { repo, auditar, ruta }) {
     }
   });
 
-  ruta(app, 'get', '/auth/callback', async (req, res, next) => {
+  ruta(app, 'get', '/auth/callback', async (req, res) => {
     try {
       if (!modoOidc()) return res.redirect('/');
       const previo = S.abrir(S.cookies(req)[S.LOGIN]);
       S.borrarCookie(req, res, S.LOGIN);
-      if (!previo) return res.status(400).send('La solicitud de inicio de sesión expiró. <a href="/auth/login">Reintentar</a>');
+      // El proveedor avisa de un rechazo (p. ej. la persona canceló) con ?error=…: se vuelve a la pantalla de acceso.
+      if (req.query.error) return res.redirect('/login?error=denegado');
+      if (!previo) return paginas.enviar(res, 'expirada');
       const { lib, config: c } = await cliente();
       const tokens = await lib.authorizationCodeGrant(c, new URL(config.http.publicUrl + req.originalUrl), {
         pkceCodeVerifier: previo.verificador,
@@ -64,17 +70,20 @@ function montarOidc(app, { repo, auditar, ruta }) {
       });
       const claims = tokens.claims();
       const email = String(claims.email || '').toLowerCase();
-      if (!email || claims.email_verified === false) return res.status(403).send('El proveedor no entregó un correo verificado.');
+      if (!email || claims.email_verified === false) {
+        await auditar('login_rechazado', email || 'desconocido', null, { motivo: 'correo no verificado' }, req.ip);
+        return paginas.enviar(res, 'correo_no_verificado');
+      }
       const o = config.auth.oidc;
       if (!dominioPermitido(claims, o.dominios)) {
         await auditar('login_rechazado', email, null, { motivo: 'dominio no permitido' }, req.ip);
-        return res.status(403).send('Tu dominio de correo no tiene acceso a este IPAM.');
+        return paginas.enviar(res, 'dominio', { email });
       }
       const fila = await repo.registrarLogin({ email, nombre: claims.name || email });
       const rol = resolverRol({ ...claims, email }, fila, o);
       if (!rol) {
         await auditar('login_rechazado', email, null, { motivo: 'sin rol asignado' }, req.ip);
-        return res.status(403).send('Tu cuenta no tiene un rol asignado. Pide acceso a un administrador.');
+        return paginas.enviar(res, 'sin_rol', { email });
       }
       const horas = config.auth.sesionHoras;
       // La cookie guarda el rol «base» (proveedor y configuración, sin la asignación de la base): el rol de HOY se calcula al revalidar.
@@ -84,7 +93,9 @@ function montarOidc(app, { repo, auditar, ruta }) {
       await auditar('login', email, rol, {}, req.ip);
       res.redirect(S.rutaSegura(previo.next));
     } catch (e) {
-      next(e);
+      // Estado distinto, código ya usado, proveedor caído…: se registra y se invita a reintentar desde el acceso.
+      log.warn('auth/callback: no se pudo completar el inicio de sesión', e);
+      res.redirect('/login?error=fallo');
     }
   });
 
@@ -96,12 +107,15 @@ function montarOidc(app, { repo, auditar, ruta }) {
     if (s) await auditar('logout', s.email, s.rol, {}, req.ip);
     res.json({ ok: true, redirect: '/auth/sesion-cerrada' });
   });
-  ruta(app, 'get', '/auth/sesion-cerrada', (_q, res) => {
-    res
-      .type('html')
-      .send(
-        '<!doctype html><meta charset="utf-8"><title>Sesión cerrada</title><link rel="stylesheet" href="/brand.css"><body style="font:16px system-ui;margin:3rem"><h2>Sesión cerrada</h2><p><a href="/auth/login">Volver a entrar</a></p>',
-      );
+  ruta(app, 'get', '/auth/sesion-cerrada', (_q, res) => paginas.enviar(res, 'sesion_cerrada'));
+
+  // Pantalla de acceso propia: con SSO, quien no tiene sesión llega aquí en vez de saltar directo al proveedor.
+  ruta(app, 'get', '/login', (req, res) => {
+    if (!modoOidc()) return res.redirect('/');
+    const s = S.abrir(S.cookies(req)[S.SESION]);
+    // Ya tiene sesión: a la aplicación. Se ignora `next` a propósito (sin redirecciones hacia un valor que viene de la URL).
+    if (s && s.v === 2 && !req.query.error) return res.redirect('/');
+    res.set('Cache-Control', 'no-store').sendFile(path.join(PUBLICO, 'login.html'));
   });
 }
 
