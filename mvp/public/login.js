@@ -24,7 +24,9 @@ if (next !== '/') $('entrar').href = '/auth/login?next=' + encodeURIComponent(ne
 const error = params.get('error');
 if (error) {
   $('aviso').textContent = AVISOS[error] || AVISO_GENERICO;
-  $('aviso').insertAdjacentHTML('afterbegin', icono('alerta') + ' ');
+  const ic = document.createElement('span');
+  ic.innerHTML = icono('alerta');
+  $('aviso').prepend(ic, ' ');
   $('aviso').hidden = false;
 }
 

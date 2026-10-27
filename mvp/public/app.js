@@ -74,7 +74,7 @@ $('nav').onclick = (e) => {
   const b = e.target.closest('[data-t]');
   if (b) show(b.dataset.t);
 };
-document.querySelectorAll('#nav [data-ic]').forEach((b) => b.insertAdjacentHTML('afterbegin', I(b.dataset.ic)));
+document.querySelectorAll('#nav [data-ic]').forEach((b) => b.prepend(ico(b.dataset.ic)));
 const fail = (id, e) => ($(id).innerHTML = `<div class="alert" role="alert">${I('error')} No se pudo cargar: ${esc(e.message)}</div>`);
 
 // Filtro global por ambiente y proveedor: vale para Pools, Asignaciones y Reservas (se conserva al cambiar de pestaña).
