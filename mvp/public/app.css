@@ -85,7 +85,7 @@ h2[tabindex="-1"]:focus{outline:none}
 .card{background:var(--card);border-radius:var(--r-lg);padding:var(--sp-4);box-shadow:var(--sombra);flex:1;min-width:260px}
 .kpi{font-size:var(--fs-xl);font-weight:700;font-variant-numeric:tabular-nums;line-height:1.2}
 .sub{color:var(--mut);font-size:var(--fs-xs)}
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:var(--sp-4)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:var(--sp-4)}
 .kpis .card{min-width:0}
 .nota{display:flex;align-items:flex-start;gap:var(--sp-2);color:var(--mut);font-size:var(--fs-xs);margin:var(--sp-3) 0 var(--sp-4)}
 footer{padding:var(--sp-4);text-align:center}
