@@ -3,12 +3,16 @@
 const { parse, libres, disponibilidad } = require('../dominio/cidr');
 const { ok, fallo } = require('./resultado');
 const { validarVlan } = require('../dominio/vlan');
+const { crearTareas } = require('./tareas');
+
+const dormir = (/** @type {number} */ ms) => new Promise((listo) => setTimeout(listo, ms));
 
 /**
  * Casos de uso de asignaciones (segmentos definitivos).
- * @param {{repo: any, eventos: import('./puertos').PublicadorEventos, tickets: import('./puertos').TicketsExternos}} deps
+ * @param {{repo: any, eventos: import('./puertos').PublicadorEventos, tickets: import('./puertos').TicketsExternos,
+ *          tareas?: ReturnType<typeof crearTareas>, config?: {jira: {reintentos: number, esperaMs: number}}}} deps
  */
-function crearAsignaciones({ repo, eventos, tickets }) {
+function crearAsignaciones({ repo, eventos, tickets, tareas = crearTareas(), config = { jira: { reintentos: 1, esperaMs: 0 } } }) {
   /** Validaciones que no dependen del estado de la base. */
   function validar({ vpc, cidr, mascara }, base, pool) {
     if (!vpc || !String(vpc).trim()) return fallo('validacion', 'Indica el proyecto / VPC.');
@@ -64,28 +68,50 @@ function crearAsignaciones({ repo, eventos, tickets }) {
     });
     if (!r.ok) return r;
     await eventos.publicar('asignacion', { cidr: r.asignacion.cidr, pool, vpc, ticket: r.asignacion.ticket, origen });
-    await sincronizarTickets(r.asignacion);
+    programarSincronizacion(r.asignacion); // Jira queda fuera del camino crítico: la asignación ya está confirmada
     return r;
   }
 
-  // Integración saliente (apagada por defecto). Un fallo del gestor de tickets nunca deshace la asignación: queda como evento.
+  /**
+   * Integración saliente con Jira (apagada por defecto). Se ejecuta en segundo plano, con hasta JIRA_REINTENTOS intentos
+   * separados por JIRA_REINTENTO_MS × n. Un fallo del gestor de tickets nunca deshace la asignación: queda como evento
+   * (jira_ticket_creado / jira_ticket_actualizado / jira_error). Un reintento tras un fallo parcial puede duplicar el comentario en Jira.
+   */
   async function sincronizarTickets(a) {
     if (!tickets.activo()) return;
     const falta = tickets.faltantes();
     if (falta.length) return eventos.publicar('jira_error', { ticket: a.ticket, motivo: `Faltan variables: ${falta.join(', ')}` });
-    try {
-      if (a.origen === 'jira') {
-        await tickets.actualizar(a.ticket, a);
-        await eventos.publicar('jira_ticket_actualizado', { ticket: a.ticket, rango: a.cidr });
-      } else {
-        const clave = await tickets.crear(a);
-        await repo.actualizarTicketAsignacion(a.id, clave);
-        a.ticket = clave;
-        await eventos.publicar('jira_ticket_creado', { ticket: clave, rango: a.cidr });
+    const { reintentos, esperaMs } = config.jira;
+    let clave = null;
+    let ultimo = null;
+    for (let i = 1; i <= Math.max(1, reintentos); i++) {
+      try {
+        if (a.origen === 'jira') await tickets.actualizar(a.ticket, a);
+        else clave = await tickets.crear(a);
+        ultimo = null;
+        break;
+      } catch (e) {
+        ultimo = e;
+        if (i < reintentos) await dormir(esperaMs * i);
       }
-    } catch (e) {
-      await eventos.publicar('jira_error', { ticket: a.ticket, motivo: e instanceof Error ? e.message : String(e) });
     }
+    if (ultimo)
+      return eventos.publicar('jira_error', { ticket: a.ticket, motivo: ultimo instanceof Error ? ultimo.message : String(ultimo), intentos: reintentos });
+    if (a.origen === 'jira') return eventos.publicar('jira_ticket_actualizado', { ticket: a.ticket, rango: a.cidr });
+    // El ticket ya existe en Jira: si guardar su clave falla NO se reintenta la creación (duplicaría el ticket).
+    try {
+      await repo.actualizarTicketAsignacion(a.id, clave);
+    } catch (e) {
+      return eventos.publicar('jira_error', {
+        ticket: a.ticket,
+        motivo: `Ticket ${clave} creado en Jira, pero no se pudo guardar: ${e instanceof Error ? e.message : String(e)}`,
+      });
+    }
+    return eventos.publicar('jira_ticket_creado', { ticket: clave, rango: a.cidr });
+  }
+  /** Programa la sincronización sin esperarla (no hace nada si Jira está apagado). */
+  function programarSincronizacion(a) {
+    if (tickets.activo()) tareas.lanzar(() => sincronizarTickets(a));
   }
 
   async function liberar(id) {
@@ -115,7 +141,7 @@ function crearAsignaciones({ repo, eventos, tickets }) {
     return ok({ pool: p.id, cidr: p.cidr, ...disponibilidad(p.cidr, await repo.ocupados(poolId)) });
   }
 
-  return { asignar, liberar, sugerirLibres, disponibilidadDe, sincronizarTickets };
+  return { asignar, liberar, sugerirLibres, disponibilidadDe, programarSincronizacion };
 }
 
 module.exports = { crearAsignaciones };

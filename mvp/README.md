@@ -101,7 +101,8 @@ Nada de «EstratoTech» está escrito en el código ni en la imagen: nombre, col
 ## Cómo está resuelto lo importante
 - **Sin solapamientos, garantizado por la base:** restricción de exclusión GiST (`sin_solapamiento`) sobre `(pool, cidr)`; además un trigger exige que el segmento caiga dentro del pool. Aunque alguien inserte directo en la base, se rechaza.
 - **Concurrencia:** las asignaciones de un mismo pool se serializan con un bloqueo de transacción (probado: 20 solicitudes simultáneas → 20 segmentos distintos).
-- **Jira → IPAM:** `POST /webhook/jira`, cuerpo `{ticket, ambiente, tipo, mascara, vpc}`, firma `x-hub-signature-256: sha256=HMAC(cuerpo, JIRA_WEBHOOK_SECRET)`. Firma inválida → 401.
+- **Jira → IPAM:** `POST /webhook/jira`, cuerpo `{ticket, ambiente, tipo, mascara, vpc}` con dos cabeceras: `x-ipam-timestamp` (segundos desde 1970, UTC) y `x-hub-signature-256: sha256=HMAC-SHA256(JIRA_WEBHOOK_SECRET, "<timestamp>.<cuerpo>")`. La firma cubre la hora: se rechaza (`401`) lo firmado hace más de 5 min o en el futuro. Un reenvío dentro de la ventana es inofensivo (idempotente por ticket). **Cambio incompatible:** quien firmaba solo el cuerpo debe añadir el timestamp. Ejemplo:
+  `ts=$(date +%s); sig=$(printf '%s.%s' "$ts" "$cuerpo" | openssl dgst -sha256 -hmac "$SECRETO" | sed 's/^.* //'); curl -H "x-ipam-timestamp: $ts" -H "x-hub-signature-256: sha256=$sig" -H 'Content-Type: application/json' -d "$cuerpo" https://<host>/webhook/jira`
 
 ## API
 | Método | Ruta | |
@@ -117,7 +118,7 @@ Nada de «EstratoTech» está escrito en el código ni en la imagen: nombre, col
 | POST | `/api/solicitudes` `{pool, vpc, cidr?, mascara?}` | 201 · 400 inválido · 409 solapamiento (con conflicto y sugeridos) |
 | DELETE | `/api/asignaciones/:id` | liberar |
 | POST | `/webhook/jira` | entrada desde Jira (firmada) |
-| POST | `/api/jira/simular` | simula un ticket para la demo |
+| POST | `/api/jira/simular` | simula un ticket para la demo. Solo fuera de producción o con `ENABLE_SIMULADOR=true`; si no, 404 |
 
 ## Integración saliente con Jira (desactivada por defecto)
 Código en `src/jira.js`. Se activa con `JIRA_ENABLED=true` más `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_PROJECT` (opcionales: `JIRA_ISSUE_TYPE`=Task, `JIRA_DONE_TRANSITION`=Done).
@@ -128,7 +129,7 @@ Código en `src/jira.js`. Se activa con `JIRA_ENABLED=true` más `JIRA_BASE_URL`
 
 ## Alcance del MVP (lo que NO está)
 - Con la integración desactivada, los números de ticket (`NET-xxx`) los genera el IPAM.
-- Solo IPv4. El rol efectivo se resuelve al iniciar sesión (no hay revocación inmediata de sesiones).
+- Solo IPv4. Las sesiones OIDC se revalidan cada 5 min (`SESSION_REVALIDAR_SEG`): una baja o un cambio de rol rige en ese tiempo, no al instante en todas las réplicas; no hay «cerrar sesión en todos los dispositivos». El rol que dan los grupos del proveedor se fija al iniciar sesión.
 - Los 6 pools y 12 asignaciones son datos de ejemplo.
 
 ## Guion de demo (5 min)

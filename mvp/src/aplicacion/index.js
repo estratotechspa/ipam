@@ -13,8 +13,8 @@ const { crearPools } = require('./pools');
 const { crearDirecciones } = require('./direcciones');
 
 /** Une todos los casos de uso con sus puertos. @param {any} deps */
-function crearCasos({ repo, eventos, auditor, tickets, reloj, config, instancia, generadorToken, contrasenas }) {
-  const asignaciones = crearAsignaciones({ repo, eventos, tickets });
+function crearCasos({ repo, eventos, auditor, tickets, reloj, config, instancia, generadorToken, contrasenas, tareas }) {
+  const asignaciones = crearAsignaciones({ repo, eventos, tickets, tareas, config });
   // Jira reserva y la aprobación (confirmar la reserva) lo avisa de vuelta: los dos casos de uso se conocen por este gancho.
   const reservas = crearReservas({ repo, eventos, config, alConfirmar: (...args) => jira.alAprobar(...args) });
   const jira = crearJira({ repo, eventos, auditor, tickets, asignaciones, reservas });

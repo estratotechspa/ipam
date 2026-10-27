@@ -294,6 +294,9 @@ create trigger direccion_ip_coherente before insert or update on direcciones_ip 
 insert into esquema_version (version, descripcion) values (10, 'direcciones ip fijas por interfaz')
   on conflict (version) do nothing;
 
+-- Rendimiento de la purga por retención (`npm run purgar`, filtra por fecha). Idempotente y opcional: no cambia la versión del esquema.
+create index if not exists eventos_ts_idx on eventos (ts);
+
 -- ============================================================================
 -- Permisos del rol de la aplicación (solo si existe `ipam_app`; ver db/roles.sql)
 -- ============================================================================

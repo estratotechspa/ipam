@@ -50,14 +50,14 @@ function crearJira({ repo, eventos, auditor, tickets, asignaciones, reservas }) 
       rol: actor.rol || null,
       detalle: { ticket: reserva.ticket, cidr: reserva.cidr, pool: reserva.pool_id, vpc: reserva.vpc, aprobado_por: aprobacion.aprobado_por },
     });
-    if (tickets.activo()) await asignaciones.sincronizarTickets(asignacion);
+    if (tickets.activo()) asignaciones.programarSincronizacion(asignacion);
     else await eventos.publicar('jira_actualiza_ticket', { ticket: reserva.ticket, rango: reserva.cidr, estado: 'Hecho', simulado: true });
   }
 
   /** Simulador para la demo: arma el ticket y lo procesa por el mismo camino del webhook. */
-  async function simular({ ambiente, tipo, mascara, vpc }, firma) {
+  async function simular({ ambiente, tipo, mascara, vpc }, firma, timestamp) {
     const ticket = await repo.siguienteTicket();
-    await eventos.publicar('jira_webhook_recibido', { ticket, ambiente, tipo, mascara, vpc, firma });
+    await eventos.publicar('jira_webhook_recibido', { ticket, ambiente, tipo, mascara, vpc, timestamp, firma });
     return procesarTicket({ ticket, ambiente, tipo, mascara, vpc });
   }
 

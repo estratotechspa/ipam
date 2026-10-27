@@ -91,7 +91,17 @@ def(
   'Habilita cuentas locales con contraseña (solo en modo Basic): el admin las crea, desactiva, elimina y restablece desde la pestaña Usuarios. APP_USER/APP_PASS sigue siendo el administrador de emergencia. Para uso real, prefiere OIDC.',
 );
 def('SESSION_SECRET', 'texto', '', 'Clave (≥ 32 caracteres) con la que se firma la cookie de sesión OIDC.', { secreta: true });
-def('SESSION_HORAS', 'entero', 8, 'Duración de la sesión OIDC.', { min: 1, max: 720 });
+def('SESSION_HORAS', 'entero', 4, 'Duración máxima de la sesión OIDC (el rol y la existencia del usuario se revalidan antes: ver SESSION_REVALIDAR_SEG).', {
+  min: 1,
+  max: 720,
+});
+def(
+  'SESSION_REVALIDAR_SEG',
+  'entero',
+  300,
+  'Cada cuántos segundos se vuelve a consultar en la base el rol y la existencia de quien tiene una sesión OIDC abierta (0 = en cada petición). Una baja o un cambio de rol rige en ese tiempo, sin esperar a que caduque la cookie; la caché es por réplica.',
+  { min: 0, max: 3600 },
+);
 def('COOKIE_SECURE', 'texto', 'auto', 'Atributo Secure de las cookies: «auto» (si PUBLIC_URL es https o la petición llegó por HTTPS), «true» o «false».', {
   opciones: ['auto', 'true', 'false'],
 });
@@ -112,6 +122,15 @@ def('OIDC_REQUESTER_GROUPS', 'lista', [], 'Grupos con rol solicitante.');
 def('OIDC_READER_GROUPS', 'lista', [], 'Grupos con rol lector.');
 def('OIDC_DEFAULT_ROLE', 'texto', 'lector', 'Rol de quien no coincide con nada. «ninguno» = solo entran los mapeados.');
 def('TOKEN_VIDA_DIAS', 'entero', 90, 'Vigencia por defecto de un token de servicio nuevo.', { min: 1, max: 365 });
+
+// Retención
+def(
+  'RETENCION_DIAS',
+  'entero',
+  365,
+  'Días que se conservan los eventos. `npm run purgar` (usuario migrador) borra lo anterior; 0 = conservar todo. La auditoría no se purga (es de solo inserción).',
+  { min: 0, max: 36500 },
+);
 
 // Reservas
 def('RESERVA_TTL_HORAS', 'entero', 24, 'Vigencia por defecto de una reserva sin confirmar.', { min: 1, max: 720 });
@@ -164,7 +183,18 @@ def(
   'Clave HMAC del webhook entrante de Jira. En producción no tiene valor por defecto: sin ella el webhook queda deshabilitado.',
   { secreta: true },
 );
+def(
+  'ENABLE_SIMULADOR',
+  'booleano',
+  false,
+  'Deja disponible POST /api/jira/simular en producción (fuera de producción siempre lo está). Solo demos: crea reservas reales.',
+);
 def('JIRA_ENABLED', 'booleano', false, 'Activa la integración saliente con Jira.');
+def('JIRA_REINTENTOS', 'entero', 3, 'Intentos de la sincronización saliente con Jira (corre en segundo plano). Si todos fallan, queda un evento jira_error.', {
+  min: 1,
+  max: 10,
+});
+def('JIRA_REINTENTO_MS', 'entero', 2000, 'Espera base entre intentos con Jira (se multiplica por el número de intento).', { min: 0, max: 60000 });
 def('JIRA_BASE_URL', 'texto', '', 'URL de Jira Cloud.', { ejemplo: 'https://empresa.atlassian.net' });
 def('JIRA_EMAIL', 'texto', '', 'Correo de la cuenta de servicio de Jira.');
 def('JIRA_API_TOKEN', 'texto', '', 'Token de API de Jira.', { secreta: true });
@@ -303,6 +333,7 @@ const config = {
       appPass: pass,
       sesionSecreto: texto('SESSION_SECRET'),
       sesionHoras: valor('SESSION_HORAS'),
+      sesionRevalidarSeg: valor('SESSION_REVALIDAR_SEG'),
       cookieSecure: texto('COOKIE_SECURE'),
       tokenVidaDias: valor('TOKEN_VIDA_DIAS'),
       oidc: {
@@ -341,6 +372,9 @@ const config = {
       almacen: texto('LIMITE_ALMACEN'),
     };
   },
+  get retencion() {
+    return { dias: valor('RETENCION_DIAS') };
+  },
   get metricas() {
     return { token: texto('METRICS_TOKEN'), redesPermitidas: valor('METRICS_ALLOW_CIDRS') };
   },
@@ -373,6 +407,9 @@ const config = {
   get jira() {
     return {
       activa: valor('JIRA_ENABLED'),
+      simulador: valor('ENABLE_SIMULADOR'),
+      reintentos: valor('JIRA_REINTENTOS'),
+      esperaMs: valor('JIRA_REINTENTO_MS'),
       baseUrl: texto('JIRA_BASE_URL'),
       email: texto('JIRA_EMAIL'),
       apiToken: texto('JIRA_API_TOKEN'),

@@ -8,6 +8,7 @@
     "test": "node --test --test-concurrency=1 --test-timeout=120000 \"src/**/*.test.js\"",
     "test:e2e": "playwright test",
     "migrar": "node src/cli/migrar.js",
+    "purgar": "node src/cli/purgar.js",
     "hash-password": "node scripts/hash-password.js",
     "lint": "eslint .",
     "formato": "prettier --write \"src/**/*.js\" \"e2e/**/*.js\" \"public/*.js\" \"scripts/*.js\" \"*.js\" \"../scripts/**/*.js\"",

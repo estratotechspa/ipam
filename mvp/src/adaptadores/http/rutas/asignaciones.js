@@ -3,9 +3,29 @@
 const { api } = require('../registro');
 const { requiere } = require('../../auth/acceso');
 const { enviarFallo, error } = require('../errores');
-const { construirLibro } = require('../excel');
+const { escribirLibro } = require('../excel');
 const marca = require('../marca');
 const { leerSegmentos } = require('../archivo-segmentos');
+
+const ORDENES = ['fecha', 'cidr', 'pool', 'vpc', 'solicitante', 'ticket', 'origen', 'codigo', 'direcciones'];
+const AMBIENTES = ['dev', 'qa', 'pre', 'prod'];
+const LIMITE_MAXIMO = 1000;
+
+/** Valida los parámetros de la lista de asignaciones. Devuelve los filtros o { error } con un mensaje claro. */
+function leerFiltrosAsignaciones(q) {
+  const texto = (k, max) => (q[k] === undefined ? undefined : typeof q[k] === 'string' && q[k].length <= max ? q[k] : null);
+  const entero = (k, defecto) => (q[k] === undefined ? defecto : typeof q[k] === 'string' && /^\d{1,9}$/.test(q[k]) ? Number(q[k]) : null);
+  const limit = entero('limit', LIMITE_MAXIMO);
+  const offset = entero('offset', 0);
+  const f = { pool: texto('pool', 100), ambiente: texto('ambiente', 10), q: texto('q', 100), orden: texto('orden', 20), dir: texto('dir', 4) };
+  if (limit === null || limit < 1 || limit > LIMITE_MAXIMO) return { error: `limit debe ser un entero entre 1 y ${LIMITE_MAXIMO}.` };
+  if (offset === null) return { error: 'offset debe ser un entero mayor o igual a 0.' };
+  if (f.pool === null || f.q === null) return { error: 'pool o q inválidos (máximo 100 caracteres).' };
+  if (f.ambiente !== undefined && !AMBIENTES.includes(f.ambiente)) return { error: `ambiente debe ser uno de: ${AMBIENTES.join(', ')}.` };
+  if (f.orden !== undefined && !ORDENES.includes(f.orden)) return { error: `orden debe ser uno de: ${ORDENES.join(', ')}.` };
+  if (f.dir !== undefined && !['asc', 'desc'].includes(f.dir)) return { error: 'dir debe ser asc o desc.' };
+  return { ...f, q: f.q && f.q.trim() ? f.q.trim() : undefined, limit, offset };
+}
 
 /** @param {import('express').Express} app @param {{casos: any, audita: Function}} deps */
 function montar(app, { casos, audita, validacion }) {
@@ -41,7 +61,15 @@ function montar(app, { casos, audita, validacion }) {
     res.json({ eliminado: r.pool });
   });
   api(app, 'get', '/resumen', async (_q, res) => res.json(await admin.resumen()));
-  api(app, 'get', '/asignaciones', async (_q, res) => res.json(await admin.asignaciones()));
+  // Lista paginada: limit (1000 por defecto, máx. 1000), offset, filtros pool, ambiente y q (CIDR, ID, proyecto/VPC, solicitante o ticket),
+  // y orden=<columna>&dir=asc|desc. El total sin paginar va en la cabecera X-Total-Count.
+  api(app, 'get', '/asignaciones', async (req, res) => {
+    const f = leerFiltrosAsignaciones(req.query);
+    if (f.error) return error(res, 400, 'parametro_invalido', f.error);
+    const { filas, total } = await admin.asignaciones(f);
+    res.set('X-Total-Count', String(total));
+    res.json(filas);
+  });
 
   api(app, 'get', '/pools/:id/libres', async (req, res) => {
     const r = await asignaciones.sugerirLibres(req.params.id, req.query.mascara);
@@ -105,14 +133,13 @@ function montar(app, { casos, audita, validacion }) {
     res.json(cuerpo);
   });
 
+  // Excel por streaming: lee la base por lotes (instantánea consistente) y escribe cada fila al llegar. Si falla a mitad, la conexión
+  // se corta (el archivo queda incompleto y el cliente lo nota) y el detalle queda en el log; la auditoría registra lo que se llegó a enviar.
   api(app, 'get', '/exportar.xlsx', requiere('lector'), async (req, res) => {
-    const datos = await admin.asignacionesParaExcel();
-    const wb = construirLibro(datos, marca.config().nombre);
-    await audita(req, 'exportar', { filas: datos.filas.length });
     const nombre = `ipam-segmentos-${new Date().toISOString().slice(0, 10)}.xlsx`;
     res.set({ 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': `attachment; filename="${nombre}"` });
-    await wb.xlsx.write(res);
-    res.end();
+    const r = await admin.recorrerParaExcel((lector) => escribirLibro(res, lector, marca.config().nombre));
+    await audita(req, 'exportar', { filas: r.segmentos, ips: r.direcciones });
   });
 
   // Portabilidad: respaldo lógico completo (pools, asignaciones y roles asignados) para llevar el IPAM a otra infraestructura.

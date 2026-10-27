@@ -16,7 +16,7 @@ const opts = { skip: hay ? false : 'sin DATABASE_URL' };
 const GRUPOS = { 'ana@empresa.cl': ['ipam-solicitantes'], 'jefe@empresa.cl': ['ipam-admins'] };
 const H = { 'X-Requested-With': 'ipam', 'Content-Type': 'application/json' };
 
-let app, base, idp, db;
+let app, base, idp, db, revalidador;
 
 // Navegador mínimo: mantiene cookies por origen y sigue redirecciones a mano.
 class Navegador {
@@ -95,6 +95,7 @@ test.before(async () => {
   // 1) La app escucha primero para conocer su URL; 2) el IdP registra ese retorno; 3) se activa OIDC_ISSUER.
   process.env.OIDC_ISSUER = 'http://127.0.0.1:1';
   ({ app, db } = require('./server'));
+  revalidador = app.locals.revalidador;
   const srvApp = await new Promise((ok) => {
     const s = app.listen(0, () => ok(s));
   });
@@ -286,4 +287,118 @@ test('modo OIDC: un token de servicio entra por Bearer sin cookie ni X-Requested
   assert.equal(malo.status, 401);
   assert.equal((await malo.json()).error, 'token_invalido');
   assert.equal((await root.api(`/api/tokens/${creado.id}`, { method: 'DELETE' })).status, 200);
+});
+
+// ---------- Sesiones revalidadas (cambio de rol, baja, formato de la cookie, CSRF en logout) ----------
+const conEntorno = async (vars, fn) => {
+  const previo = Object.fromEntries(Object.keys(vars).map((k) => [k, process.env[k]]));
+  Object.assign(process.env, vars);
+  try {
+    return await fn();
+  } finally {
+    for (const [k, v] of Object.entries(previo))
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+  }
+};
+const admin = async () => {
+  const n = new Navegador();
+  await n.entrar('root@empresa.cl');
+  return n;
+};
+const poner = (root, email, rol) => root.api('/api/usuarios/' + email, { method: 'PUT', body: JSON.stringify({ rol }) });
+
+test('la sesión dura 4 h por defecto y la cookie guarda el rol base (v:2), no el efectivo', opts, async () => {
+  const cb = await new Navegador().entrar('horas@empresa.cl');
+  const c = cb.headers.getSetCookie().find((x) => x.startsWith('ipam_sesion='));
+  assert.match(c, /Max-Age=14400/);
+  const carga = JSON.parse(Buffer.from(decodeURIComponent(c.split('=')[1].split(';')[0]).split('.')[0], 'base64url').toString());
+  assert.equal(carga.v, 2);
+  assert.equal(carga.rolBase, 'lector');
+  assert.equal(carga.rol, undefined);
+});
+
+test('un cambio de rol rige sin volver a entrar: ascenso, degradación y «heredar» (vuelve al rol de sus grupos)', opts, async () => {
+  const root = await admin();
+  const ana = new Navegador();
+  await ana.entrar('ana@empresa.cl'); // solicitante por su grupo
+  const rol = async () => (await (await ana.api('/api/me')).json()).rol;
+  assert.equal(await rol(), 'solicitante');
+  assert.equal((await ana.api('/api/auditoria')).status, 403);
+  assert.equal((await poner(root, 'ana@empresa.cl', 'admin')).status, 200);
+  assert.equal(await rol(), 'admin');
+  assert.equal((await ana.api('/api/auditoria')).status, 200);
+  await poner(root, 'ana@empresa.cl', 'lector');
+  assert.equal(await rol(), 'lector');
+  assert.equal((await ana.api('/api/auditoria')).status, 403);
+  await poner(root, 'ana@empresa.cl', null);
+  assert.equal(await rol(), 'solicitante');
+  // un administrador de la configuración no se degrada desde la base
+  await poner(root, 'root@empresa.cl', 'lector');
+  assert.equal((await (await root.api('/api/me')).json()).rol, 'admin');
+  await poner(root, 'root@empresa.cl', null);
+});
+
+test('baja y reactivación rigen de inmediato en esta réplica; la sesión revocada recibe 401 «sesion_revocada» y se borra la cookie', opts, async () => {
+  const root = await admin();
+  const web = new Navegador();
+  const api = new Navegador();
+  await web.entrar('baja@empresa.cl');
+  await api.entrar('baja@empresa.cl');
+  assert.equal((await api.api('/api/pools')).status, 200);
+  assert.equal((await root.api('/api/usuarios/baja@empresa.cl/desactivar', { method: 'POST', body: '{}' })).status, 200);
+  const r = await api.api('/api/pools');
+  assert.equal(r.status, 401);
+  assert.equal((await r.json()).error, 'sesion_revocada');
+  assert.ok(
+    r.headers.getSetCookie().some((c) => /^ipam_sesion=;/.test(c) || /Max-Age=0/.test(c)),
+    'se borra la cookie',
+  );
+  const pagina = await web.pedir(base + '/');
+  assert.equal(pagina.status, 302);
+  assert.match(pagina.headers.get('location'), /^\/auth\/login\?next=/);
+  await root.api('/api/usuarios/baja@empresa.cl/activar', { method: 'POST', body: '{}' });
+  const otra = new Navegador();
+  await otra.entrar('baja@empresa.cl');
+  assert.equal((await otra.api('/api/pools')).status, 200, 'reactivada: vuelve a entrar');
+});
+
+test(
+  'una baja o eliminación hecha directo en la base se nota al vencer la caché (5 min); con SESSION_REVALIDAR_SEG=0, en la petición siguiente',
+  opts,
+  async () => {
+    const n = new Navegador();
+    await n.entrar('directo@empresa.cl');
+    assert.equal((await n.api('/api/pools')).status, 200);
+    await db.query("update usuarios set activo = false where email = 'directo@empresa.cl'");
+    assert.equal((await n.api('/api/pools')).status, 200, 'dentro de la caché sigue valiendo');
+    revalidador.olvidarTodos(); // equivale a que venza la caché
+    assert.equal((await n.api('/api/pools')).status, 401);
+
+    const m = new Navegador();
+    await m.entrar('directo2@empresa.cl');
+    await conEntorno({ SESSION_REVALIDAR_SEG: '0' }, async () => {
+      assert.equal((await m.api('/api/pools')).status, 200);
+      await db.query("delete from usuarios where email = 'directo2@empresa.cl'");
+      assert.equal((await m.api('/api/pools')).status, 401, 'eliminado: sin caché rige al instante');
+    });
+  },
+);
+
+test('una cookie con el formato anterior (sin revalidación) obliga a entrar de nuevo', opts, async () => {
+  const S = require('./adaptadores/auth/sesion');
+  const vieja = S.sellar({ email: 'root@empresa.cl', nombre: 'x', rol: 'admin', exp: Date.now() / 1000 + 3600 });
+  const n = new Navegador();
+  n.jar.set(base, new Map([['ipam_sesion', vieja]]));
+  assert.equal((await n.api('/api/me')).status, 401);
+});
+
+test('/auth/logout exige X-Requested-With (defensa CSRF): sin él no cierra la sesión', opts, async () => {
+  const n = await admin();
+  const sin = await n.pedir(base + '/auth/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  assert.equal(sin.status, 403);
+  assert.match((await sin.json()).error, /X-Requested-With/);
+  assert.equal((await n.api('/api/me')).status, 200, 'la sesión sigue activa');
+  assert.equal((await n.api('/auth/logout', { method: 'POST', body: '{}' })).status, 200);
+  assert.equal((await n.api('/api/me')).status, 401);
 });

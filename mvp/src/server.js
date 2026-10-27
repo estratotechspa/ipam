@@ -13,6 +13,7 @@ const { crearMetricas } = require('./adaptadores/metricas/prom');
 const tickets = require('./adaptadores/tickets/jira');
 const generadorToken = require('./adaptadores/auth/token');
 const { crearCasos } = require('./aplicacion');
+const { crearTareas } = require('./aplicacion/tareas');
 const contrasenas = require('./adaptadores/auth/contrasena');
 const { crearLimite } = require('./aplicacion/limite');
 const { crearAlmacenPostgres } = require('./adaptadores/limite/postgres');
@@ -45,13 +46,14 @@ function construir() {
       repo.registrarAuditoria({ usuario, rol, accion, detalle, ip, requestId: contexto.actual().request_id }).catch((e) => log.error('auditoría', e)),
   };
   const auditar = (accion, usuario, rol, detalle = {}, ip = null) => auditor.registrar({ accion, usuario, rol, detalle, ip });
-  const casos = crearCasos({ repo, eventos: publicador, auditor, tickets, reloj, config, instancia, generadorToken, contrasenas });
+  const tareas = crearTareas({ avisar: (e) => log.error('Tarea en segundo plano', e) });
+  const casos = crearCasos({ repo, eventos: publicador, auditor, tickets, reloj, config, instancia, generadorToken, contrasenas, tareas });
   // Puerto AlmacenLimite: PostgreSQL por defecto (varias réplicas comparten contadores); «memoria» solo para pruebas.
   const almacen = config.limite.almacen === 'memoria' ? crearAlmacenMemoria() : crearAlmacenPostgres(db);
   const limite = crearLimite({ almacen, config, auditor, log, metricas });
   const estado = { apagando: false };
   const app = crearApp({ config, log, db, repo, casos, auditar, publicador, tickets, estado, metricas, trazas, limite });
-  return { app, db, repo, casos, log, estado, avisos, instancia, metricas, trazas };
+  return { app, db, repo, casos, log, estado, avisos, instancia, metricas, trazas, tareas };
 }
 
 let compuesto;

@@ -11,7 +11,7 @@ const metricasRutas = require('./adaptadores/http/rutas/metricas');
 
 /** @param {ReturnType<typeof import('./server')['compuesto']>} c */
 async function iniciar(c) {
-  const { app, db, casos, log, estado, avisos, trazas, metricas } = c;
+  const { app, db, casos, log, estado, avisos, trazas, metricas, tareas } = c;
   for (const a of avisos) log.warn(a);
 
   if (config.bd.migrarAlArrancar) {
@@ -57,6 +57,7 @@ async function iniciar(c) {
       servidor.closeIdleConnections();
       await planificador.detener();
       await cerrado;
+      await tareas.esperar(); // p. ej. la sincronización con Jira que quedó en segundo plano
       clearTimeout(limite);
       await trazas.apagar();
       await db.end().catch((e) => log.warn('Error al cerrar el pool', e));
