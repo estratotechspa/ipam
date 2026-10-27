@@ -1,8 +1,30 @@
 # IPAM · MVP
 
+## Lee esto si quieres…
+| Quiero… | Documento |
+|---|---|
+| Entender los términos | [GLOSARIO](../docs/GLOSARIO.md) |
+| **Usar el IPAM** (cada pestaña explicada) | [MANUAL-DE-USO](../docs/MANUAL-DE-USO.md) |
+| Entender cómo está construido y por qué | [ARQUITECTURA](../docs/ARQUITECTURA.md) y los [ADR](../docs/adr/) |
+| Llamar a la API o integrar un agente | [API-Y-AGENTES](../docs/API-Y-AGENTES.md) y `/api/v1/openapi.json` |
+| Entender el YAML de redes del MVP | [CONTRATO-YAML-REDES](../docs/CONTRATO-YAML-REDES.md) |
+| Configurar roles, tokens y seguridad | [ACCESO-Y-SEGURIDAD](../docs/ACCESO-Y-SEGURIDAD.md) |
+| Ver todas las variables | [CONFIGURACION](../docs/CONFIGURACION.md) |
+| Desplegarlo (Docker, Kubernetes, nubes) | [DESPLIEGUE](../docs/ops/DESPLIEGUE.md) y [PORTABILIDAD](../docs/PORTABILIDAD.md) |
+| Levantar el POC en Render + Supabase | [POC-RENDER-SUPABASE](../docs/ops/POC-RENDER-SUPABASE.md) |
+| Operarlo y resolver fallas | [RUNBOOK](../docs/ops/RUNBOOK.md) y [OBSERVABILIDAD](../docs/ops/OBSERVABILIDAD.md) |
+| Respaldar y recuperar | [RESPALDO-Y-RECUPERACION](../docs/ops/RESPALDO-Y-RECUPERACION.md) y [OPERACION](../docs/OPERACION.md) |
+| Cambiar de hosting o de nube | [MIGRACION](../docs/ops/MIGRACION.md) |
+| Pasar de GitHub a GitLab / pipelines | [MIGRAR-A-GITLAB](../docs/ops/MIGRAR-A-GITLAB.md) y [ops/gitlab](../docs/ops/gitlab/README.md) |
+| Aplicar buenas prácticas (human-in-the-loop) | [BUENAS-PRACTICAS](../docs/BUENAS-PRACTICAS.md) |
+| Saber qué no hace | [LIMITACIONES](../docs/LIMITACIONES.md) y [ANALISIS-IPAM-COMERCIAL](../docs/ANALISIS-IPAM-COMERCIAL.md) |
+| Revisar la seguridad del código | [MODELO-DE-AMENAZAS](../docs/MODELO-DE-AMENAZAS.md) y [CALIDAD-Y-SEGURIDAD-DEL-CODIGO](../docs/CALIDAD-Y-SEGURIDAD-DEL-CODIGO.md) |
+| Contribuir (incluye «cómo agregar un adaptador») | [CONTRIBUIR](../docs/CONTRIBUIR.md) |
+| Ver los cambios por versión | [CHANGELOG](../CHANGELOG.md) |
+
 Gestión de segmentos de red (IPv4): pools, asignaciones sin solapamiento, sugerencia de segmentos libres e integración con Jira por webhook firmado.
 
-**Stack:** Node 20 + Express · PostgreSQL 16 · Docker Compose.
+**Stack:** Node 22 + Express 5 · PostgreSQL 14–17 · Docker.
 
 ## Levantar en local
 ```bash
@@ -10,29 +32,7 @@ docker compose up -d --build        # http://localhost:8080
 docker compose down -v              # apaga y borra la base (vuelve a los datos de ejemplo)
 ```
 Variables opcionales (archivo `.env` junto al compose): `APP_USER` y `APP_PASS` (clave de acceso) o `OIDC_*` + `PUBLIC_URL` + `SESSION_SECRET` (ver «Acceso, roles y auditoría»), `DB_PASSWORD`, `JIRA_WEBHOOK_SECRET`, `PORT`.
-El compose es una **demo local**: corre con `NODE_ENV=development` (abierto y con simulador de Jira). La imagen, en cambio, trae `NODE_ENV=production`: ahí la app **no arranca** sin autenticación ni con un secreto de webhook de ejemplo (ver «Acceso, roles y auditoría»).
 Pruebas unitarias: `npm test`.
-
-## Variables de entorno de la app
-| Variable | Por defecto | Para qué |
-|---|---|---|
-| `DATABASE_URL` | — | conexión a PostgreSQL |
-| `DB_POOL_MAX` · `DB_CONNECT_TIMEOUT_MS` · `DB_STATEMENT_TIMEOUT_MS` | 10 · 5000 · 15000 | tamaño del pool, espera máxima por una conexión y duración máxima de cada consulta |
-| `JSON_LIMIT` · `IMPORT_LIMIT` | `100kb` · `5mb` | tamaño máximo de un cuerpo JSON; `IMPORT_LIMIT` solo rige en `POST /api/importar` (admin) |
-| `RETENCION_DIAS` | 365 | días que se conservan `eventos` y `auditoria`; se purga al arrancar y cada 24 h. `0` = conservar todo |
-| `JIRA_REINTENTOS` · `JIRA_REINTENTO_MS` | 3 · 2000 | intentos de la sincronización con Jira (en segundo plano) y espera base entre ellos (× n) |
-| `SHUTDOWN_TIMEOUT_MS` | 10000 | tiempo máximo para drenar peticiones al recibir SIGTERM/SIGINT |
-| `DEMO` | `false` | `true` muestra en la pantalla «Solicitar» la pista de demostración (probar un CIDR que choque). Helm: `config.demo` |
-| `NODE_ENV` | `production` en la imagen | en `production` la app exige autenticación y `JIRA_WEBHOOK_SECRET` propio, y oculta el simulador de Jira |
-| `AUTH_MODE` | se deduce | `oidc` · `basic` · `none`. Vacío: OIDC si hay `OIDC_ISSUER`, Basic si hay `APP_USER`+`APP_PASS`, si no abierto. **En producción el modo abierto hay que pedirlo con `AUTH_MODE=none`**; si no, la app no arranca |
-| `JIRA_WEBHOOK_SECRET` | — | secreto del webhook. En producción es obligatorio y no puede ser `dev-secret-cambiar` |
-| `ENABLE_SIMULADOR` | `false` | `true` deja disponible `POST /api/jira/simular` en producción (fuera de producción siempre lo está) |
-| `SESSION_HORAS` | 4 | duración máxima de la sesión OIDC |
-| `SESSION_REVALIDAR_SEG` | 300 | cada cuántos segundos se revalida el rol y la existencia del usuario en la base (`0` = en cada petición) |
-| `RATE_LIMIT_AUTH_MAX` · `RATE_LIMIT_AUTH_VENTANA_MIN` | 30 · 15 | peticiones por IP a `/auth/login` + `/auth/callback` por ventana |
-| `RATE_LIMIT_WEBHOOK_MAX` | 120 | peticiones por minuto y por IP a `/webhook/jira` |
-| `RATE_LIMIT_BASIC_MAX` | 5 | fallos de Basic Auth por minuto y por IP; luego 2× en 15 min y 4× en 1 h (bloqueo progresivo) |
-| `TRUST_PROXY` | — | saltos de proxy delante de la app. **Necesario detrás de un ingress** para que los límites por IP usen la IP del cliente y no la del proxy |
 
 ## Instalar en Kubernetes con Helm
 El chart está en `chart/ipam` (API + PostgreSQL opcional + migración de esquema + Ingress opcional).
@@ -60,7 +60,7 @@ helm install ipam chart/ipam -n ipam -f mis-valores.yaml \
 - **Webhook de Jira:** debe poder llegar a `https://<host>/webhook/jira`; usa el mismo `JIRA_WEBHOOK_SECRET`.
 
 ## Acceso, roles y auditoría
-Tres modos, que salen de `AUTH_MODE` o, si no se define, de la configuración: **OIDC** (`OIDC_ISSUER`), **Basic Auth** de un solo usuario (`APP_USER` + `APP_PASS`, solo demos) o **abierto** (demo local; la interfaz lo avisa). Con `NODE_ENV=production` (la imagen) la app **no arranca sin autenticación** —tampoco con credenciales a medias— a menos que el modo abierto se pida expresamente con `AUTH_MODE=none`. `AUTH_MODE=none` junto a `OIDC_ISSUER`/`APP_USER` es una contradicción y tampoco arranca. Helm: `auth.mode`.
+Tres modos, según la configuración: **OIDC** (`OIDC_ISSUER`), **Basic Auth** de un solo usuario (`APP_USER` + `APP_PASS`, solo demos) o **abierto** (demo local; la interfaz lo avisa).
 
 **Inicio de sesión con Google Workspace** (cualquier proveedor OpenID Connect funciona igual cambiando `issuer`):
 1. En Google Cloud → *APIs y servicios → Credenciales* → *ID de cliente de OAuth* (aplicación web). URI de redirección autorizado: `<PUBLIC_URL>/auth/callback`.
@@ -73,26 +73,11 @@ Tres modos, que salen de `AUTH_MODE` o, si no se define, de la configuración: *
 | `solicitante` | + solicitar segmentos |
 | `admin` | + liberar, simular tickets de Jira, ver auditoría, asignar roles a otras personas |
 
-El rol sale de: correos admin de la configuración (siempre) → rol asignado en la pestaña *Usuarios* → grupos del proveedor → `defaultRole` (`lector`; `ninguno` = solo entran los mapeados). La sesión es una cookie firmada de 4 h (`SESSION_HORAS`); **el rol y la existencia del usuario se revalidan contra la base cada 5 min** (`SESSION_REVALIDAR_SEG`, caché por proceso), así que quien es degradado, cambia de rol o se da de baja lo nota en minutos sin esperar a que caduque la cookie. «Heredar» devuelve al rol que dan sus grupos/la configuración al entrar (que se fija en la cookie; un cambio de grupos en el proveedor sí requiere volver a entrar), y los administradores de `OIDC_ADMIN_EMAILS` no se pueden degradar desde la base. Con varias réplicas un cambio puede tardar hasta esos 5 min en llegar a todas. Cerrar sesión borra la cookie local, no cierra la sesión en Google. Los cambios desde el navegador —incluido `POST /auth/logout`— exigen la cabecera `X-Requested-With: ipam` (defensa CSRF).
-**Pantalla de acceso:** con OIDC, quien no tiene sesión llega a `/login` (marca, botón «Entrar con tu cuenta corporativa» y, según `?error=`, un aviso: sesión expirada, acceso revocado, rechazo del proveedor…), no directo al proveedor; el botón lleva a `/auth/login?next=…` y se vuelve a la página pedida. Los rechazos del servidor (dominio no permitido, sin rol, correo no verificado, solicitud expirada, demasiados intentos, sesión cerrada) se muestran como páginas con el estilo de la app —qué pasó, qué hacer y un botón para volver— generadas en `src/paginas.js`, sin scripts en línea. `/login`, `/login.js` y `/app.css` son públicos; el resto sigue exigiendo sesión.
-**Límites de tasa** (`express-rate-limit`, por IP): `/auth/login` y `/auth/callback`, `/webhook/jira` y, en modo Basic, bloqueo progresivo tras fallos (5/min → 10/15 min → 20/h; los accesos correctos y la primera petición sin credenciales no cuentan). Responden `429` con `Retry-After`. Los contadores viven en cada réplica. Todo inicio/cierre de sesión, asignación, liberación, exportación y cambio de rol queda en la tabla `auditoria` (pestaña *Auditoría*).
+El rol sale de: correos admin de la configuración (siempre) → rol asignado en la pestaña *Usuarios* → grupos del proveedor → `defaultRole` (`lector`; `ninguno` = solo entran los mapeados). Un cambio de rol rige en el próximo inicio de sesión. La sesión es una cookie firmada de 8 h (`SESSION_HORAS`) sin estado en el servidor (sirve con varias réplicas); cerrar sesión borra la cookie local, no cierra la sesión en Google. Los cambios desde el navegador exigen la cabecera `X-Requested-With: ipam` (defensa CSRF). Todo inicio/cierre de sesión, asignación, liberación, exportación y cambio de rol queda en la tabla `auditoria` (pestaña *Auditoría*).
 
 ## Respaldos y exposición
 - **Respaldos incrementales a GCS** (`postgres.backup.*`): completo semanal + incremental diario + WAL continuo (recuperación a cualquier instante), retención de 4 completos y prueba de restauración mensual. Imagen `mvp/postgres` (PostgreSQL + pgBackRest). Pasos, restauración y qué vigilar: **`docs/OPERACION.md`**.
 - **URL interna del cliente** (`ingress.*`, `httpRoute.*`, `config.publicUrl`): ver el mismo documento, que incluye el paso de la POC al tenant del cliente.
-
-## Interfaz
-La interfaz es HTML + JavaScript en módulos ES (`public/js/`: `api`, `pools`, `asignaciones`, `solicitar`, `jira`, `usuarios`, `auditoria`, más `ui` —diálogo y avisos—, `util` y `calculos` —lógica pura, con pruebas—). Sin framework ni paso de compilación; cumple la CSP (sin scripts en línea). La navegación usa `#pools`, `#pools/<pool>`, `#asig`, `#sol/<pool>`…, así que «atrás» y los enlaces directos funcionan.
-- **Pools:** barra de uso con el porcentaje en número y color por umbral (verde < 70 %, ámbar 70–90 %, rojo > 90 %; en uso alto además un icono); el detalle de un pool trae un mapa de hasta 256 bloques (libre, parcial rayado, ocupado) y la tabla de sus segmentos. Para quien no usa el ratón, la tabla tiene el mismo detalle que el mapa.
-- **Asignaciones:** búsqueda por texto, filtros por pool y ambiente, orden por columna (`aria-sort`) y paginación de 25 en 25 sobre `GET /api/asignaciones`.
-- **Solicitar:** valida el CIDR al escribir (formato, alineación con sugerencia y que quede dentro del pool); no pierde lo escrito al cambiar de pestaña.
-- **Confirmaciones y avisos:** un diálogo accesible (foco atrapado, Esc, foco de vuelta) y avisos temporales en lugar de `alert()`/`confirm()`.
-
-### Tokens, iconos y accesibilidad
-- **Tokens CSS** (`public/app.css`, bloque `:root`): escala tipográfica 12/14/16/20/28 px, espaciado 4/8/12/16/24 px, radios, colores semánticos (ambientes, alertas, umbrales de uso) y modo oscuro por `prefers-color-scheme`. La marca (`brand.css`) solo sobrescribe `--top`, `--blue` y `--accent`.
-- **Iconos:** un único set (Lucide, licencia ISC) en `public/iconos.js` como SVG en línea (`currentColor`, 16 o 20 px, `aria-hidden`); el significado siempre lo da el texto al lado. Favicon: `/favicon.svg` (cuatro bloques con el color de la marca) o el logo de la marca si lo hay.
-- **Contraste WCAG 2.2 AA** medido, no estimado: `src/ui.test.js` calcula las razones sobre el CSS real (claro y oscuro) y `e2e/accesibilidad.spec.js` sobre lo que pinta el navegador (texto ≥ 4,5:1; anillo de foco, borde de campos y barras ≥ 3:1). **Los colores de marca personalizados (`BRAND_COLOR*`) no se validan**: si usas uno claro, el texto blanco de los botones puede quedar bajo 4,5:1; comprueba tu color antes (p. ej. con la calculadora de contraste de WebAIM).
-- **Accesibilidad:** foco visible en todo lo interactivo, enlace «Saltar al contenido», `aria-current` en la navegación, `role="alert"` (errores) y `role="status"` (éxito), etiquetas asociadas a cada campo, tablas con `<thead>` y `<th scope>`, zonas táctiles de 44 px en pantallas táctiles, `prefers-reduced-motion` y sin desplazamiento horizontal a 320 px.
 
 ## Marca y dominio configurables
 Nada de «EstratoTech» está escrito en el código ni en la imagen: nombre, colores, logo y URL se cambian por configuración.
@@ -110,48 +95,48 @@ Nada de «EstratoTech» está escrito en el código ni en la imagen: nombre, col
 - **Imagen:** dos etapas; runtime `cgr.dev/chainguard/node` fijado por digest (sin shell ni gestor de paquetes; Trivy: 0 CRITICAL/HIGH con parche). Usuario `65532`, sistema de archivos de solo lectura, sin capacidades Linux.
 - **Imagen propia del cliente:** `docker build --build-arg BASE_IMAGE=<su-imagen-node> --build-arg BUILD_IMAGE=<su-imagen-node> .` (Node ≥ 20 en el PATH, usuario no root).
 - **Chart:** `seccomp RuntimeDefault`, ServiceAccount propia sin token montado, `NetworkPolicy` (`networkPolicy.*`; `ingressFrom` para limitar quién llega a la app), Postgres y Job con filesystem de solo lectura y límites de recursos.
-- **Cabeceras HTTP:** `helmet` con CSP estricta (`script-src 'self'`) y `Referrer-Policy: no-referrer`; `Permissions-Policy` desactiva cámara, micrófono, geolocalización, pagos, USB… (helmet no la trae: se añade con un middleware propio). Detrás de un ingress: `TRUST_PROXY=1`; con acceso solo por HTTPS: `HSTS=true`.
+- **Cabeceras HTTP:** `helmet` con CSP estricta (`script-src 'self'`). Detrás de un ingress: `TRUST_PROXY=1`; con acceso solo por HTTPS: `HSTS=true`.
 - **Cadena de suministro:** `publicar.yml` publica en GHCR con SBOM y atestación. Pendiente: firma de imágenes y TLS de extremo a extremo → `docs/DEUDA-TECNICA.md`.
 
 ## Cómo está resuelto lo importante
 - **Sin solapamientos, garantizado por la base:** restricción de exclusión GiST (`sin_solapamiento`) sobre `(pool, cidr)`; además un trigger exige que el segmento caiga dentro del pool. Aunque alguien inserte directo en la base, se rechaza.
 - **Concurrencia:** las asignaciones de un mismo pool se serializan con un bloqueo de transacción (probado: 20 solicitudes simultáneas → 20 segmentos distintos).
-- **Jira → IPAM:** `POST /webhook/jira`, cuerpo `{ticket, ambiente, tipo, mascara, vpc}` con dos cabeceras: `x-ipam-timestamp` (segundos desde 1970, UTC) y `x-hub-signature-256: sha256=HMAC-SHA256(JIRA_WEBHOOK_SECRET, "<timestamp>.<cuerpo>")`. La firma cubre el timestamp; se rechaza (`401`) lo firmado hace más de 5 min o en el futuro, y una misma firma no se acepta dos veces dentro de esa ventana (`409`; la memoria de firmas es por réplica). **Cambio incompatible:** quien firmaba solo el cuerpo debe añadir el timestamp. Ejemplo:
+- **Jira → IPAM:** `POST /webhook/jira`, cuerpo `{ticket, ambiente, tipo, mascara, vpc}` con dos cabeceras: `x-ipam-timestamp` (segundos desde 1970, UTC) y `x-hub-signature-256: sha256=HMAC-SHA256(JIRA_WEBHOOK_SECRET, "<timestamp>.<cuerpo>")`. La firma cubre la hora: se rechaza (`401`) lo firmado hace más de 5 min o en el futuro. Un reenvío dentro de la ventana es inofensivo (idempotente por ticket). **Cambio incompatible:** quien firmaba solo el cuerpo debe añadir el timestamp. Ejemplo:
   `ts=$(date +%s); sig=$(printf '%s.%s' "$ts" "$cuerpo" | openssl dgst -sha256 -hmac "$SECRETO" | sed 's/^.* //'); curl -H "x-ipam-timestamp: $ts" -H "x-hub-signature-256: sha256=$sig" -H 'Content-Type: application/json' -d "$cuerpo" https://<host>/webhook/jira`
 
 ## API
 | Método | Ruta | |
 |---|---|---|
 | GET | `/api/health` | salud (abierta) |
-| GET | `/api/pools`, `/api/resumen`, `/api/eventos` | lecturas. `/api/pools` trae `total`, `usadas`, `libres` y `uso` por pool; `/api/resumen` se calcula de la misma consulta (la interfaz ya no lo usa) |
-| GET | `/api/asignaciones` | paginada: `limit` (50; máx. 200), `offset`, filtros `pool`, `ambiente`, `q` (CIDR, proyecto/VPC, solicitante o ticket), `orden` (`fecha`·`cidr`·`pool`·`vpc`·`solicitante`·`ticket`·`origen`·`direcciones`) y `dir` (`asc`·`desc`). El total sin paginar va en la cabecera `X-Total-Count` |
+| GET | `/api/pools`, `/api/resumen`, `/api/asignaciones`, `/api/eventos` | lecturas |
 | GET | `/api/me` · `/api/usuarios` · `/api/auditoria` | sesión actual · usuarios y roles (admin) · bitácora (admin) |
 | GET · POST | `/api/exportar.json` · `/api/importar` | respaldo lógico completo · restauración (admin) |
 | GET | `/api/config` · `/brand.css` · `/brand/logo` | marca (abiertos) |
-| GET | `/api/exportar.xlsx` | Excel con todos los segmentos (hoja «Segmentos») y los pools (hoja «Pools»); se genera por streaming, sin cargar todo en memoria |
-| GET | `/api/jira/estado` | si la integración saliente con Jira está activa, qué variables faltan y si el simulador está disponible |
+| GET | `/api/exportar.xlsx` | Excel con todos los segmentos (hoja «Segmentos») y los pools (hoja «Pools») |
+| GET | `/api/jira/estado` | si la integración saliente con Jira está activa |
 | GET | `/api/pools/:id/libres?mascara=22` | 3 segmentos libres |
 | POST | `/api/solicitudes` `{pool, vpc, cidr?, mascara?}` | 201 · 400 inválido · 409 solapamiento (con conflicto y sugeridos) |
 | DELETE | `/api/asignaciones/:id` | liberar |
 | POST | `/webhook/jira` | entrada desde Jira (firmada) |
-| POST | `/api/jira/simular` | simula un ticket para la demo (firmado igual que el webhook real). Solo fuera de producción o con `ENABLE_SIMULADOR=true`; si no, 404 |
+| POST | `/api/jira/simular` | simula un ticket para la demo. Solo fuera de producción o con `ENABLE_SIMULADOR=true`; si no, 404 |
 
 ## Integración saliente con Jira (desactivada por defecto)
 Código en `src/jira.js`. Se activa con `JIRA_ENABLED=true` más `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_PROJECT` (opcionales: `JIRA_ISSUE_TYPE`=Task, `JIRA_DONE_TRANSITION`=Done).
 - Solicitud desde el panel → crea el ticket en Jira y guarda su clave real en la asignación.
 - Ticket que llega por webhook → comenta el rango en el ticket y lo pasa a la transición final.
-- **Corre en segundo plano:** la respuesta al usuario no espera a Jira (hasta 3 llamadas de 10 s antes). Si falla, se reintenta (`JIRA_REINTENTOS`) y el resultado queda en la tabla `eventos`: `jira_ticket_creado`, `jira_ticket_actualizado` o `jira_error`. Mientras tanto la asignación lleva su ticket `NET-xxx` interno, que se reemplaza por la clave de Jira al crearse. Un reintento tras un fallo parcial puede duplicar el comentario en Jira.
 - Si Jira falla, la asignación se mantiene y queda un evento `jira_error`. Sin activar, todo funciona como antes (tickets `NET-xxx` simulados).
 - Aún no probada contra un Jira real. Pendiente para Helm: pasar estas variables al Secret/values del chart.
 
 ## Alcance del MVP (lo que NO está)
 - Con la integración desactivada, los números de ticket (`NET-xxx`) los genera el IPAM.
-- Solo IPv4. Las sesiones se revalidan cada 5 min (no hay cierre inmediato ni «cerrar sesión en todos los dispositivos»); el rol que dan los grupos del proveedor se fija al iniciar sesión.
+- Solo IPv4. Las sesiones OIDC se revalidan cada 5 min (`SESSION_REVALIDAR_SEG`): una baja o un cambio de rol rige en ese tiempo, no al instante en todas las réplicas; no hay «cerrar sesión en todos los dispositivos». El rol que dan los grupos del proveedor se fija al iniciar sesión.
 - Los 6 pools y 12 asignaciones son datos de ejemplo.
 
 ## Guion de demo (5 min)
-1. **Pools:** totales (incluye «Pools sobre 80 %» y el espacio libre) y barras de uso por umbral; clic en un pool → mapa de bloques libres/ocupados y sus asignaciones.
-2. **Solicitar:** elige `gke-pods-prod`, escribe un proyecto y el CIDR `10.64.8.0/22` → solapamiento con NET-142 y sugeridos; «Usar» → asignado con ticket. (Los valores no vienen precargados; con `DEMO=true` la pantalla muestra esta pista.) Escribe `10.64.9.0/22` para ver la validación en vivo.
-3. **Solicitar sin CIDR** (solo máscara) → asigna el primer libre.
-4. **Jira:** el estado real de la integración y sus eventos; en «Cómo funciona» está el diagrama y, fuera de producción, el simulador: «Enviar webhook» → se ve el evento recibido y la asignación.
-5. **Asignaciones:** buscar, filtrar por pool y ambiente, ordenar por columna y paginar; aparecen con origen `panel` / `jira`; «Liberar» (con confirmación) devuelve el espacio.
+1. **Pools:** estado y uso de cada pool.
+2. **Asignaciones → Nueva asignación (admin):** `gke-pods-prod` + `10.64.8.0/22` → solapamiento con NET-142, y sugeridos; «Usar» → asignado con ticket.
+3. **Nueva asignación sin CIDR** (solo máscara, con VLAN opcional) → asigna el primer libre; clic en su ID → ficha con detalle e historial.
+3b. **Direcciones IP:** en la ficha del segmento → «Registrar IP fija» (`rtr-core-01` · `Gi0/1` · gateway); en la pestaña Direcciones IP, buscar por el equipo.
+3c. **API:** enlace «API» → `/api.html`, «Try it out» en `GET /api/v1/pools`.
+4. **Jira:** «Enviar webhook» → se ve el evento recibido, la asignación y la actualización del ticket.
+5. **Asignaciones:** aparecen con origen `panel` / `jira`; «Liberar» devuelve el espacio.

@@ -1,0 +1,235 @@
+# CI de GitLab: un envoltorio FINO. La lógica vive en el Makefile y en scripts/ci/ (los mismos que usa .github/workflows/ci.yml y tu computador).
+# Mismos trabajos y mismo orden que GitHub: validar → probar → escanear → construir → liberar. Imágenes fijadas por digest (las actualiza Renovate).
+# La rama por defecto NO se escribe a fuego: sale de $CI_DEFAULT_BRANCH (scripts/ci/entorno.sh la traduce a IPAM_RAMA_POR_DEFECTO).
+stages: [validar, probar, escanear, construir, liberar, poc]
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never                       # evita pipelines duplicados: la rama con un MR abierto corre como MR
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+
+default:
+  image: node:22-bookworm@sha256:63538dfe497cc29dfafdda25ada09b46db68a3f4cc205abf1f5d6bf0913f3384
+  cache:
+    key: {files: [mvp/package-lock.json]}
+    paths: [.npm/]
+  interruptible: true
+
+variables:
+  npm_config_cache: "$CI_PROJECT_DIR/.npm"
+  IPAM_PUBLICAR: "false"
+
+.reglas: &reglas
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+# ---------------------------------------------------------------- validar
+validar:
+  stage: validar
+  <<: *reglas
+  script:
+    - make deps
+    - make portabilidad
+    - make docs
+    - make lint
+    - make helm-check
+    - make alertas        # sin Docker en este trabajo se omiten promtool y tofu validate (el generador y el JSON sí se validan)
+
+# ---------------------------------------------------------------- probar (PostgreSQL 14 a 17 como servicio, en paralelo)
+.probar:
+  stage: probar
+  <<: *reglas
+  needs: [validar]
+  variables:
+    POSTGRES_USER: ipam
+    POSTGRES_PASSWORD: ci
+    POSTGRES_DB: ipam
+    DATABASE_URL: postgres://ipam:ci@postgres:5432/ipam
+  script:
+    - make deps
+    - make test
+    - make esquema
+
+probar:pg14:
+  extends: .probar
+  services: [{name: 'postgres:14-alpine@sha256:e73790e2702b489f664605acbec5f5da6981bc7e432f0489e52a53c9d1e7467f', alias: postgres}]
+probar:pg15:
+  extends: .probar
+  services: [{name: 'postgres:15-alpine@sha256:d2c2ced0372e855e4c257a9e9b5725f403847c01cfb64facbf2b21dbdadb2d74', alias: postgres}]
+probar:pg16:
+  extends: .probar
+  services: [{name: 'postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea', alias: postgres}]
+  script:
+    - make deps
+    - make test
+    - make esquema
+    - make cobertura
+probar:pg17:
+  extends: .probar
+  services: [{name: 'postgres:17-alpine@sha256:1bcc18d81671b02906296aad470ec9778a6b71016ce953092024b680bad007b0', alias: postgres}]
+
+probar:e2e:
+  stage: probar
+  <<: *reglas
+  needs: [validar]
+  image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:7852dc5a7d72f5fe458a597d690f6c42fbc8e9e26ddfa95f8e6ef552558d9bbf   # ya trae Node y los navegadores
+  services: [{name: 'postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea', alias: postgres}]
+  variables:
+    POSTGRES_USER: ipam
+    POSTGRES_PASSWORD: ci
+    POSTGRES_DB: ipam
+    DATABASE_URL: postgres://ipam:ci@postgres:5432/ipam
+    IPAM_NAVEGADOR_PREINSTALADO: "1"
+  script:
+    - cd mvp && npm ci && cd ..
+    - ./scripts/ci/e2e.sh
+  artifacts:
+    when: on_failure
+    paths: [mvp/test-results/]
+
+# ---------------------------------------------------------------- escanear (cada herramienta corre en su propia imagen: sin Docker-en-Docker)
+.escaner:
+  stage: escanear
+  <<: *reglas
+  needs: [validar]
+  variables: {IPAM_ESCANEO_LOCAL: "1", GIT_DEPTH: "0"}
+
+escanear:secretos:
+  extends: .escaner
+  image: {name: 'ghcr.io/gitleaks/gitleaks@sha256:0e99e8821643ea5b235718642b93bb32486af9c8162c8b8731f7cbdc951a7f46', entrypoint: [""]}
+  script: [./scripts/ci/escanear.sh gitleaks]
+escanear:sast:
+  extends: .escaner
+  image: {name: 'semgrep/semgrep@sha256:a265d09a9ca712e6624aca09056304ce4314a695b7028d65c041dd53fd44c700', entrypoint: [""]}
+  script: [./scripts/ci/escanear.sh semgrep]
+escanear:trivy:
+  extends: .escaner
+  image: {name: 'aquasec/trivy@sha256:ab70a02200597efa04748f210f793936eb647cbcdb0ea69cc30b226d6f5a22c7', entrypoint: [""]}
+  script: [./scripts/ci/escanear.sh trivy-fs]
+escanear:iac:
+  extends: .escaner
+  image: {name: 'bridgecrew/checkov@sha256:ead6eb24cf9884859566ecb461bf396d0e52bd9c3b9d71a221f3f5e054308347', entrypoint: [""]}
+  script: [./scripts/ci/escanear.sh checkov]
+escanear:dependencias:
+  extends: .escaner
+  script:
+    - make deps
+    - make auditar
+    - make sbom
+  artifacts:
+    paths: [sbom/ipam.cdx.json]
+
+# ---------------------------------------------------------------- construir (Docker-en-Docker: se envía el contexto por la API, sin montajes)
+.docker:
+  image: docker:27.5-cli@sha256:851f91d241214e7c6db86513b270d58776379aacc5eb9c4a87e5b47115e3065c
+  services: [{name: 'docker:27.5-dind@sha256:aa3df78ecf320f5fafdce71c659f1629e96e9de0968305fe1de670e0ca9176ce', alias: docker}]
+  variables: {DOCKER_HOST: "tcp://docker:2376", DOCKER_TLS_CERTDIR: "/certs", DOCKER_TLS_VERIFY: "1", DOCKER_CERT_PATH: "/certs/client"}
+
+construir:imagen:
+  extends: .docker
+  stage: construir
+  <<: *reglas
+  needs: [probar:pg16, probar:pg14, probar:pg15, probar:pg17, probar:e2e, escanear:secretos, escanear:sast, escanear:trivy, escanear:iac, escanear:dependencias]
+  script:
+    - IPAM_GUARDAR_TAR=1 ./scripts/ci/construir-imagen.sh local
+  artifacts:
+    paths: [imagen.tar]
+    expire_in: 1 day
+
+construir:trivy-imagen:
+  stage: construir
+  <<: *reglas
+  needs: ["construir:imagen"]
+  image: {name: 'aquasec/trivy@sha256:ab70a02200597efa04748f210f793936eb647cbcdb0ea69cc30b226d6f5a22c7', entrypoint: [""]}
+  variables: {IPAM_ESCANEO_LOCAL: "1"}
+  script: [./scripts/ci/escanear.sh trivy-imagen imagen.tar]
+
+construir:multiarquitectura:
+  extends: .docker
+  stage: construir
+  needs: ["construir:imagen"]
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+  script:
+    # amd64 + arm64: la emulación necesita un runner con permisos para registrar binfmt (privilegiado). Ver docs/ops/MIGRAR-A-GITLAB.md.
+    - docker run --privileged --rm tonistiigi/binfmt --install arm64
+    - ./scripts/ci/construir-imagen.sh multiarch
+
+construir:compose:
+  extends: .docker
+  stage: construir
+  <<: *reglas
+  needs: [validar]
+  script: [./scripts/ci/compose-check.sh]
+
+# ---------------------------------------------------------------- liberar (solo con etiquetas vX.Y.Z)
+liberar:publicar:
+  extends: .docker
+  stage: liberar
+  needs: ["construir:trivy-imagen", "construir:multiarquitectura"]
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+  variables: {IPAM_PUBLICAR: "true"}
+  script:
+    - docker run --privileged --rm tonistiigi/binfmt --install arm64
+    - ./scripts/ci/construir-imagen.sh publicar          # el registry es $CI_REGISTRY_IMAGE; las credenciales las traduce scripts/ci/entorno.sh
+
+liberar:firmar:
+  stage: liberar
+  needs: ["liberar:publicar"]
+  image: {name: 'gcr.io/projectsigstore/cosign:v2.4.1@sha256:b03690aa52bfe94054187142fba24dc54137650682810633901767d8a3e15b31', entrypoint: [""]}
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/ && $FIRMAR_IMAGEN == "true"      # OPCIONAL: apagado por defecto
+  id_tokens:
+    SIGSTORE_ID_TOKEN: {aud: sigstore}                                           # firma sin llaves con la identidad OIDC de GitLab
+  script:
+    - ./scripts/ci/firmar-imagen.sh "$CI_REGISTRY_IMAGE:${CI_COMMIT_TAG#v}"
+
+# DAST opcional (OWASP ZAP baseline contra una instancia efímera): apagado por defecto, se activa con ACTIVAR_DAST=true.
+dast:
+  extends: .docker
+  stage: liberar
+  needs: ["construir:imagen"]
+  rules:
+    - if: $ACTIVAR_DAST == "true" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script: [./scripts/ci/dast.sh]
+  artifacts:
+    when: always
+    paths: [dast-informe.html]
+
+# ---------------------------------------------------------------- poc (Render + Supabase)
+# Migrar el POC: SOLO manual. El secreto DATABASE_URL_MIGRACION va como variable del CI (enmascarada y protegida).
+poc:migrar:
+  stage: poc
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+  environment: {name: poc}
+  resource_group: migrar-poc
+  interruptible: false
+  variables: {DATABASE_SCHEMA: ipam}
+  script:
+    - scripts/ci/migrar.sh
+
+# Keepalive: crea una programación (Build → Pipeline schedules) con la variable IPAM_TAREA=keepalive y la variable IPAM_URL.
+poc:keepalive:
+  stage: poc
+  image: curlimages/curl:8.11.1@sha256:c1fe1679c34d9784c1b0d1e5f62ac0a79fca01fb6377cdd33e90473c6f9f9a69
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $IPAM_TAREA == "keepalive"
+  needs: []
+  script:
+    - sh scripts/ci/keepalive.sh

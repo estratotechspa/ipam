@@ -1,0 +1,5 @@
+body{margin:0;font:14px system-ui,sans-serif;background:#fff;color:#1c2333}
+.api-top{background:#12203a;color:#fff;padding:14px 24px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.api-top b{font-size:18px}.api-top span{color:#c3cee3}.api-top a{color:#fff;margin-left:auto}
+.api-ayuda{max-width:1460px;margin:16px auto 0;padding:0 20px;color:#3b4252}
+.api-ayuda code{background:#eef1f6;padding:1px 5px;border-radius:4px}

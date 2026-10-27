@@ -1,0 +1,12 @@
+{{- if and .Values.networkPolicy.enabled .Values.networkPolicy.defaultDeny }}
+# Denegación POR DEFECTO en el namespace: ningún pod recibe ni envía tráfico salvo lo que permita una política explícita
+# (las del IPAM y su base están en networkpolicy.yaml). OJO: afecta a TODOS los pods del namespace; úsala solo si el namespace es del IPAM.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "ipam.name" . }}-denegar-todo
+  labels: {{- include "ipam.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+{{- end }}

@@ -1,0 +1,115 @@
+# EJEMPLO para el repositorio de INFRAESTRUCTURA DE REDES del cliente (OpenTofu). NO se ejecutó contra un GitLab ni una cuenta de GCP reales:
+# se valida su sintaxis y su esquema; adáptalo antes de usarlo. Todos los nombres y URLs son de relleno.
+#
+# Etapas:  validate → scan → plan → aprobacion-manual → apply → confirmar-ipam         (si algo falla o se rechaza: liberar-ipam)
+#   · El agente de redes ya RESERVÓ los rangos en el IPAM y los dejó en el MR (variables de OpenTofu + el archivo ipam-reservas.json con los id de reserva).
+#   · Nada se vuelve definitivo hasta que una PERSONA aprueba (paso manual en un ambiente protegido) y el `apply` termina bien.
+#   · Si el pipeline falla o se rechaza, `liberar-ipam` libera las reservas; y si nadie hace nada, las reservas EXPIRAN solas.
+# `tofu` es OpenTofu; `terraform` es compatible: cambia la imagen y la variable TF_BIN.
+# Variables de CI necesarias (Settings → CI/CD → Variables; ENMASCARADAS y PROTEGIDAS):
+#   IPAM_URL     https://ipam.ejemplo.interno          IPAM_TOKEN   token de servicio con rol «agente» (se guarda solo como secreto)
+#   GCP_WIF_PROVIDER / GCP_SERVICE_ACCOUNT  federación de identidad de carga de trabajo (sin llaves de larga duración; ver docs/ops/MIGRAR-A-GITLAB.md)
+
+stages: [validate, scan, plan, aprobacion-manual, apply, confirmar-ipam]
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH     # flujo: feature → MR → rama por defecto (master)
+
+variables:
+  TF_BIN: tofu
+  TF_IN_AUTOMATION: "true"
+  TF_ROOT: redes
+
+default:
+  image: {name: 'ghcr.io/opentofu/opentofu:1.8@sha256:5201379f7d79cdce8c475a0b2bb0c0aef742604c6a6ae3cd64c62a797d043714', entrypoint: [""]}
+  id_tokens:
+    GCP_ID_TOKEN: {aud: "https://iam.googleapis.com/$GCP_WIF_PROVIDER"}   # el pipeline se identifica ante GCP con su token OIDC, sin llaves
+
+.tofu-init: &tofu-init
+  - cd "$TF_ROOT"
+  - $TF_BIN init -input=false
+
+validate:
+  stage: validate
+  script:
+    - *tofu-init
+    - $TF_BIN fmt -check -recursive
+    - $TF_BIN validate
+
+scan:trivy:
+  stage: scan
+  image: {name: 'aquasec/trivy@sha256:ab70a02200597efa04748f210f793936eb647cbcdb0ea69cc30b226d6f5a22c7', entrypoint: [""]}
+  script: [trivy config --severity HIGH,CRITICAL --exit-code 1 "$TF_ROOT"]
+
+scan:checkov:
+  stage: scan
+  image: {name: 'bridgecrew/checkov@sha256:ead6eb24cf9884859566ecb461bf396d0e52bd9c3b9d71a221f3f5e054308347', entrypoint: [""]}
+  script: [checkov -d "$TF_ROOT" --framework terraform --compact --quiet]
+
+# Herramienta de escaneo adicional mencionada en la reunión como «Whisky»: nombre POR CONFIRMAR (parece un error de transcripción).
+# Cuando se confirme cuál es, se agrega aquí como otro trabajo de la etapa `scan`.
+
+plan:
+  stage: plan
+  script:
+    - *tofu-init
+    - $TF_BIN plan -input=false -out=plan.bin
+    - $TF_BIN show -no-color plan.bin > plan.txt
+  artifacts:
+    paths: ["$TF_ROOT/plan.bin", "$TF_ROOT/plan.txt"]
+    expire_in: 1 week
+
+aprobacion-manual:
+  stage: aprobacion-manual
+  needs: [plan]
+  environment: {name: redes-produccion}        # ambiente PROTEGIDO: solo los aprobadores definidos pueden ejecutarlo
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+      allow_failure: false                     # sin esta aprobación el pipeline no avanza
+  script: ['echo "Aprobado por $GITLAB_USER_LOGIN"']
+
+apply:
+  stage: apply
+  needs: [plan, aprobacion-manual]
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  environment: {name: redes-produccion}
+  script:
+    - *tofu-init
+    - $TF_BIN apply -input=false plan.bin
+
+# Confirma las reservas en el IPAM: pasan a asignación definitiva (origen «agente»). Deja constancia de QUIÉN aprobó y DÓNDE.
+# El primer request al IPAM puede tardar si el servicio estaba dormido (plan gratuito): se espera con reintentos.
+confirmar-ipam:
+  stage: confirmar-ipam
+  needs: [apply]
+  image: curlimages/curl:8.11.1@sha256:c1fe1679c34d9784c1b0d1e5f62ac0a79fca01fb6377cdd33e90473c6f9f9a69
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script:
+    - |
+      curl -fsS --retry 12 --retry-delay 10 --retry-all-errors --max-time 120 "$IPAM_URL/healthz" >/dev/null   # despierta el servicio si dormía
+      for id in $(sed -n 's/.*"id": *"\([0-9a-f-]\{36\}\)".*/\1/p' ipam-reservas.json); do
+        curl -fsS --max-time 120 --retry 3 --retry-all-errors -X POST "$IPAM_URL/api/v1/reservas/$id/confirmar" \
+          -H "Authorization: Bearer $IPAM_TOKEN" -H "Content-Type: application/json" \
+          -d "{\"aprobado_por\": \"$GITLAB_USER_LOGIN\", \"referencia\": \"$CI_PIPELINE_URL\"}"
+        echo
+      done
+
+# Si algo falla (o el pipeline se cancela/rechaza), se liberan las reservas: así el rango no queda apartado por nada.
+liberar-ipam:
+  stage: .post
+  image: curlimages/curl:8.11.1@sha256:c1fe1679c34d9784c1b0d1e5f62ac0a79fca01fb6377cdd33e90473c6f9f9a69
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: on_failure
+  script:
+    - |
+      curl -fsS --retry 12 --retry-delay 10 --retry-all-errors --max-time 120 "$IPAM_URL/healthz" >/dev/null
+      for id in $(sed -n 's/.*"id": *"\([0-9a-f-]\{36\}\)".*/\1/p' ipam-reservas.json); do
+        curl -fsS --max-time 120 --retry 3 --retry-all-errors -X DELETE "$IPAM_URL/api/v1/reservas/$id" -H "Authorization: Bearer $IPAM_TOKEN"
+        echo
+      done

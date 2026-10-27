@@ -1,0 +1,23 @@
+# EJEMPLO 2 · mismo proyecto en los cuatro ambientes (dev, qa, pre, prod), con clúster privado (rango del plano de control)
+# y una segunda subred para máquinas virtuales. Contrato PROPUESTO (pendiente de validar con el repo cd-agents).
+# Todos los rangos y nombres son FICTICIOS. Los nombres siguen el mismo patrón en todos los ambientes.
+redes:
+  ipam_reservations:
+    # ---- dev ----
+    - {subnet: gke-principal, region: us-central1, ambiente: dev, ttl_horas: 24, primary: {tipo: Nodos, mascara: 24},
+       secondary_ranges: [{name: pods, tipo: Pods, mascara: 20}, {name: servicios, tipo: Servicios, mascara: 24}]}
+    - {subnet: vm-apoyo, region: us-central1, ambiente: dev, primary: {tipo: Nodos, mascara: 27}}
+    # ---- qa ----
+    - {subnet: gke-principal, region: us-central1, ambiente: qa, ttl_horas: 24, primary: {tipo: Nodos, mascara: 24},
+       secondary_ranges: [{name: pods, tipo: Pods, mascara: 20}, {name: servicios, tipo: Servicios, mascara: 24}]}
+    - {subnet: vm-apoyo, region: us-central1, ambiente: qa, primary: {tipo: Nodos, mascara: 27}}
+    # ---- pre ----
+    - {subnet: gke-principal, region: us-central1, ambiente: pre, ttl_horas: 48, primary: {tipo: Nodos, mascara: 23},
+       secondary_ranges: [{name: pods, tipo: Pods, mascara: 19}, {name: servicios, tipo: Servicios, mascara: 23},
+                          {name: plano-control, tipo: Control plane, mascara: 28}]}
+    - {subnet: vm-apoyo, region: us-central1, ambiente: pre, primary: {tipo: Nodos, mascara: 27}}
+    # ---- prod (dos pools de nodos en el ambiente: se indica cuál, para evitar la respuesta «ambiguo») ----
+    - {subnet: gke-principal, region: us-central1, ambiente: prod, ttl_horas: 72, primary: {tipo: Nodos, mascara: 22, pool: prod-nodos-a},
+       secondary_ranges: [{name: pods, tipo: Pods, mascara: 18}, {name: servicios, tipo: Servicios, mascara: 22},
+                          {name: plano-control, tipo: Control plane, mascara: 28}]}
+    - {subnet: vm-apoyo, region: us-central1, ambiente: prod, primary: {tipo: Nodos, mascara: 26, pool: prod-nodos-a}}

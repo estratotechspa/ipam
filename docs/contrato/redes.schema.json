@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ipam.ejemplo.interno/contrato/redes.schema.json",
+  "title": "Fragmento de redes del YAML de metadatos (PROPUESTA pendiente de validar con el repo cd-agents)",
+  "description": "Lo que el IPAM necesita saber para reservar rangos IP. Solo describe la sección «redes.ipam_reservations»; el resto del YAML (arquetipos de infraestructura y DevOps) no es asunto del IPAM.",
+  "type": "object",
+  "required": ["redes"],
+  "properties": {
+    "redes": {
+      "type": "object",
+      "required": ["ipam_reservations"],
+      "properties": {
+        "ipam_reservations": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/reserva_de_subred" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "ambiente": { "enum": ["dev", "qa", "pre", "prod"] },
+    "nombre": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,40}$" },
+    "rango": {
+      "type": "object",
+      "description": "Un bloque de direcciones. El IPAM lo busca por tipo de pool (Nodos, Pods, Servicios, Control plane…) y por tamaño.",
+      "required": ["tipo", "mascara"],
+      "properties": {
+        "tipo": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "mascara": { "type": "integer", "minimum": 8, "maximum": 32 },
+        "pool": { "type": "string", "description": "Solo para desambiguar cuando hay más de un pool del mismo ambiente y tipo (el IPAM responde 422 con las opciones)." }
+      },
+      "additionalProperties": false
+    },
+    "reserva_de_subred": {
+      "type": "object",
+      "required": ["subnet", "ambiente", "primary"],
+      "properties": {
+        "subnet": { "$ref": "#/$defs/nombre", "description": "Nombre lógico de la subred. Con el ambiente forma la clave de idempotencia." },
+        "region": { "type": "string", "pattern": "^[a-z]+-[a-z]+[0-9]+$" },
+        "ambiente": { "$ref": "#/$defs/ambiente" },
+        "ttl_horas": { "type": "integer", "minimum": 1, "maximum": 72, "description": "Cuánto dura la reserva sin confirmar. Por defecto 24 y nunca más de 72." },
+        "primary": { "$ref": "#/$defs/rango" },
+        "secondary_ranges": {
+          "type": "array",
+          "description": "Rangos secundarios de la subred (en GKE: Pods y Servicios). Cada uno es una reserva aparte.",
+          "items": {
+            "type": "object",
+            "required": ["name", "tipo", "mascara"],
+            "properties": {
+              "name": { "$ref": "#/$defs/nombre" },
+              "tipo": { "type": "string", "minLength": 1, "maxLength": 40 },
+              "mascara": { "type": "integer", "minimum": 8, "maximum": 32 },
+              "pool": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

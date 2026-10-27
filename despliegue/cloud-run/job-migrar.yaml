@@ -1,0 +1,23 @@
+# Job de Cloud Run que aplica el esquema con el usuario migrador (la app NO toca el esquema al arrancar).
+# NO VALIDADO contra una cuenta real.   Ejecutar:  gcloud run jobs replace job-migrar.yaml --region REGION && gcloud run jobs execute ipam-migrar --region REGION --wait
+apiVersion: run.googleapis.com/v1
+kind: Job
+metadata:
+  name: ipam-migrar
+spec:
+  template:
+    spec:
+      template:
+        metadata:
+          annotations:
+            run.googleapis.com/cloudsql-instances: PROYECTO:REGION:INSTANCIA
+        spec:
+          serviceAccountName: ipam-migrar@PROYECTO.iam.gserviceaccount.com
+          maxRetries: 1
+          containers:
+            - image: REGION-docker.pkg.dev/PROYECTO/REPO/ipam:0.3.0
+              command: ["node", "src/cli/migrar.js"]
+              env:
+                - {name: DATABASE_SCHEMA, value: public}
+                - name: DATABASE_URL_MIGRACION
+                  valueFrom: {secretKeyRef: {name: ipam-database-url-migracion, key: latest}}
