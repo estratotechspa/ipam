@@ -1,0 +1,86 @@
+# GENERADO por scripts/ci/generar-alertas.js: no lo edites a mano (edita la lista de ese script y vuelve a ejecutarlo).
+# Mismas reglas como archivo de Prometheus (rule_files:). Validar:  promtool check rules reglas-prometheus.yml
+groups:
+  - name: ipam
+    interval: 1m
+    rules:
+      - alert: IpamPoolSobre80
+        expr: "ipam_pool_utilizacion_ratio > 0.8"
+        for: 10m
+        labels:
+          severidad: warning
+          servicio: ipam
+        annotations:
+          summary: "El pool {{ $labels.pool }} está sobre el 80 % (asignaciones + reservas vigentes)."
+          description: "Un pool se está llenando. Revisa `docs/ops/RUNBOOK.md` → «Un pool está lleno»: libera rangos que ya no se usen, revisa reservas colgadas o planifica un pool nuevo."
+          runbook_url: "docs/ops/RUNBOOK.md"
+      - alert: IpamPoolSobre90
+        expr: "ipam_pool_utilizacion_ratio > 0.9"
+        for: 5m
+        labels:
+          severidad: critical
+          servicio: ipam
+        annotations:
+          summary: "El pool {{ $labels.pool }} está sobre el 90 %: quedan pocos rangos."
+          description: "Casi sin espacio. Las nuevas reservas de ese pool empezarán a fallar con 409 `sin_espacio`. Ver `docs/ops/RUNBOOK.md` → «Un pool está lleno»."
+          runbook_url: "docs/ops/RUNBOOK.md"
+      - alert: IpamBaseDeDatosCaida
+        expr: "ipam_db_up == 0"
+        for: 2m
+        labels:
+          severidad: critical
+          servicio: ipam
+        annotations:
+          summary: "El IPAM no logra consultar su base de datos."
+          description: "El servicio sigue vivo pero `/readyz` da 503. Ver `docs/ops/RUNBOOK.md` → «La base de datos está caída»."
+          runbook_url: "docs/ops/RUNBOOK.md"
+      - alert: IpamBarredorDetenido
+        expr: "time() - ipam_barredor_ultima_ejecucion_timestamp > 300"
+        for: 1m
+        labels:
+          severidad: warning
+          servicio: ipam
+        annotations:
+          summary: "Ninguna réplica ejecuta el barredor hace más de 5 minutos."
+          description: "Solo tiene sentido si el servicio está SIEMPRE encendido (no en planes gratuitos que duermen). La corrección no depende del barredor (la expiración es perezosa), pero las reservas vencidas no se limpian. Ver `docs/ops/RUNBOOK.md` → «El barredor no corre»."
+          runbook_url: "docs/ops/RUNBOOK.md"
+      - alert: IpamPicoDe401
+        expr: "sum(rate(ipam_http_requests_total{codigo=\"401\"}[5m])) > 0.5"
+        for: 5m
+        labels:
+          severidad: warning
+          servicio: ipam
+        annotations:
+          summary: "Más de 0,5 respuestas 401 por segundo sostenidas."
+          description: "Puede ser un token vencido o revocado en un agente, o un intento de fuerza bruta. Revisa la auditoría (`token_rechazado`). Ver `docs/ops/RUNBOOK.md` → «Hay muchos 401»."
+          runbook_url: "docs/ops/RUNBOOK.md"
+      - alert: IpamPicoDe429
+        expr: "sum(rate(ipam_http_requests_total{codigo=\"429\"}[5m])) > 0.2"
+        for: 5m
+        labels:
+          severidad: warning
+          servicio: ipam
+        annotations:
+          summary: "Se están rechazando peticiones por límite o por cuota de reservas."
+          description: "Un agente con un bucle roto o una cuota demasiado baja. Ver `docs/ops/RUNBOOK.md` → «Hay muchos 429»."
+          runbook_url: "docs/ops/RUNBOOK.md"
+      - alert: IpamTokenPorVencer
+        expr: "ipam_tokens_por_vencer > 0"
+        for: 60m
+        labels:
+          severidad: warning
+          servicio: ipam
+        annotations:
+          summary: "Hay {{ $value }} token(s) de servicio por vencer."
+          description: "Rota el token: crea uno nuevo, actualiza el agente y revoca el anterior (ver `docs/ACCESO-Y-SEGURIDAD.md`)."
+          runbook_url: "docs/ops/RUNBOOK.md"
+      - alert: IpamTasaDe5xx
+        expr: "sum(rate(ipam_http_requests_total{codigo=~\"5..\"}[5m])) / sum(rate(ipam_http_requests_total[5m])) > 0.05 and sum(rate(ipam_http_requests_total[5m])) > 0.05"
+        for: 5m
+        labels:
+          severidad: critical
+          servicio: ipam
+        annotations:
+          summary: "Más del 5 % de las peticiones terminan en error 5xx."
+          description: "Errores internos. Busca el `request_id` de una respuesta 500 en los logs. Ver `docs/ops/RUNBOOK.md`."
+          runbook_url: "docs/ops/RUNBOOK.md"

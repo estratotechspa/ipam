@@ -1,0 +1,31 @@
+{
+  "displayName": "IPAM · pool sobre 80 % de utilización",
+  "documentation": {
+    "content": "Un pool se está llenando. Revisa `docs/ops/RUNBOOK.md` → «Un pool está lleno»: libera rangos que ya no se usen, revisa reservas colgadas o planifica un pool nuevo.\n\nMétrica de origen: expresión PromQL `ipam_pool_utilizacion_ratio > 0.8`.",
+    "mimeType": "text/markdown"
+  },
+  "userLabels": {
+    "servicio": "ipam",
+    "severidad": "warning"
+  },
+  "conditions": [
+    {
+      "displayName": "IPAM · pool sobre 80 % de utilización",
+      "conditionPrometheusQueryLanguage": {
+        "query": "ipam_pool_utilizacion_ratio > 0.8",
+        "duration": "600s",
+        "evaluationInterval": "60s",
+        "alertRule": "IpamPoolSobre80",
+        "labels": {
+          "severidad": "warning"
+        }
+      }
+    }
+  ],
+  "combiner": "OR",
+  "enabled": true,
+  "alertStrategy": {
+    "autoClose": "1800s"
+  },
+  "notificationChannels": []
+}

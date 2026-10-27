@@ -1,0 +1,11 @@
+# Hallazgos de Trivy aceptados a propósito, cada uno con su justificación (revisar en cada actualización de Trivy).
+misconfigurations:
+  - id: KSV118
+    paths: ["despliegue/cloud-run/job-migrar.yaml"]
+    statement: "Es un manifiesto de Cloud Run (Knative), no un Pod de Kubernetes: Cloud Run no usa securityContext; la imagen ya corre como usuario no root (65532)."
+  - id: AVD-GCP-0015
+    paths: ["despliegue/ejemplos-iac/gcp/main.tf"]
+    statement: "La instancia fuerza TLS con `ssl_mode = ENCRYPTED_ONLY`, el atributo vigente; la regla de Trivy solo reconoce el antiguo `require_ssl` (obsoleto)."
+  - id: DS002
+    paths: ["mvp/postgres/Dockerfile"]
+    statement: "Imagen derivada de la oficial de PostgreSQL: su entrypoint arranca como root solo para preparar el directorio de datos y luego baja a `postgres` (patrón oficial). Es de respaldos con pgBackRest, no de la app."

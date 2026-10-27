@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>API del IPAM · documentación y pruebas</title>
+<link rel="stylesheet" href="/vendor/swagger-ui/swagger-ui.css">
+<link rel="stylesheet" href="/api.css">
+</head>
+<body>
+<header class="api-top">
+  <b>API del IPAM</b>
+  <span>Contrato OpenAPI 3.1 · prueba cada llamada con «Try it out»</span>
+  <a href="/">← Volver al IPAM</a>
+</header>
+<main>
+  <section class="api-ayuda">
+    <p><b>Cómo probar:</b> con la sesión abierta en el IPAM, las llamadas de lectura funcionan directo. Para probar como lo hará un <b>agente</b>, crea un token (pestaña <b>Tokens</b>, rol <code>agente</code>), pulsa <b>Authorize</b> y pega el token en <code>bearerToken</code>. Las escrituras (reservar, registrar IPs…) modifican datos reales: usa rangos y nombres de prueba.</p>
+    <p>Guía paso a paso: <code>docs/API-Y-AGENTES.md</code> · Contrato en JSON: <a href="/api/v1/openapi.json">/api/v1/openapi.json</a></p>
+  </section>
+  <div id="swagger"></div>
+</main>
+<script src="/vendor/swagger-ui/swagger-ui-bundle.js"></script>
+<script src="/api.js"></script>
+</body>
+</html>

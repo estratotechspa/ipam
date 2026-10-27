@@ -1,0 +1,69 @@
+# IPAM en local: PostgreSQL + migración de esquema (paso previo) + API.
+# Autocontenido: construye la imagen desde ../../mvp.   Uso:   cp .env.example .env && docker compose up --build
+# Los datos de ejemplo (FICTICIOS) se cargan con:      docker compose --profile semilla run --rm semilla
+name: ipam
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ipam
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-ipam-dev}
+      POSTGRES_DB: ipam
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ipam -d ipam"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  # Paso previo: aplica el esquema (idempotente). La app NO toca el esquema al arrancar.
+  migrar:
+    build: {context: ../../mvp}
+    command: ["node", "src/cli/migrar.js"]
+    depends_on: {db: {condition: service_healthy}}
+    environment:
+      DATABASE_URL: postgres://ipam:${DB_PASSWORD:-ipam-dev}@db:5432/ipam
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: "no"
+
+  semilla:
+    image: postgres:16-alpine
+    profiles: ["semilla"]
+    depends_on: {migrar: {condition: service_completed_successfully}}
+    environment: {PGPASSWORD: "${DB_PASSWORD:-ipam-dev}"}
+    volumes: ["../../mvp/db/seed.sql:/seed.sql:ro"]
+    command: ["psql", "-h", "db", "-U", "ipam", "-d", "ipam", "-v", "ON_ERROR_STOP=1", "-f", "/seed.sql"]
+
+  api:
+    build: {context: ../../mvp}
+    depends_on:
+      db: {condition: service_healthy}
+      migrar: {condition: service_completed_successfully}
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://ipam:${DB_PASSWORD:-ipam-dev}@db:5432/ipam
+      # Acceso abierto: SOLO para desarrollo local. Para algo real, define APP_USER/APP_PASS (hash scrypt) u OIDC_* en .env.
+      ALLOW_ANONYMOUS: ${ALLOW_ANONYMOUS:-true}
+      APP_USER: ${APP_USER:-}
+      APP_PASS: ${APP_PASS:-}
+      JIRA_WEBHOOK_SECRET: ${JIRA_WEBHOOK_SECRET:-dev-secret-cambiar}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "${PORT:-8080}:8080"
+    healthcheck:
+      # La imagen no trae curl ni wget: se usa el propio Node.
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/readyz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+volumes:
+  pgdata:

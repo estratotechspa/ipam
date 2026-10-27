@@ -1,0 +1,24 @@
+# Dueños del código. Este archivo es válido tanto en GitHub como en GitLab (raíz del repositorio).
+# Cambia @estratotechspa por los usuarios o grupos reales de quien debe revisar cada cosa
+# (en GitLab: @usuario o @grupo; en GitHub: @usuario, @organizacion/equipo).
+# La regla más específica (la última que coincide) manda.
+
+*                              @estratotechspa
+
+# Reglas de negocio y esquema de datos: cambios aquí exigen revisión de plataforma.
+/mvp/src/dominio/              @estratotechspa
+/mvp/src/aplicacion/           @estratotechspa
+/mvp/db/                       @estratotechspa
+/mvp/chart/                    @estratotechspa
+
+# Seguridad, CI/CD y despliegue.
+/mvp/src/adaptadores/auth/     @estratotechspa
+/mvp/src/adaptadores/eventos/  @estratotechspa
+/.github/                      @estratotechspa
+/.gitlab-ci.yml                @estratotechspa
+/.gitlab/                      @estratotechspa
+/scripts/                      @estratotechspa
+/despliegue/                   @estratotechspa
+/SECURITY.md                   @estratotechspa
+/docs/MODELO-DE-AMENAZAS.md    @estratotechspa
+/CODEOWNERS                    @estratotechspa

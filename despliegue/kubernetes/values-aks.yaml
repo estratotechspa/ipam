@@ -1,0 +1,31 @@
+# Ajustes para Azure Kubernetes Service (AKS). NO PROBADO en un clúster real: revisa cada valor antes de usarlo.
+# Uso:  helm upgrade --install ipam ../../mvp/chart/ipam -n ipam -f values-aks.yaml --set image.repository=REGISTRO.azurecr.io/ipam
+image:
+  repository: REGISTRO.azurecr.io/ipam                    # Azure Container Registry (o el registry que uses)
+
+# Workload Identity: el pod usa una identidad administrada sin llaves. Además hay que etiquetar el pod con
+# azure.workload.identity/use: "true" (según la versión de tu clúster; revisa la documentación de Azure).
+serviceAccount:
+  annotations:
+    azure.workload.identity/client-id: 00000000-0000-0000-0000-000000000000     # FICTICIO
+
+# Base gestionada (Azure Database for PostgreSQL – servidor flexible). Conexión directa (puerto 5432).
+postgres:
+  enabled: false
+config:
+  trustProxy: "1"                  # verifícalo con tu controlador de ingress
+  publicUrl: https://ipam.ejemplo.interno
+secrets:
+  existingSecret: ipam-secrets     # sincronizado desde Azure Key Vault (driver CSI o External Secrets)
+  asFiles: true
+
+ingress:
+  enabled: true
+  className: webapprouting.kubernetes.azure.com     # complemento de enrutamiento de aplicaciones; o azure-application-gateway
+  host: ipam.ejemplo.interno
+  annotations: {}
+networkPolicy:
+  enabled: true
+  egressExtra:
+    - to: [{ipBlock: {cidr: 10.250.0.0/24}}]     # FICTICIO: rango de la subred del servidor PostgreSQL
+      ports: [{port: 5432, protocol: TCP}]

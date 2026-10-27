@@ -1,0 +1,18 @@
+# EJEMPLO 1 · proyecto nuevo de GCP en dev, con un clúster GKE.
+# Contrato PROPUESTO (pendiente de validar con el repo cd-agents). Todos los rangos y nombres son FICTICIOS.
+# El agente de redes toma esta sección, pide un rango por cada entrada al IPAM y escribe el resultado en las variables de OpenTofu.
+redes:
+  ipam_reservations:
+    - subnet: gke-principal          # nombre lógico: sn-<proyecto>-<ambiente>-<subnet>
+      region: us-central1
+      ambiente: dev
+      primary:                       # rango principal de la subred: nodos del clúster
+        tipo: Nodos
+        mascara: 24
+      secondary_ranges:              # rangos secundarios de la subred
+        - name: pods
+          tipo: Pods
+          mascara: 20
+        - name: servicios
+          tipo: Servicios
+          mascara: 24

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", ":pinAllExceptPeerDependencies", "helpers:pinGitHubActionDigests", "docker:pinDigests"],
+  "description": "Renovate funciona igual en GitHub y GitLab (por eso reemplaza a Dependabot). Fija por digest o commit y agrupa las actualizaciones menores.",
+  "timezone": "America/Santiago",
+  "schedule": ["before 6am on monday"],
+  "labels": ["dependencias"],
+  "semanticCommits": "enabled",
+  "commitMessagePrefix": "chore(deps):",
+  "packageRules": [
+    {"matchUpdateTypes": ["minor", "patch"], "matchManagers": ["npm"], "groupName": "dependencias npm (menores)"},
+    {"matchManagers": ["github-actions", "gitlab-ci"], "groupName": "acciones y plantillas de CI"},
+    {"matchPackageNames": ["express", "pg", "openid-client"], "reviewers": ["team:plataforma"], "description": "Dependencias críticas: revisión humana"}
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Imágenes de escáneres y de PostgreSQL fijadas por digest en scripts/ci/*.sh",
+      "managerFilePatterns": ["/^scripts/ci/.*\\.sh$/"],
+      "matchStrings": ["(?<depName>[a-z0-9./_-]+/?[a-z0-9._-]+):(?<currentValue>[0-9][A-Za-z0-9._-]*)@(?<currentDigest>sha256:[0-9a-f]{64})"],
+      "datasourceTemplate": "docker"
+    }
+  ],
+  "vulnerabilityAlerts": {"labels": ["seguridad"], "schedule": ["at any time"]}
+}

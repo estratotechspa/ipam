@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": false,
+    "noImplicitAny": false,
+    "skipLibCheck": true,
+    "types": [
+      "node"
+    ],
+    "resolveJsonModule": true,
+    "strictNullChecks": true
+  },
+  "include": [
+    "src/dominio/**/*.js",
+    "src/aplicacion/**/*.js"
+  ],
+  "exclude": [
+    "**/*.test.js"
+  ]
+}

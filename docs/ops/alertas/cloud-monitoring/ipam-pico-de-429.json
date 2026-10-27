@@ -1,0 +1,31 @@
+{
+  "displayName": "IPAM · pico de respuestas 429 (límite excedido)",
+  "documentation": {
+    "content": "Un agente con un bucle roto o una cuota demasiado baja. Ver `docs/ops/RUNBOOK.md` → «Hay muchos 429».\n\nMétrica de origen: expresión PromQL `sum(rate(ipam_http_requests_total{codigo=\"429\"}[5m])) > 0.2`.",
+    "mimeType": "text/markdown"
+  },
+  "userLabels": {
+    "servicio": "ipam",
+    "severidad": "warning"
+  },
+  "conditions": [
+    {
+      "displayName": "IPAM · pico de respuestas 429 (límite excedido)",
+      "conditionPrometheusQueryLanguage": {
+        "query": "sum(rate(ipam_http_requests_total{codigo=\"429\"}[5m])) > 0.2",
+        "duration": "300s",
+        "evaluationInterval": "60s",
+        "alertRule": "IpamPicoDe429",
+        "labels": {
+          "severidad": "warning"
+        }
+      }
+    }
+  ],
+  "combiner": "OR",
+  "enabled": true,
+  "alertStrategy": {
+    "autoClose": "1800s"
+  },
+  "notificationChannels": []
+}

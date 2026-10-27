@@ -6,6 +6,9 @@ metadata:
 data:
   PORT: {{ .Values.config.port | quote }}
   {{- $o := .Values.auth.oidc }}
+  {{- if not (or $o.issuer .Values.secrets.appUser .Values.secrets.existingSecret .Values.auth.allowAnonymous) }}
+  {{- fail "Sin autenticación configurada: define auth.oidc.issuer, secrets.appUser (modo Basic), secrets.existingSecret o, SOLO para demos, auth.allowAnonymous=true" }}
+  {{- end }}
   {{- $pub := .Values.config.publicUrl }}
   {{- if and (not $pub) .Values.ingress.enabled }}{{ $pub = printf "%s://%s" (ternary "https" "http" (gt (len .Values.ingress.tls) 0)) .Values.ingress.host }}{{ end }}
   {{- if and $o.issuer (not $pub) }}{{ fail "Con auth.oidc.issuer debes indicar config.publicUrl (o activar el ingress con host)" }}{{ end }}
@@ -16,6 +19,30 @@ data:
   TRUST_PROXY: {{ . | quote }}
   {{- end }}
   HSTS: {{ .Values.config.hsts | quote }}
+  LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  ROL: {{ .Values.config.role | quote }}
+  DATABASE_SCHEMA: {{ .Values.config.databaseSchema | quote }}
+  MIGRAR_AL_ARRANCAR: {{ .Values.config.migrarAlArrancar | quote }}
+  RETENCION_DIAS: {{ .Values.config.retencionDias | quote }}
+  JIRA_REINTENTOS: {{ .Values.config.jiraReintentos | quote }}
+  {{- if .Values.config.enableSimulador }}
+  ENABLE_SIMULADOR: "true"
+  {{- end }}
+  ALLOW_ANONYMOUS: {{ .Values.auth.allowAnonymous | quote }}
+  AUTH_LOCAL: {{ .Values.auth.local | quote }}
+  SESSION_REVALIDAR_SEG: {{ .Values.auth.revalidateSeconds | quote }}
+  RATE_LIMIT_POR_MINUTO: {{ .Values.limites.porMinuto | quote }}
+  RATE_LIMIT_ESCRITURA_POR_MINUTO: {{ .Values.limites.escrituraPorMinuto | quote }}
+  RATE_LIMIT_IP_POR_MINUTO: {{ .Values.limites.ipPorMinuto | quote }}
+  RATE_LIMIT_AUTH_FALLOS_POR_MINUTO: {{ .Values.limites.authFallosPorMinuto | quote }}
+  {{- with .Values.metrics.allowCidrs }}
+  METRICS_ALLOW_CIDRS: {{ . | quote }}
+  {{- end }}
+  CUOTA_RESERVAS_POR_TOKEN: {{ .Values.limites.cuotaReservasPorToken | quote }}
+  RESERVA_TTL_HORAS: {{ .Values.config.reservaTtlHoras | quote }}
+  RESERVA_TTL_MAX_HORAS: {{ .Values.config.reservaTtlMaxHoras | quote }}
+  CONFIRMACION_EXIGE_APROBADOR: {{ .Values.config.confirmacionExigeAprobador | quote }}
+  BARREDOR_INTERVALO_SEGUNDOS: {{ .Values.config.barredorIntervaloSegundos | quote }}
   {{- range $k, $val := dict "BRAND_NAME" .Values.branding.name "BRAND_SUBTITLE" .Values.branding.subtitle "BRAND_FOOTER" .Values.branding.footer "BRAND_COLOR" .Values.branding.color "BRAND_COLOR_TOP" .Values.branding.colorTop "BRAND_COLOR_ACCENT" .Values.branding.colorAccent }}
   {{- if $val }}
   {{ $k }}: {{ $val | quote }}

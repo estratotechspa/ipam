@@ -101,3 +101,30 @@ networkPolicy:
 2. En la POC: *Respaldo JSON* (admin). En el cliente: `POST /api/importar` con ese archivo.
 3. Registrar la nueva URL de retorno en su proveedor OIDC y la del webhook en su Jira.
 4. Apagar la POC. Nada de EstratoTech queda en el código ni en la imagen: solo en los valores de la POC.
+
+## 4 · Operación de la aplicación (estabilidad y datos)
+
+- **Jira en segundo plano:** al asignar un segmento (o aprobar una reserva que vino de Jira), la respuesta no espera a Jira: la sincronización corre aparte con `JIRA_REINTENTOS` (3) intentos separados por `JIRA_REINTENTO_MS` × n (2 s). El resultado queda en `eventos` (`jira_ticket_creado`, `jira_ticket_actualizado` o `jira_error`, con `intentos`) y se ve en la pestaña Jira. Mientras tanto la asignación lleva su ticket `NET-xxx` interno, que se reemplaza por la clave de Jira al crearse. Un reintento tras un fallo parcial puede duplicar el comentario en Jira. Al apagar el servicio (SIGTERM) se espera a que terminen las sincronizaciones pendientes dentro de `APAGADO_TIMEOUT_MS`.
+- **Lista de asignaciones paginada:** `GET /api/v1/asignaciones` devuelve como máximo 1000 filas por llamada (`limit`, `offset`) y el total en `X-Total-Count`; admite `pool`, `ambiente`, `q` y `orden`/`dir`. Quien consuma la API con más de 1000 asignaciones debe paginar (antes recibía todo sin límite). La interfaz junta todas las páginas por su cuenta.
+- **Excel por streaming:** `GET /api/exportar.xlsx` lee la base por lotes de 1000 dentro de una transacción de solo lectura con instantánea consistente y escribe cada fila al llegar: la memoria no crece con el tamaño de la base. Incluye todas las IPs fijas (antes se cortaba en 2000). Si falla a mitad, la conexión se corta y el archivo queda incompleto.
+- **Retención de eventos:** `npm run purgar` borra de `eventos` lo anterior a `RETENCION_DIAS` (365; `0` = conservar todo), por lotes de 5000; `-- --simular` cuenta sin borrar. **Se ejecuta con el usuario migrador** (`DATABASE_URL_MIGRACION`): la aplicación no puede borrar eventos (el rol `ipam_app` no tiene DELETE). Para programarlo en Kubernetes, un CronJob con la misma imagen:
+  ```yaml
+  apiVersion: batch/v1
+  kind: CronJob
+  metadata: {name: ipam-purgar}
+  spec:
+    schedule: "0 3 * * *"
+    jobTemplate:
+      spec:
+        template:
+          spec:
+            restartPolicy: OnFailure
+            containers:
+              - name: purgar
+                image: <la misma imagen del IPAM>
+                command: ["node", "src/cli/purgar.js"]
+                envFrom: [{configMapRef: {name: ipam-ipam-config}}]   # trae RETENCION_DIAS
+                env: [{name: DATABASE_URL_MIGRACION, valueFrom: {secretKeyRef: {name: ipam-migrador, key: DATABASE_URL_MIGRACION}}}]
+  ```
+  **La auditoría no se purga:** es de solo inserción incluso para el dueño de la tabla (disparador `trg_auditoria_solo_insercion`) para que nadie pueda borrar el rastro de lo que se hizo. Si una política exige acotarla, hay que archivarla fuera (exportarla a almacenamiento frío) y decidirlo caso por caso; no se hace desde la aplicación.
+

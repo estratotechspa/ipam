@@ -1,0 +1,22 @@
+# Aplica las migraciones al POC (Supabase). SOLO manual (workflow_dispatch) y protegido por el ambiente «poc»: configura en
+# GitHub revisores requeridos para ese ambiente. El secreto DATABASE_URL_MIGRACION vive como secreto del AMBIENTE «poc».
+name: Migrar POC
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: migrar-poc
+  cancel-in-progress: false
+jobs:
+  migrar:
+    runs-on: ubuntu-latest
+    environment: poc
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: {node-version: 22}
+      - run: scripts/ci/migrar.sh
+        env:
+          DATABASE_URL_MIGRACION: ${{ secrets.DATABASE_URL_MIGRACION }}
+          DATABASE_SCHEMA: ipam

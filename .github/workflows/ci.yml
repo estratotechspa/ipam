@@ -1,19 +1,51 @@
+# CI de GitHub: un envoltorio FINO. La lógica vive en el Makefile y en scripts/ci/ (los mismos que usa .gitlab-ci.yml y tu computador).
+# Mismos trabajos y mismo orden que GitLab: validar → probar → escanear → construir. Acciones fijadas por commit (las actualiza Renovate).
 name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: ['**']
 permissions:
   contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  # GitHub no entrega la rama por defecto como variable: se pasa aquí y scripts/ci/entorno.sh la traduce a IPAM_RAMA_POR_DEFECTO.
+  IPAM_RAMA_POR_DEFECTO: ${{ github.event.repository.default_branch }}
+  HUSKY: '0'
 
 jobs:
-  pruebas:
-    name: Pruebas (unitarias, integración, e2e)
+  validar:
+    name: validar · lint, tipos, portabilidad, chart, alertas
     runs-on: ubuntu-latest
-    defaults: {run: {working-directory: mvp}}
+    if: github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: {node-version: 22, cache: npm, cache-dependency-path: mvp/package-lock.json}
+      - run: make deps
+      - run: make portabilidad
+      - run: make docs
+      - run: make lint
+      - run: make helm-check
+      - run: make alertas
+
+  probar:
+    name: probar · PostgreSQL ${{ matrix.pg }}
+    runs-on: ubuntu-latest
+    needs: validar
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {pg: 14, imagen: 'postgres:14-alpine@sha256:e73790e2702b489f664605acbec5f5da6981bc7e432f0489e52a53c9d1e7467f'}
+          - {pg: 15, imagen: 'postgres:15-alpine@sha256:d2c2ced0372e855e4c257a9e9b5725f403847c01cfb64facbf2b21dbdadb2d74'}
+          - {pg: 16, imagen: 'postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea'}
+          - {pg: 17, imagen: 'postgres:17-alpine@sha256:1bcc18d81671b02906296aad470ec9778a6b71016ce953092024b680bad007b0'}
     services:
       postgres:
-        image: postgres:16-alpine
+        image: ${{ matrix.imagen }}
         env: {POSTGRES_USER: ipam, POSTGRES_PASSWORD: ci, POSTGRES_DB: ipam}
         ports: ['5432:5432']
         options: >-
@@ -21,92 +53,60 @@ jobs:
     env:
       DATABASE_URL: postgres://ipam:ci@127.0.0.1:5432/ipam
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: {node-version: 22, cache: npm, cache-dependency-path: mvp/package-lock.json}
-      - run: npm ci
-      - name: Esquema y datos de ejemplo
-        run: |
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/schema.sql
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/seed.sql
-      - name: Unitarias + integración
-        run: npm test
-      - name: Navegador (Playwright)
-        run: |
-          npx playwright install --with-deps chromium
-          npm run test:e2e
-      - name: Informe de Playwright
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with: {name: playwright-report, path: mvp/test-results, if-no-files-found: ignore}
+      - run: make deps
+      - run: make test
+      - run: make esquema
+      - if: matrix.pg == 16
+        run: make cobertura
 
-  chart:
-    name: Chart de Helm
+  e2e:
+    name: probar · navegador (Playwright)
     runs-on: ubuntu-latest
+    needs: validar
+    services:
+      postgres:
+        image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+        env: {POSTGRES_USER: ipam, POSTGRES_PASSWORD: ci, POSTGRES_DB: ipam}
+        ports: ['5432:5432']
+        options: --health-cmd "pg_isready -U ipam -d ipam" --health-interval 3s --health-timeout 3s --health-retries 20
+    env:
+      DATABASE_URL: postgres://ipam:ci@127.0.0.1:5432/ipam
     steps:
-      - uses: actions/checkout@v4
-      - uses: azure/setup-helm@v5
-      - name: El esquema y los datos del chart son los mismos que los de db/
-        run: |
-          diff mvp/db/schema.sql mvp/chart/ipam/files/schema.sql
-          diff mvp/db/seed.sql mvp/chart/ipam/files/seed.sql
-      - run: helm lint mvp/chart/ipam --set secrets.existingSecret=x
-      - name: Render con respaldos activados
-        run: helm template ipam mvp/chart/ipam --set secrets.existingSecret=x --set postgres.backup.enabled=true --set postgres.backup.repo.gcs.bucket=b > /dev/null
-      - name: Render con OIDC activado
-        run: helm template ipam mvp/chart/ipam --set auth.oidc.issuer=https://accounts.google.com --set auth.oidc.clientId=x --set secrets.oidcClientSecret=x --set config.publicUrl=https://ipam.example.com > /dev/null
-      - run: helm template ipam mvp/chart/ipam --set secrets.existingSecret=x --set ingress.enabled=true > /tmp/render.yaml
-      - name: kube-linter
-        uses: stackrox/kube-linter-action@v1
-        with: {directory: /tmp/render.yaml, config: .kube-linter.yaml}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: {node-version: 22, cache: npm, cache-dependency-path: mvp/package-lock.json}
+      - run: make deps
+      - run: make test-e2e
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with: {name: playwright-resultados, path: mvp/test-results, if-no-files-found: ignore}
 
-  postgres-imagen:
-    name: Imagen de PostgreSQL con pgBackRest
+  escanear:
+    name: escanear · secretos, SAST, dependencias, IaC, SBOM
     runs-on: ubuntu-latest
+    needs: validar
     steps:
-      - uses: actions/checkout@v4
-      - uses: hadolint/hadolint-action@v3.5.0
-        with: {dockerfile: mvp/postgres/Dockerfile, failure-threshold: warning}
-      - run: sh -n mvp/postgres/respaldo.sh && sh -n mvp/postgres/prueba-restauracion.sh
-      - uses: docker/build-push-action@v7
-        with: {context: mvp/postgres, load: true, tags: 'ipam-postgres:ci'}
-      - name: Respaldo completo, incremental y restauración con la imagen
-        run: |
-          docker run -d --name pg -e POSTGRES_USER=ipam -e POSTGRES_PASSWORD=ci -e POSTGRES_DB=ipam \
-            -v "$PWD/mvp/db/schema.sql:/docker-entrypoint-initdb.d/01.sql:ro" -v "$PWD/mvp/db/seed.sql:/docker-entrypoint-initdb.d/02.sql:ro" \
-            ipam-postgres:ci postgres -c archive_mode=on -c wal_level=replica -c 'archive_command=pgbackrest --stanza=ipam archive-push %p'
-          docker exec pg sh -c 'mkdir -p /etc/pgbackrest /repo /tmp/pgbackrest; chown postgres /repo /tmp/pgbackrest; printf "[global]\nrepo1-type=posix\nrepo1-path=/repo\nstart-fast=y\nlock-path=/tmp/pgbackrest/lock\n[ipam]\npg1-path=/var/lib/postgresql/data\npg1-socket-path=/var/run/postgresql\npg1-user=ipam\n" > /etc/pgbackrest/pgbackrest.conf'
-          until docker exec pg pg_isready -U ipam -d ipam -h /var/run/postgresql >/dev/null 2>&1; do sleep 2; done; sleep 3
-          docker exec -u postgres pg pgbackrest --stanza=ipam stanza-create
-          docker exec -u postgres pg pgbackrest --stanza=ipam --type=full backup
-          docker exec -u postgres pg psql -U ipam -d ipam -qAc "insert into asignaciones (pool_id,cidr,vpc,solicitante,ticket) values ('onprem-lan-dev','192.168.90.0/24','ci','ci','NET-CI'); select pg_switch_wal()"
-          docker exec -u postgres pg pgbackrest --stanza=ipam --type=incr backup
-          docker exec -u postgres -e POSTGRES_USER=ipam -e POSTGRES_DB=ipam pg prueba-restauracion.sh | tee /dev/stderr | grep -q 'OK:'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: {fetch-depth: 0}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: {node-version: 22, cache: npm, cache-dependency-path: mvp/package-lock.json}
+      - run: make deps
+      - run: make scan
+      - run: make sbom
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with: {name: sbom, path: sbom/ipam.cdx.json}
 
-  dockerfile:
-    name: Dockerfile e imagen
+  construir:
+    name: construir · imagen multi-arquitectura, Trivy y docker compose
     runs-on: ubuntu-latest
+    needs: [probar, escanear]
     steps:
-      - uses: actions/checkout@v4
-      - uses: hadolint/hadolint-action@v3.5.0
-        with: {dockerfile: mvp/Dockerfile, failure-threshold: warning}
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v7
-        with: {context: mvp, load: true, tags: 'ipam:ci'}
-      - name: Trivy (CRITICAL/HIGH con parche disponible)
-        # Se ejecuta con la imagen oficial de Trivy: la instalación del binario por trivy-action falló en el runner.
-        run: |
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$HOME/.cache/trivy:/root/.cache" \
-            aquasec/trivy:0.58.1 image --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 ipam:ci
-      - name: Prueba de humo de la imagen (solo lectura, sin capacidades)
-        run: |
-          docker network create ipam-ci
-          docker run -d --name db --network ipam-ci -e POSTGRES_USER=ipam -e POSTGRES_PASSWORD=ci -e POSTGRES_DB=ipam \
-            -v "$PWD/mvp/db/schema.sql:/docker-entrypoint-initdb.d/01.sql:ro" -v "$PWD/mvp/db/seed.sql:/docker-entrypoint-initdb.d/02.sql:ro" postgres:16-alpine
-          until docker exec db pg_isready -U ipam -d ipam >/dev/null 2>&1; do sleep 2; done; sleep 3
-          docker run -d --name app --network ipam-ci --read-only --cap-drop ALL --security-opt no-new-privileges -p 8080:8080 \
-            -e DATABASE_URL=postgres://ipam:ci@db:5432/ipam ipam:ci
-          for i in $(seq 1 20); do curl -fs localhost:8080/api/health && break; sleep 1; done
-          curl -fs localhost:8080/api/resumen
-          curl -fs -o /dev/null -w "xlsx %{http_code}\n" localhost:8080/api/exportar.xlsx
-          docker logs app
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - run: make build
+      - run: make build-multiarch
+      - run: make compose-check

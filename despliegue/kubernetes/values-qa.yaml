@@ -1,0 +1,15 @@
+# Ambiente QA (ejemplo). Se combina con el ajuste de tu nube:  -f values-gke.yaml -f values-qa.yaml
+replicaCount: 2
+config:
+  publicUrl: https://ipam-qa.ejemplo.interno
+  hsts: true
+  logLevel: info
+secrets:
+  existingSecret: ipam-secrets
+metrics:
+  enabled: true
+networkPolicy:
+  enabled: true
+auth:
+  oidc:
+    defaultRole: lector
