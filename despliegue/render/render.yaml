@@ -1,0 +1,44 @@
+# Render Blueprint del POC del IPAM: UN servicio web desde la imagen del Dockerfile, con la base de datos en Supabase.
+# Los valores marcados «sync: false» son SECRETOS: Render los pide en su panel y NUNCA se escriben en este archivo.
+# Plan «free» (verifica límites y condiciones vigentes en la página oficial de Render). Para pasar a un plan de pago:
+# cambia `plan: free` por el plan que elijas (p. ej. `starter`); no hace falta tocar nada más. Para salir de Render por
+# completo, el mismo Dockerfile corre en cualquier plataforma de contenedores (ver docs/PORTABILIDAD.md).
+services:
+  - type: web
+    name: ipam-poc
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./mvp/Dockerfile
+    dockerContext: ./mvp
+    healthCheckPath: /healthz
+    autoDeploy: false          # los despliegues los dispara una persona (o el CI), no cada commit
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: ROL
+        value: todos
+      - key: DATABASE_SCHEMA
+        value: ipam
+      - key: DATABASE_URL        # postgres://ipam_app.<ref>:<clave>@<host-del-pooler>:5432/postgres?sslmode=require  (modo SESIÓN, puerto 5432; NUNCA 6543)
+        sync: false
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: HSTS
+        value: "true"
+      - key: PUBLIC_URL          # la URL pública que Render asigne (https://ipam-poc-xxxx.onrender.com)
+        sync: false
+      - key: APP_USER
+        value: admin
+      - key: APP_PASS            # hash scrypt (node mvp/scripts/hash-password.js), NO la contraseña en texto plano
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: LOG_LEVEL
+        value: info
+      - key: DB_POOL_MAX
+        value: "5"
+      - key: BRAND_NAME
+        value: IPAM POC
+      - key: METRICS_TOKEN
+        sync: false

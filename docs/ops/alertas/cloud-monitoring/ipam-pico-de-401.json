@@ -1,0 +1,31 @@
+{
+  "displayName": "IPAM · pico de respuestas 401 (no autenticado)",
+  "documentation": {
+    "content": "Puede ser un token vencido o revocado en un agente, o un intento de fuerza bruta. Revisa la auditoría (`token_rechazado`). Ver `docs/ops/RUNBOOK.md` → «Hay muchos 401».\n\nMétrica de origen: expresión PromQL `sum(rate(ipam_http_requests_total{codigo=\"401\"}[5m])) > 0.5`.",
+    "mimeType": "text/markdown"
+  },
+  "userLabels": {
+    "servicio": "ipam",
+    "severidad": "warning"
+  },
+  "conditions": [
+    {
+      "displayName": "IPAM · pico de respuestas 401 (no autenticado)",
+      "conditionPrometheusQueryLanguage": {
+        "query": "sum(rate(ipam_http_requests_total{codigo=\"401\"}[5m])) > 0.5",
+        "duration": "300s",
+        "evaluationInterval": "60s",
+        "alertRule": "IpamPicoDe401",
+        "labels": {
+          "severidad": "warning"
+        }
+      }
+    }
+  ],
+  "combiner": "OR",
+  "enabled": true,
+  "alertStrategy": {
+    "autoClose": "1800s"
+  },
+  "notificationChannels": []
+}

@@ -1,0 +1,31 @@
+{
+  "displayName": "IPAM · hay tokens que vencen en menos de 7 días",
+  "documentation": {
+    "content": "Rota el token: crea uno nuevo, actualiza el agente y revoca el anterior (ver `docs/ACCESO-Y-SEGURIDAD.md`).\n\nMétrica de origen: expresión PromQL `ipam_tokens_por_vencer > 0`.",
+    "mimeType": "text/markdown"
+  },
+  "userLabels": {
+    "servicio": "ipam",
+    "severidad": "warning"
+  },
+  "conditions": [
+    {
+      "displayName": "IPAM · hay tokens que vencen en menos de 7 días",
+      "conditionPrometheusQueryLanguage": {
+        "query": "ipam_tokens_por_vencer > 0",
+        "duration": "3600s",
+        "evaluationInterval": "60s",
+        "alertRule": "IpamTokenPorVencer",
+        "labels": {
+          "severidad": "warning"
+        }
+      }
+    }
+  ],
+  "combiner": "OR",
+  "enabled": true,
+  "alertStrategy": {
+    "autoClose": "1800s"
+  },
+  "notificationChannels": []
+}

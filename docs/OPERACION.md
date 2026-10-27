@@ -102,19 +102,29 @@ networkPolicy:
 3. Registrar la nueva URL de retorno en su proveedor OIDC y la del webhook en su Jira.
 4. Apagar la POC. Nada de EstratoTech queda en el código ni en la imagen: solo en los valores de la POC.
 
-## 4. Operación de la aplicación
+## 4 · Operación de la aplicación (estabilidad y datos)
 
-- **Errores internos:** la API nunca devuelve el mensaje de un error inesperado; responde `{"error":"interno","id":"1a2b3c4d"}` y el detalle completo queda en el log del contenedor con ese mismo `id` (`[error 1a2b3c4d] POST /api/…`). Para investigar un reporte: `kubectl -n ipam logs deploy/ipam-ipam | grep 1a2b3c4d`.
-- **Retención:** `RETENCION_DIAS` (chart: `config.retencionDias`, 365 por defecto) borra de `eventos` y `auditoria` lo más antiguo que ese plazo. Corre al arrancar y cada 24 h en cada réplica (es idempotente). Si la auditoría debe conservarse más tiempo por política, súbelo o usa `0` (sin purga) y archiva la tabla por tu cuenta. El índice `eventos_ts_idx` lo crea el esquema.
-- **Apagado ordenado:** con SIGTERM/SIGINT la app deja de aceptar conexiones (`/api/health` responde 503 para que el balanceador deje de enviarle tráfico), termina las peticiones en curso y la sincronización con Jira pendiente, cierra el pool de PostgreSQL y sale con 0. Tiene `SHUTDOWN_TIMEOUT_MS` (10 s) como tope; el `terminationGracePeriodSeconds` de Kubernetes (30 s por defecto) lo cubre.
-- **Base de datos lenta o caída:** una consulta se corta a los `DB_STATEMENT_TIMEOUT_MS` (15 s) y esperar una conexión libre falla a los `DB_CONNECT_TIMEOUT_MS` (5 s) en vez de colgar la petición; un error en una conexión inactiva se registra y no tumba el proceso.
-- **Jira:** la sincronización saliente va en segundo plano; el resultado (`jira_ticket_creado`, `jira_ticket_actualizado`, `jira_error`) se ve en la pestaña *Jira* y en la tabla `eventos`.
+- **Jira en segundo plano:** al asignar un segmento (o aprobar una reserva que vino de Jira), la respuesta no espera a Jira: la sincronización corre aparte con `JIRA_REINTENTOS` (3) intentos separados por `JIRA_REINTENTO_MS` × n (2 s). El resultado queda en `eventos` (`jira_ticket_creado`, `jira_ticket_actualizado` o `jira_error`, con `intentos`) y se ve en la pestaña Jira. Mientras tanto la asignación lleva su ticket `NET-xxx` interno, que se reemplaza por la clave de Jira al crearse. Un reintento tras un fallo parcial puede duplicar el comentario en Jira. Al apagar el servicio (SIGTERM) se espera a que terminen las sincronizaciones pendientes dentro de `APAGADO_TIMEOUT_MS`.
+- **Lista de asignaciones paginada:** `GET /api/v1/asignaciones` devuelve como máximo 1000 filas por llamada (`limit`, `offset`) y el total en `X-Total-Count`; admite `pool`, `ambiente`, `q` y `orden`/`dir`. Quien consuma la API con más de 1000 asignaciones debe paginar (antes recibía todo sin límite). La interfaz junta todas las páginas por su cuenta.
+- **Excel por streaming:** `GET /api/exportar.xlsx` lee la base por lotes de 1000 dentro de una transacción de solo lectura con instantánea consistente y escribe cada fila al llegar: la memoria no crece con el tamaño de la base. Incluye todas las IPs fijas (antes se cortaba en 2000). Si falla a mitad, la conexión se corta y el archivo queda incompleto.
+- **Retención de eventos:** `npm run purgar` borra de `eventos` lo anterior a `RETENCION_DIAS` (365; `0` = conservar todo), por lotes de 5000; `-- --simular` cuenta sin borrar. **Se ejecuta con el usuario migrador** (`DATABASE_URL_MIGRACION`): la aplicación no puede borrar eventos (el rol `ipam_app` no tiene DELETE). Para programarlo en Kubernetes, un CronJob con la misma imagen:
+  ```yaml
+  apiVersion: batch/v1
+  kind: CronJob
+  metadata: {name: ipam-purgar}
+  spec:
+    schedule: "0 3 * * *"
+    jobTemplate:
+      spec:
+        template:
+          spec:
+            restartPolicy: OnFailure
+            containers:
+              - name: purgar
+                image: <la misma imagen del IPAM>
+                command: ["node", "src/cli/purgar.js"]
+                envFrom: [{configMapRef: {name: ipam-ipam-config}}]   # trae RETENCION_DIAS
+                env: [{name: DATABASE_URL_MIGRACION, valueFrom: {secretKeyRef: {name: ipam-migrador, key: DATABASE_URL_MIGRACION}}}]
+  ```
+  **La auditoría no se purga:** es de solo inserción incluso para el dueño de la tabla (disparador `trg_auditoria_solo_insercion`) para que nadie pueda borrar el rastro de lo que se hizo. Si una política exige acotarla, hay que archivarla fuera (exportarla a almacenamiento frío) y decidirlo caso por caso; no se hace desde la aplicación.
 
-## 5. Seguridad de la aplicación: lo que hay que saber al operar
-
-- **Arranque en producción:** la imagen trae `NODE_ENV=production`. La app se niega a arrancar (el pod queda en `CrashLoopBackOff` y el motivo está en `kubectl logs`) si: no hay autenticación (`auth.oidc.issuer`, `secrets.appUser`/`appPass`) y no se pidió `auth.mode=none` expresamente; o si `JIRA_WEBHOOK_SECRET` falta o es `dev-secret-cambiar`. El chart genera un secreto aleatorio si no das uno; con `secrets.existingSecret` debe traer `JIRA_WEBHOOK_SECRET`.
-- **Webhook de Jira con timestamp:** el emisor debe enviar `x-ipam-timestamp` y firmar `"<timestamp>.<cuerpo>"` (ver el README). El reloj del emisor y el del servidor no pueden diferir más de 5 min (sincronizar con NTP); si ves `401` con `motivo: "timestamp fuera de la ventana de 5 minutos"`, es el reloj. Un `409 petición repetida` indica un reenvío exacto de una petición ya procesada.
-- **Revocar un acceso:** quitar el rol en la pestaña *Usuarios* o borrar la fila de `usuarios` (`delete from usuarios where email = '…'`): la sesión deja de valer en ≤ 5 min (`auth.revalidateSeconds`; en la réplica que atendió el cambio por la API, al instante). Para cortar de inmediato en todas las réplicas, reiniciar el despliegue. Para invalidar **todas** las sesiones de golpe, rotar `SESSION_SECRET`.
-- **Límites de tasa:** responden `429` + `Retry-After`. Si usuarios legítimos detrás de un mismo NAT reciben 429 en el login, subir `auth.rateLimit.authMax`. **`config.trustProxy` debe corresponder a los saltos reales** delante de la app: si es 0 con un ingress, todos comparten la IP del ingress y se limitan entre sí; si es mayor que los saltos reales, un cliente puede falsear `X-Forwarded-For` y esquivar el límite.
-- **Simulador de Jira:** apagado en producción. `config.enableSimulador=true` lo habilita (solo para demos: crea asignaciones reales).
-- **Pantalla «Solicitar» de demostración:** `config.demo=true` (variable `DEMO`) muestra la pista para probar un CIDR que choque; en un entorno real déjalo apagado.

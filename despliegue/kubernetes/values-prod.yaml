@@ -1,0 +1,29 @@
+# Ambiente PROD (ejemplo). Se combina con el ajuste de tu nube:  -f values-gke.yaml -f values-prod.yaml
+# Producción: base administrada con respaldos del proveedor, varias réplicas, OIDC y red restringida.
+replicaCount: 3
+config:
+  publicUrl: https://ipam.ejemplo.interno
+  hsts: true
+  logLevel: info
+  reservaTtlHoras: 24
+  reservaTtlMaxHoras: 72
+  confirmacionExigeAprobador: true
+postgres:
+  enabled: false                  # Cloud SQL / RDS / Azure Database: respaldos y alta disponibilidad del proveedor
+secrets:
+  existingSecret: ipam-secrets
+  asFiles: true
+metrics:
+  enabled: true
+networkPolicy:
+  enabled: true
+auth:
+  allowAnonymous: false
+  oidc:
+    issuer: https://login.ejemplo.interno/realms/ejemplo   # FICTICIO
+    clientId: ipam
+    scopes: "openid email profile groups"
+    adminGroups: ipam-admins
+    requesterGroups: ipam-solicitantes
+    readerGroups: ipam-lectores
+    defaultRole: lector

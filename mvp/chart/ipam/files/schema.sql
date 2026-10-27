@@ -18,7 +18,7 @@ create table if not exists asignaciones (
   vpc         text not null,
   solicitante text not null,
   ticket      text not null,
-  origen      text not null default 'panel' check (origen in ('panel','jira','semilla')),
+  origen      text not null default 'panel' check (origen in ('panel','jira','semilla','agente')),
   creado_en   timestamptz not null default now(),
   -- Garantía en la base: dos segmentos del mismo pool nunca se solapan (también con concurrencia).
   constraint sin_solapamiento exclude using gist (pool_id with =, cidr inet_ops with &&)
@@ -42,8 +42,7 @@ create table if not exists eventos (
   tipo    text not null,
   detalle jsonb not null default '{}'
 );
--- La purga por retención (RETENCION_DIAS) filtra por fecha.
-create index if not exists eventos_ts_idx on eventos (ts);
+
 
 -- Usuarios que han iniciado sesión (OIDC). «rol» nulo = se resuelve por grupos / configuración.
 create table if not exists usuarios (
@@ -65,3 +64,255 @@ create table if not exists auditoria (
   ip      text
 );
 create index if not exists auditoria_ts_idx on auditoria (ts desc);
+
+-- ============================================================================
+-- Fase 0 · versión del esquema, trazabilidad y auditoría de solo inserción
+-- ============================================================================
+-- Versión del esquema: la app la verifica en /readyz (no modifica el esquema al arrancar).
+create table if not exists esquema_version (
+  version     int primary key,
+  descripcion text not null,
+  aplicado_en timestamptz not null default now()
+);
+
+-- Correlación: cada fila de auditoría guarda el X-Request-Id de la petición que la originó.
+alter table auditoria add column if not exists request_id text;
+
+-- La auditoría es de solo inserción: ni siquiera el dueño de la tabla puede modificar ni borrar sus filas.
+create or replace function auditoria_solo_insercion() returns trigger language plpgsql as $$
+begin
+  raise exception 'La tabla auditoria es de solo inserción' using errcode = '42501';
+end $$;
+drop trigger if exists trg_auditoria_solo_insercion on auditoria;
+create trigger trg_auditoria_solo_insercion before update or delete on auditoria
+  for each row execute function auditoria_solo_insercion();
+drop trigger if exists trg_auditoria_sin_truncate on auditoria;
+create trigger trg_auditoria_sin_truncate before truncate on auditoria
+  for each statement execute function auditoria_solo_insercion();
+
+-- Estado del barredor: lo comparten todas las réplicas (solo una lo ejecuta a la vez, con un advisory lock).
+create table if not exists barredor_estado (
+  id               int primary key default 1 check (id = 1),
+  ultima_ejecucion timestamptz,
+  duracion_ms      int,
+  instancia        text
+);
+insert into barredor_estado (id) values (1) on conflict (id) do nothing;
+
+insert into esquema_version (version, descripcion) values (2, 'fase 0: version del esquema, auditoria de solo insercion, estado del barredor')
+  on conflict (version) do nothing;
+
+-- ============================================================================
+-- Fase 1 · reservas tentativas (human-in-the-loop: sin confirmar, expiran solas)
+-- ============================================================================
+-- El origen «agente» debe ser válido también en bases ya existentes (idempotente: solo cambia la restricción si aún no lo incluye).
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conrelid = 'asignaciones'::regclass and contype = 'c' and pg_get_constraintdef(oid) like '%''agente''%') then
+    alter table asignaciones drop constraint if exists asignaciones_origen_check;
+    alter table asignaciones add constraint asignaciones_origen_check check (origen in ('panel','jira','semilla','agente'));
+  end if;
+end $$;
+
+create table if not exists reservas (
+  id            uuid primary key default gen_random_uuid(),
+  pool_id       text not null references pools(id),
+  cidr          cidr not null,
+  vpc           text not null,
+  solicitante   text not null,
+  ticket        text not null,
+  estado        text not null default 'reservada' check (estado in ('reservada','confirmada','liberada','expirada')),
+  clave_idem    text,                                  -- Idempotency-Key del agente (única por solicitante)
+  creado_en     timestamptz not null default now(),
+  expira_en     timestamptz not null,
+  resuelto_en   timestamptz,
+  asignacion_id bigint references asignaciones(id) on delete set null,
+  -- Garantía en la base: dos reservas vigentes del mismo pool nunca se solapan (también con concurrencia).
+  constraint reservas_sin_solapamiento exclude using gist (pool_id with =, cidr inet_ops with &&) where (estado = 'reservada')
+);
+create unique index if not exists reservas_solicitante_clave_idx on reservas (solicitante, clave_idem);
+create index if not exists reservas_estado_expira_idx on reservas (estado, expira_en);
+create index if not exists reservas_pool_idx on reservas (pool_id);
+create index if not exists reservas_solicitante_idx on reservas (solicitante);
+
+-- La reserva debe caer dentro del CIDR base de su pool y no pisar una asignación existente.
+create or replace function reserva_valida() returns trigger language plpgsql as $$
+begin
+  if not (new.cidr <<= (select cidr from pools where id = new.pool_id)) then
+    raise exception 'El segmento % queda fuera del pool %', new.cidr, new.pool_id using errcode = '23514';
+  end if;
+  if new.estado = 'reservada' and exists (select 1 from asignaciones a where a.pool_id = new.pool_id and a.cidr && new.cidr) then
+    raise exception 'El segmento % se solapa con una asignación del pool %', new.cidr, new.pool_id using errcode = '23P01';
+  end if;
+  return new;
+end $$;
+drop trigger if exists trg_reserva_valida on reservas;
+create trigger trg_reserva_valida before insert on reservas
+  for each row execute function reserva_valida();
+
+-- Una asignación (panel, Jira, importación…) no puede pisar una reserva VIGENTE de otra persona. Al confirmar, la propia reserva se
+-- exceptúa con el ajuste local «ipam.reserva_confirmando» (lo fija la transacción de confirmación).
+create or replace function asignacion_respeta_reservas() returns trigger language plpgsql as $$
+begin
+  if exists (select 1 from reservas r
+              where r.pool_id = new.pool_id and r.estado = 'reservada' and r.expira_en > now() and r.cidr && new.cidr
+                and r.id::text is distinct from nullif(current_setting('ipam.reserva_confirmando', true), '')) then
+    raise exception 'El segmento % se solapa con una reserva vigente del pool %', new.cidr, new.pool_id using errcode = '23P01';
+  end if;
+  return new;
+end $$;
+drop trigger if exists trg_asignacion_respeta_reservas on asignaciones;
+create trigger trg_asignacion_respeta_reservas before insert on asignaciones
+  for each row execute function asignacion_respeta_reservas();
+
+insert into esquema_version (version, descripcion) values (3, 'fase 1: reservas tentativas y origen agente')
+  on conflict (version) do nothing;
+
+-- ============================================================================
+-- Fase 2 · tokens de servicio (credenciales para agentes; el token en claro NUNCA se guarda)
+-- ============================================================================
+create table if not exists tokens_servicio (
+  id             uuid primary key default gen_random_uuid(),
+  nombre         text not null unique check (nombre ~ '^[a-z0-9][a-z0-9-]{1,40}$'),
+  prefijo        text not null,                       -- «ipam_» + 4 caracteres: reconoce el token en una lista sin revelarlo
+  hash           text not null unique,                -- SHA-256 (hex) del token completo
+  rol            text not null check (rol in ('lector','agente')),
+  cuota_reservas int check (cuota_reservas is null or cuota_reservas > 0),   -- tope propio de reservas vigentes (nulo = el general)
+  creado_por     text not null,
+  creado_en      timestamptz not null default now(),
+  expira_en      timestamptz not null,
+  ultimo_uso     timestamptz,
+  revocado_en    timestamptz
+);
+create index if not exists tokens_servicio_expira_idx on tokens_servicio (expira_en) where revocado_en is null;
+
+insert into esquema_version (version, descripcion) values (4, 'fase 2: tokens de servicio con rol agente')
+  on conflict (version) do nothing;
+
+-- ============================================================================
+-- Fase 5 · límite de peticiones (contadores compartidos por todas las réplicas)
+-- ============================================================================
+-- UNLOGGED: no se escribe en el registro de transacciones (más rápido). Son contadores desechables de 1 minuto: si la base se reinicia, se pierden sin daño.
+create unlogged table if not exists limite_contador (
+  clave   text   not null,                -- p. ej. a:svc:agente-redes:w · ip:10.0.0.5 · f:10.0.0.5 (fallos de autenticación)
+  ventana bigint not null,                -- minuto UNIX (segundos / 60), según el reloj de la base
+  cuenta  int    not null default 0,
+  primary key (clave, ventana)
+);
+
+insert into esquema_version (version, descripcion) values (5, 'fase 5: contadores del limite de peticiones')
+  on conflict (version) do nothing;
+
+-- ============================================================================
+-- Identificador legible de la asignación (ASG-000123): se deriva del número interno, que no se reutiliza al liberar.
+-- Identifica la ASIGNACIÓN (no el rango): el mismo CIDR puede asignarse de nuevo más adelante y tendrá otro ID.
+-- ============================================================================
+alter table asignaciones add column if not exists codigo text generated always as ('ASG-' || lpad(id::text, 6, '0')) stored;
+create unique index if not exists asignaciones_codigo_idx on asignaciones (codigo);
+
+insert into esquema_version (version, descripcion) values (6, 'id legible de asignacion (ASG-000123)')
+  on conflict (version) do nothing;
+
+-- ============================================================================
+-- Cuentas de usuario administrables: baja lógica (activo) y cuentas locales con contraseña (solo hash scrypt, nunca en claro).
+-- ============================================================================
+alter table usuarios add column if not exists activo boolean not null default true;
+alter table usuarios add column if not exists clave_hash text;                              -- nulo = cuenta SSO (OIDC); con valor = cuenta local
+alter table usuarios add column if not exists debe_cambiar_clave boolean not null default false;
+alter table usuarios add column if not exists creado_por text;
+
+insert into esquema_version (version, descripcion) values (7, 'cuentas de usuario: activo, clave local con hash, cambio obligatorio')
+  on conflict (version) do nothing;
+
+-- ============================================================================
+-- Origen «importado»: segmentos que ya existían (Excel/CSV) y se cargaron con la importación masiva.
+-- ============================================================================
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conrelid = 'asignaciones'::regclass and contype = 'c' and pg_get_constraintdef(oid) like '%''importado''%') then
+    alter table asignaciones drop constraint if exists asignaciones_origen_check;
+    alter table asignaciones add constraint asignaciones_origen_check check (origen in ('panel','jira','semilla','agente','importado'));
+  end if;
+end $$;
+
+insert into esquema_version (version, descripcion) values (8, 'origen importado para la importacion masiva de segmentos')
+  on conflict (version) do nothing;
+
+-- ============================================================================
+-- VLAN opcional por segmento: número (1–4094) y nombre de la VLAN o subred. En asignaciones y reservas (la confirmación la copia).
+-- ============================================================================
+alter table asignaciones add column if not exists vlan int check (vlan between 1 and 4094);
+alter table asignaciones add column if not exists vlan_nombre text check (char_length(vlan_nombre) <= 80);
+alter table reservas add column if not exists vlan int check (vlan between 1 and 4094);
+alter table reservas add column if not exists vlan_nombre text check (char_length(vlan_nombre) <= 80);
+
+insert into esquema_version (version, descripcion) values (9, 'vlan opcional por segmento (numero y nombre)')
+  on conflict (version) do nothing;
+
+-- ============================================================================
+-- Direcciones IP fijas (interfaces de router, switch, firewall, gateways, VIP…). Normalmente dentro de un segmento
+-- asignado; por excepción (con motivo) pueden quedar fuera de un segmento, dentro de un pool o fuera de todo pool.
+-- ============================================================================
+create table if not exists direcciones_ip (
+  id            bigserial primary key,
+  ip            inet not null check (family(ip) = 4 and masklen(ip) = 32),
+  pool_id       text references pools(id),
+  asignacion_id bigint references asignaciones(id),
+  dispositivo   text check (char_length(dispositivo) <= 80),
+  interfaz      text check (char_length(interfaz) <= 80),
+  rol           text not null default 'interfaz' check (rol in ('interfaz','gateway','gestion','loopback','vip','servidor','otro')),
+  dns           text check (char_length(dns) <= 253),
+  descripcion   text check (char_length(descripcion) <= 200),
+  excepcion     text check (char_length(excepcion) <= 200),
+  creado_por    text not null,
+  creado_en     timestamptz not null default now(),
+  -- Dentro de un segmento, o una excepción con su motivo.
+  constraint direcciones_ip_segmento_o_excepcion check (asignacion_id is not null or excepcion is not null)
+);
+-- Una IP no se repite dentro de un mismo pool (ni entre las que no tienen pool).
+create unique index if not exists direcciones_ip_unica on direcciones_ip ((coalesce(pool_id, '')), ip);
+create index if not exists direcciones_ip_asignacion on direcciones_ip (asignacion_id);
+
+-- Coherencia: la IP cae dentro de su segmento (y hereda su pool) o, si es excepción con pool, dentro del pool.
+create or replace function direccion_ip_coherente() returns trigger language plpgsql as $$
+declare seg record;
+begin
+  if new.asignacion_id is not null then
+    select pool_id, cidr into seg from asignaciones where id = new.asignacion_id;
+    if not found or not (new.ip <<= seg.cidr) then
+      raise exception 'la IP % no está dentro del segmento %', new.ip, new.asignacion_id using errcode = '23514';
+    end if;
+    new.pool_id := seg.pool_id;
+  elsif new.pool_id is not null and not (new.ip <<= (select cidr from pools where id = new.pool_id)) then
+    raise exception 'la IP % no está dentro del pool %', new.ip, new.pool_id using errcode = '23514';
+  end if;
+  return new;
+end $$;
+drop trigger if exists direccion_ip_coherente on direcciones_ip;
+create trigger direccion_ip_coherente before insert or update on direcciones_ip for each row execute function direccion_ip_coherente();
+
+insert into esquema_version (version, descripcion) values (10, 'direcciones ip fijas por interfaz')
+  on conflict (version) do nothing;
+
+-- Rendimiento de la purga por retención (`npm run purgar`, filtra por fecha). Idempotente y opcional: no cambia la versión del esquema.
+create index if not exists eventos_ts_idx on eventos (ts);
+
+-- ============================================================================
+-- Permisos del rol de la aplicación (solo si existe `ipam_app`; ver db/roles.sql)
+-- ============================================================================
+-- Se ejecuta con el rol migrador (dueño de las tablas) y se repite en cada migración. Sin el rol, no hace nada (desarrollo local).
+do $$
+declare
+  esq text := current_schema();
+begin
+  if exists (select 1 from pg_roles where rolname = 'ipam_app') then
+    execute format('grant usage on schema %I to ipam_app', esq);
+    execute format('grant select, insert, update, delete on all tables in schema %I to ipam_app', esq);
+    execute format('grant usage, select on all sequences in schema %I to ipam_app', esq);
+    -- La auditoría y los eventos son de solo inserción para la app (además de los disparadores, que lo impiden a cualquiera).
+    execute format('revoke update, delete, truncate on %I.auditoria from ipam_app', esq);
+    execute format('revoke update, delete, truncate on %I.eventos from ipam_app', esq);
+    -- La versión del esquema solo la cambia el migrador.
+    execute format('revoke insert, update, delete, truncate on %I.esquema_version from ipam_app', esq);
+  end if;
+end $$;

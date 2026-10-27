@@ -22,6 +22,7 @@ spec:
       imagePullSecrets: {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "ipam.name" . }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       automountServiceAccountToken: false
       securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, seccompProfile: {type: RuntimeDefault}}
       containers:
@@ -33,22 +34,42 @@ spec:
           envFrom:
             - configMapRef: {name: {{ include "ipam.name" . }}-config}
           env:
+            {{- if .Values.secrets.asFiles }}
+            {{- range $k := list "DATABASE_URL" "APP_USER" "APP_PASS" "JIRA_WEBHOOK_SECRET" "OIDC_CLIENT_SECRET" "SESSION_SECRET" "METRICS_TOKEN" }}
+            - {name: {{ $k }}_FILE, value: /etc/ipam-secrets/{{ $k }}}
+            {{- end }}
+            {{- else }}
             {{- range $k := list "DATABASE_URL" "APP_USER" "APP_PASS" "JIRA_WEBHOOK_SECRET" }}
             - name: {{ $k }}
               valueFrom: {secretKeyRef: {name: {{ include "ipam.secretName" $ }}, key: {{ $k }}}}
             {{- end }}
-            {{- range $k := list "OIDC_CLIENT_SECRET" "SESSION_SECRET" }}
+            {{- range $k := list "OIDC_CLIENT_SECRET" "SESSION_SECRET" "METRICS_TOKEN" }}
             - name: {{ $k }}
               valueFrom: {secretKeyRef: {name: {{ include "ipam.secretName" $ }}, key: {{ $k }}, optional: true}}
             {{- end }}
-          readinessProbe: {httpGet: {path: /api/health, port: http}, periodSeconds: 5}
-          livenessProbe: {httpGet: {path: /api/health, port: http}, initialDelaySeconds: 15, periodSeconds: 20}
-          {{- if .Values.branding.logo }}
-          volumeMounts: [{name: brand, mountPath: /etc/ipam-brand, readOnly: true}]
+            {{- end }}
+          # /healthz = vivo (sin tocar la base) · /readyz = listo (base alcanzable y esquema al día)
+          startupProbe: {httpGet: {path: /healthz, port: http}, periodSeconds: 2, failureThreshold: 30}
+          readinessProbe: {httpGet: {path: /readyz, port: http}, periodSeconds: 5}
+          livenessProbe: {httpGet: {path: /healthz, port: http}, periodSeconds: 20}
+          {{- if or .Values.branding.logo .Values.secrets.asFiles }}
+          volumeMounts:
+            {{- if .Values.branding.logo }}
+            - {name: brand, mountPath: /etc/ipam-brand, readOnly: true}
+            {{- end }}
+            {{- if .Values.secrets.asFiles }}
+            - {name: secretos, mountPath: /etc/ipam-secrets, readOnly: true}
+            {{- end }}
           {{- end }}
           resources: {{- toYaml .Values.resources | nindent 12 }}
-      {{- if .Values.branding.logo }}
+      {{- if or .Values.branding.logo .Values.secrets.asFiles }}
       volumes:
+        {{- if .Values.branding.logo }}
         - name: brand
           configMap: {name: {{ include "ipam.name" . }}-brand}
+        {{- end }}
+        {{- if .Values.secrets.asFiles }}
+        - name: secretos
+          secret: {secretName: {{ include "ipam.secretName" . }}, defaultMode: 0440}
+        {{- end }}
       {{- end }}

@@ -1,0 +1,12 @@
+node_modules
+coverage
+test-results
+playwright-report
+chart
+db
+package-lock.json
+*.md
+*.yaml
+*.yml
+*.css
+*.html

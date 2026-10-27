@@ -1,0 +1,38 @@
+# Publicación de la imagen al registry configurado (por defecto GHCR) cuando se crea una etiqueta vX.Y.Z. Envoltorio fino de scripts/ci/.
+# Firma (cosign sin llaves) y atestación SLSA: pasos listos pero APAGADOS; se activan con la variable de repositorio FIRMAR_IMAGEN=true.
+name: Liberar
+on:
+  push:
+    tags: ['v*.*.*']
+permissions:
+  contents: read
+  packages: write
+  id-token: write       # solo se usa para firmar/atestar (FIRMAR_IMAGEN=true) o para federación OIDC con tu nube
+  attestations: write
+env:
+  IPAM_RAMA_POR_DEFECTO: ${{ github.event.repository.default_branch }}
+  IPAM_PUBLICAR: 'true'
+  IPAM_REGISTRY_CLAVE: ${{ secrets.GITHUB_TOKEN }}
+  FIRMAR_IMAGEN: ${{ vars.FIRMAR_IMAGEN }}
+jobs:
+  liberar:
+    name: liberar · publicar imagen multi-arquitectura
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: {node-version: 22, cache: npm, cache-dependency-path: mvp/package-lock.json}
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - run: make deps && make sbom
+      - run: ./scripts/ci/construir-imagen.sh publicar
+      - name: Firma opcional (cosign sin llaves)
+        if: ${{ vars.FIRMAR_IMAGEN == 'true' }}
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - if: ${{ vars.FIRMAR_IMAGEN == 'true' }}
+        run: |
+          . scripts/ci/entorno.sh
+          digest=$(docker buildx imagetools inspect "$IPAM_IMAGEN:$IPAM_VERSION" --format '{{.Manifest.Digest}}')
+          ./scripts/ci/firmar-imagen.sh "$IPAM_IMAGEN@$digest"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with: {name: sbom, path: sbom/ipam.cdx.json}

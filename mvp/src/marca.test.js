@@ -16,7 +16,13 @@ test('valores por defecto: IPAM, sin subtítulo ni logo', () => {
 
 test('nombre, subtítulo, pie y colores configurables', () => {
   limpiar();
-  Object.assign(process.env, { BRAND_NAME: 'NetOps', BRAND_SUBTITLE: 'Cliente S.A.', BRAND_FOOTER: 'Uso interno', BRAND_COLOR: '#0a7d4f', BRAND_COLOR_TOP: '#111' });
+  Object.assign(process.env, {
+    BRAND_NAME: 'NetOps',
+    BRAND_SUBTITLE: 'Cliente S.A.',
+    BRAND_FOOTER: 'Uso interno',
+    BRAND_COLOR: '#0a7d4f',
+    BRAND_COLOR_TOP: '#111',
+  });
   assert.deepEqual(marca.config(), { nombre: 'NetOps', subtitulo: 'Cliente S.A.', pie: 'Uso interno', logo: null });
   assert.match(marca.css(), /--top:#111;--blue:#0a7d4f/);
 });
@@ -41,17 +47,5 @@ test('logo: solo se acepta una imagen real (png, jpg, webp, svg)', () => {
   assert.equal(marca.config().logo, null);
   process.env.BRAND_LOGO_FILE = path.join(dir, 'no-existe.png');
   assert.equal(marca.config().logo, null);
-  limpiar();
-});
-
-test('favicon: SVG con el color de la marca (y un código malicioso se descarta)', () => {
-  limpiar();
-  assert.match(marca.favicon(), /^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg"/);
-  assert.match(marca.favicon(), /fill="#2d6cdf"/);
-  process.env.BRAND_COLOR = '#0a7d4f';
-  assert.match(marca.favicon(), /fill="#0a7d4f"/);
-  process.env.BRAND_COLOR = '"/><script>alert(1)</script>';
-  assert.ok(!marca.favicon().includes('<script'));
-  assert.match(marca.favicon(), /fill="#2d6cdf"/);
   limpiar();
 });

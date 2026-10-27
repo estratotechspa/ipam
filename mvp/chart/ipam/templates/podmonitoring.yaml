@@ -1,0 +1,23 @@
+{{- if .Values.metrics.podMonitoring.enabled }}
+{{- if not .Values.metrics.enabled }}{{ fail "metrics.podMonitoring.enabled necesita metrics.enabled=true (el token de lectura de /metrics)" }}{{ end }}
+# Google Managed Prometheus: recolecta /metrics de los pods del IPAM con el token de lectura. Solo para GKE (CRD monitoring.googleapis.com/v1).
+apiVersion: monitoring.googleapis.com/v1
+kind: PodMonitoring
+metadata:
+  name: {{ include "ipam.name" . }}
+  labels: {{- include "ipam.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels: {{- include "ipam.selector" . | nindent 6 }}
+      app.kubernetes.io/component: api
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: {{ .Values.metrics.podMonitoring.interval }}
+      authorization:
+        type: Bearer
+        credentials:
+          secret:
+            name: {{ include "ipam.secretName" . }}
+            key: METRICS_TOKEN
+{{- end }}

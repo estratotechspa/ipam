@@ -1,0 +1,47 @@
+# Cloud Run (Knative) con Cloud SQL y secretos de Secret Manager.
+# NO VALIDADO contra una cuenta real: es un ejemplo para adaptar. Reemplaza PROYECTO, REGION, INSTANCIA y el registro.
+# Desplegar:   gcloud run services replace service.yaml --region REGION
+# Antes: crear los secretos (ver README) y ejecutar la migración (job-migrar.yaml).
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: ipam
+  annotations:
+    run.googleapis.com/ingress: internal-and-cloud-load-balancing     # sin acceso directo desde Internet; entra por un balanceador
+spec:
+  template:
+    metadata:
+      annotations:
+        # El barredor solo corre mientras hay una instancia viva y con CPU asignada. Si prefieres escalar a cero, déjalo en "0":
+        # la expiración de reservas sigue siendo correcta (se aplica al consultar), solo se retrasa la limpieza.
+        autoscaling.knative.dev/minScale: "1"
+        autoscaling.knative.dev/maxScale: "3"
+        run.googleapis.com/cpu-throttling: "false"                    # CPU siempre asignada (necesaria para el barredor)
+        run.googleapis.com/cloudsql-instances: PROYECTO:REGION:INSTANCIA
+    spec:
+      serviceAccountName: ipam-runtime@PROYECTO.iam.gserviceaccount.com   # permisos mínimos: Cloud SQL Client + acceso a SUS secretos
+      containerConcurrency: 80
+      timeoutSeconds: 60
+      containers:
+        - image: REGION-docker.pkg.dev/PROYECTO/REPO/ipam:0.3.0
+          ports: [{containerPort: 8080}]
+          env:
+            - {name: NODE_ENV, value: production}
+            - {name: DATABASE_SCHEMA, value: public}
+            - {name: ROL, value: todos}
+            - {name: TRUST_PROXY, value: "2"}        # verificar: saltos entre el cliente y la app
+            - {name: LOG_LEVEL, value: info}
+            - {name: PUBLIC_URL, value: "https://ipam.ejemplo.interno"}
+            # Conexión por socket de Cloud SQL (el usuario ipam_app solo tiene permisos de datos; ver docs/ACCESO-Y-SEGURIDAD.md)
+            - name: DATABASE_URL
+              valueFrom: {secretKeyRef: {name: ipam-database-url, key: latest}}     # postgres://ipam_app:CLAVE@/ipam?host=/cloudsql/PROYECTO:REGION:INSTANCIA
+            - name: APP_USER
+              valueFrom: {secretKeyRef: {name: ipam-app-user, key: latest}}
+            - name: APP_PASS
+              valueFrom: {secretKeyRef: {name: ipam-app-pass, key: latest}}         # hash scrypt (npm run hash-password)
+            - name: METRICS_TOKEN
+              valueFrom: {secretKeyRef: {name: ipam-metrics-token, key: latest}}
+          startupProbe: {httpGet: {path: /healthz, port: 8080}, periodSeconds: 2, failureThreshold: 30}
+          livenessProbe: {httpGet: {path: /healthz, port: 8080}, periodSeconds: 20}
+          resources:
+            limits: {cpu: "1", memory: 512Mi}

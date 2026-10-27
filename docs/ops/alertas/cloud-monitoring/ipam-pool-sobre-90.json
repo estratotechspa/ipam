@@ -1,0 +1,31 @@
+{
+  "displayName": "IPAM · pool sobre 90 % de utilización",
+  "documentation": {
+    "content": "Casi sin espacio. Las nuevas reservas de ese pool empezarán a fallar con 409 `sin_espacio`. Ver `docs/ops/RUNBOOK.md` → «Un pool está lleno».\n\nMétrica de origen: expresión PromQL `ipam_pool_utilizacion_ratio > 0.9`.",
+    "mimeType": "text/markdown"
+  },
+  "userLabels": {
+    "servicio": "ipam",
+    "severidad": "critical"
+  },
+  "conditions": [
+    {
+      "displayName": "IPAM · pool sobre 90 % de utilización",
+      "conditionPrometheusQueryLanguage": {
+        "query": "ipam_pool_utilizacion_ratio > 0.9",
+        "duration": "300s",
+        "evaluationInterval": "60s",
+        "alertRule": "IpamPoolSobre90",
+        "labels": {
+          "severidad": "critical"
+        }
+      }
+    }
+  ],
+  "combiner": "OR",
+  "enabled": true,
+  "alertStrategy": {
+    "autoClose": "1800s"
+  },
+  "notificationChannels": []
+}

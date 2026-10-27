@@ -1,0 +1,31 @@
+{
+  "displayName": "IPAM · la base de datos no responde",
+  "documentation": {
+    "content": "El servicio sigue vivo pero `/readyz` da 503. Ver `docs/ops/RUNBOOK.md` → «La base de datos está caída».\n\nMétrica de origen: expresión PromQL `ipam_db_up == 0`.",
+    "mimeType": "text/markdown"
+  },
+  "userLabels": {
+    "servicio": "ipam",
+    "severidad": "critical"
+  },
+  "conditions": [
+    {
+      "displayName": "IPAM · la base de datos no responde",
+      "conditionPrometheusQueryLanguage": {
+        "query": "ipam_db_up == 0",
+        "duration": "120s",
+        "evaluationInterval": "60s",
+        "alertRule": "IpamBaseDeDatosCaida",
+        "labels": {
+          "severidad": "critical"
+        }
+      }
+    }
+  ],
+  "combiner": "OR",
+  "enabled": true,
+  "alertStrategy": {
+    "autoClose": "1800s"
+  },
+  "notificationChannels": []
+}

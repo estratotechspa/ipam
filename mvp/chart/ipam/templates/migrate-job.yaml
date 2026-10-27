@@ -34,6 +34,10 @@ spec:
           args:
             - |
               until psql "$DATABASE_URL" -c 'select 1' >/dev/null 2>&1; do echo "esperando la base..."; sleep 3; done
+              {{- if ne .Values.config.databaseSchema "public" }}
+              psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -c 'create schema if not exists "{{ .Values.config.databaseSchema }}"'
+              {{- end }}
+              export PGOPTIONS='-c search_path={{ .Values.config.databaseSchema }}'
               psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f /sql/schema.sql
               {{- if and .Release.IsInstall .Values.seed.enabled }}
               psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f /sql/seed.sql

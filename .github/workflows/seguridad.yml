@@ -1,50 +1,20 @@
-name: Seguridad
+# Escaneo semanal: detecta vulnerabilidades NUEVAS sin cambios de código. Llama a los mismos objetivos que el CI.
+name: Seguridad semanal
 on:
-  pull_request:
-  push:
-    branches: [main]
   schedule:
-    - cron: '17 6 * * 1'   # semanal: detecta vulnerabilidades nuevas sin cambios de código
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
 permissions:
   contents: read
-
 jobs:
-  dependencias:
-    name: Dependencias y licencias
-    runs-on: ubuntu-latest
-    defaults: {run: {working-directory: mvp}}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: {node-version: 22, cache: npm, cache-dependency-path: mvp/package-lock.json}
-      - run: npm ci
-      - name: npm audit (solo producción)
-        run: npm audit --omit=dev --audit-level=high
-      - name: Licencias permitidas
-        # buffers@0.1.1 (dependencia de exceljs) no declara licencia en su package.json: se excluye y debe revisarse a mano.
-        run: >-
-          npx --yes license-checker-rseidelsohn@4 --production --summary --excludePrivatePackages --excludePackages 'buffers@0.1.1' --onlyAllow
-          'MIT;ISC;Apache-2.0;BSD-2-Clause;BSD-3-Clause;0BSD;BlueOak-1.0.0;Python-2.0;CC0-1.0;CC-BY-4.0;Unlicense'
-
-  secretos:
-    name: Secretos en el repositorio
+  escanear:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: {fetch-depth: 0}
-      - name: Gitleaks
-        run: |
-          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.21.2 \
-            detect --source /repo --redact --verbose
-
-  codeql:
-    name: Análisis estático (CodeQL)
-    # En repos privados exige GitHub Advanced Security; activar con la variable de repositorio CODEQL=true.
-    if: ${{ !github.event.repository.private || vars.CODEQL == 'true' }}
-    runs-on: ubuntu-latest
-    permissions: {contents: read, security-events: write}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: github/codeql-action/init@v3
-        with: {languages: javascript-typescript}
-      - uses: github/codeql-action/analyze@v3
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: {node-version: 22, cache: npm, cache-dependency-path: mvp/package-lock.json}
+      - run: make deps
+      - run: make scan
+  # CodeQL queda como COMPLEMENTO opcional (en repos privados exige GitHub Advanced Security): activar con la variable de repositorio CODEQL=true.
+  # La barrera que cuenta es Semgrep, que corre igual en GitHub y GitLab.
