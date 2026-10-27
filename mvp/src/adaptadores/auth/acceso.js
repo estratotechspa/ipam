@@ -48,6 +48,22 @@ async function basicValido(cabecera, usuariosLocales) {
   return { nombre: fila.email, rol: fila.rol, local: true, debeCambiar: Boolean(fila.debe_cambiar_clave) };
 }
 
+/**
+ * Sesión OIDC por cookie, con el rol revalidado en la base. Si no vale (sin cookie, formato anterior, persona dada de baja o
+ * eliminada) responde 401 o redirige al login y devuelve null. Sin revalidador (pruebas unitarias) se confía en el rol base.
+ */
+async function sesionOidc(req, res, { revalidador, rechazo }) {
+  const s = S.abrir(S.cookies(req)[S.SESION]);
+  // Las cookies anteriores a la revalidación (sin `v: 2`) obligan a entrar de nuevo.
+  const rol = s && s.v === 2 ? (revalidador ? await revalidador.rol(s) : s.rolBase) : null;
+  if (rol) return { sesion: s, rol };
+  rechazo(s ? 'sesion_revocada' : 'sesion_invalida', req);
+  if (s) S.borrarCookie(req, res, S.SESION);
+  if (req.path.startsWith('/api/')) res.status(401).json({ error: s ? 'sesion_revocada' : 'no autenticado', login: '/auth/login' });
+  else res.redirect('/auth/login?next=' + encodeURIComponent(req.originalUrl));
+  return null;
+}
+
 // Mientras la clave sea temporal, la cuenta solo puede ver quién es y cambiarla.
 const SIN_CAMBIO_DE_CLAVE = new Set(['/api/me', '/api/v1/me', '/api/yo/clave', '/api/v1/yo/clave', '/api/config']);
 
@@ -55,7 +71,7 @@ const SIN_CAMBIO_DE_CLAVE = new Set(['/api/me', '/api/v1/me', '/api/yo/clave', '
  * @param {{rechazo?: (motivo: string, req: any) => unknown, autenticarToken?: (token: string) => Promise<any>, auditar?: Function}} [deps]
  * @returns {import('express').RequestHandler}
  */
-function crearAcceso({ rechazo = () => {}, autenticarToken, auditar = async () => {}, frenoFuerzaBruta, usuariosLocales } = {}) {
+function crearAcceso({ rechazo = () => {}, autenticarToken, auditar = async () => {}, frenoFuerzaBruta, usuariosLocales, revalidador } = {}) {
   return async (req, res, next) => {
     if (esPublica(req.path)) return next();
     const modo = config.auth.modo;
@@ -117,13 +133,9 @@ function crearAcceso({ rechazo = () => {}, autenticarToken, auditar = async () =
         });
       }
     } else {
-      const s = S.abrir(S.cookies(req)[S.SESION]);
-      if (!s) {
-        rechazo('sesion_invalida', req);
-        if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'no autenticado', login: '/auth/login' });
-        return res.redirect('/auth/login?next=' + encodeURIComponent(req.originalUrl));
-      }
-      fijar(s.email, s.rol, 'oidc', s.nombre);
+      const o = await sesionOidc(req, res, { revalidador, rechazo });
+      if (!o) return; // sesión inválida o revocada: ya se respondió
+      fijar(o.sesion.email, o.rol, 'oidc', o.sesion.nombre);
     }
     // Defensa CSRF: los cambios desde el navegador exigen una cabecera que un sitio externo no puede enviar sin permiso CORS.
     if (req.path.startsWith('/api/') && !['GET', 'HEAD', 'OPTIONS'].includes(req.method) && req.headers['x-requested-with'] !== 'ipam') {

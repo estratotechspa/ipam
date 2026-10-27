@@ -84,8 +84,8 @@ function crearAdministracion({ repo, rolesUsuario, contrasenas, cuentasLocales =
   return {
     pools: (filtros = {}) => repo.poolsConUso(filtros),
     resumen: async () => ({ ...(await repo.resumen()), solapamientos: 0 }), // la restricción de exclusión impide solapes
-    asignaciones: () => repo.listarAsignaciones(),
-    asignacionesParaExcel: async () => ({ ...(await repo.asignacionesParaExcel()), direcciones: await repo.listarDirecciones({}) }),
+    asignaciones: (filtros) => repo.listarAsignaciones(filtros),
+    recorrerParaExcel: (consumir) => repo.recorrerParaExcel(consumir),
     usuarios: () => repo.listarUsuarios(),
     auditoria: (filtros = {}) => repo.listarAuditoria(filtros),
     eventos: () => repo.listarEventos(),

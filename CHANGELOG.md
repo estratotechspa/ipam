@@ -3,6 +3,18 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y versionado semántico.
 
 ## [Sin publicar]
+### Seguridad
+- **Sesiones OIDC revalidadas:** el rol y la existencia de la persona se consultan en la base cada `SESSION_REVALIDAR_SEG` (300 s); una baja o un cambio de rol rige en ese tiempo. `SESSION_HORAS` baja de 8 a 4. La cookie pasa a un formato nuevo (se entra de nuevo una vez).
+- **Webhook de Jira con timestamp:** exige `x-ipam-timestamp` y la firma `HMAC(secreto, "<timestamp>.<cuerpo>")` con ventana de ±5 min. **Cambio incompatible** para quien firmaba solo el cuerpo.
+- `POST /api/jira/simular` solo fuera de producción o con `ENABLE_SIMULADOR=true`; `/api/jira/estado` informa `simulador`.
+- `POST /auth/logout` exige `X-Requested-With` (CSRF); se agregan `Permissions-Policy` y `Referrer-Policy`.
+
+### Rendimiento y datos
+- La sincronización con Jira corre en segundo plano con reintentos (`JIRA_REINTENTOS`, `JIRA_REINTENTO_MS`); el resultado queda en `eventos`.
+- `GET /api/asignaciones` pagina (`limit` máx. 1000, `offset`), filtra (`pool`, `ambiente`, `q`), ordena y devuelve `X-Total-Count`. **Cambio:** antes devolvía todo sin límite.
+- El Excel se genera por streaming (lotes de 1000, instantánea consistente) e incluye todas las IPs fijas (antes, 2000).
+- `npm run purgar` (usuario migrador) borra eventos anteriores a `RETENCION_DIAS` (365), por lotes; la auditoría no se purga (solo inserción). Índice `eventos_ts_idx` (idempotente, sin cambiar la versión del esquema).
+
 ### Agregado
 - **Cerrar sesión en modo Basic:** el botón «Salir» ahora también aparece con usuario y contraseña. Llama a `/auth/salir` (401 con el desafío de Basic) con credenciales falsas para que Chromium y Firefox olviden las guardadas, y lleva a «Sesión cerrada». Es de mejor esfuerzo (Safari puede recordarlas).
 - Helm: `auth.local` (variable `AUTH_LOCAL`) para habilitar las cuentas locales; también en `docker-compose.yml`.

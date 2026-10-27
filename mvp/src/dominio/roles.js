@@ -43,6 +43,22 @@ function resolverRol(claims, filaDb, cfg) {
   return ROLES_USUARIO.includes(cfg.rolPorDefecto) ? cfg.rolPorDefecto : null;
 }
 
+/**
+ * Rol que tiene HOY una sesión OIDC abierta. La cookie solo guarda el rol «base» (el que dan el proveedor y la configuración al
+ * entrar); el cambio que haga después un admin en la base (otro rol, baja, eliminación) rige al revalidar.
+ * Prioridad: correos admin de la configuración > cuenta dada de baja o eliminada (sin acceso) > rol asignado en la base > rol base.
+ * @param {{email: string, rolBase?: string|null}} sesion
+ * @param {{rol?: string|null, activo?: boolean}|null|undefined} fila  la fila de `usuarios`, o null si ya no existe
+ * @param {{correosAdmin: string[]}} cfg
+ * @returns {string|null} null = la sesión ya no vale
+ */
+function rolVigente(sesion, fila, cfg) {
+  if (cfg.correosAdmin.includes(String(sesion.email).toLowerCase())) return 'admin';
+  if (!fila || fila.activo === false) return null;
+  const rol = fila.rol || sesion.rolBase;
+  return ROLES_USUARIO.includes(String(rol)) ? String(rol) : null;
+}
+
 /** @param {Record<string, any>} claims @param {string[]} dominios */
 function dominioPermitido(claims, dominios) {
   if (!dominios.length) return true;
@@ -52,4 +68,4 @@ function dominioPermitido(claims, dominios) {
   return dominios.includes(dom);
 }
 
-module.exports = { ORDEN, ROLES_USUARIO, ROLES_TOKEN, tiene, lista, resolverRol, dominioPermitido };
+module.exports = { ORDEN, ROLES_USUARIO, ROLES_TOKEN, tiene, lista, resolverRol, rolVigente, dominioPermitido };

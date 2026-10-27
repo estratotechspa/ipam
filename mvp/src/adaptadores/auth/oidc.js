@@ -77,7 +77,10 @@ function montarOidc(app, { repo, auditar, ruta }) {
         return res.status(403).send('Tu cuenta no tiene un rol asignado. Pide acceso a un administrador.');
       }
       const horas = config.auth.sesionHoras;
-      S.ponerCookie(req, res, S.SESION, S.sellar({ email, nombre: claims.name || email, rol, exp: Date.now() / 1000 + horas * 3600 }), horas * 3600);
+      // La cookie guarda el rol «base» (proveedor y configuración, sin la asignación de la base): el rol de HOY se calcula al revalidar.
+      const rolBase = resolverRol({ ...claims, email }, null, o);
+      const sesion = { v: 2, email, nombre: claims.name || email, rolBase, exp: Date.now() / 1000 + horas * 3600 };
+      S.ponerCookie(req, res, S.SESION, S.sellar(sesion), horas * 3600);
       await auditar('login', email, rol, {}, req.ip);
       res.redirect(S.rutaSegura(previo.next));
     } catch (e) {
@@ -86,6 +89,8 @@ function montarOidc(app, { repo, auditar, ruta }) {
   });
 
   ruta(app, 'post', '/auth/logout', async (req, res) => {
+    // Cerrar la sesión también cambia estado: mismo control CSRF que la API (esta ruta está fuera del middleware de acceso).
+    if (req.headers['x-requested-with'] !== 'ipam') return res.status(403).json({ error: 'falta la cabecera X-Requested-With: ipam' });
     const s = S.abrir(S.cookies(req)[S.SESION]);
     S.borrarCookie(req, res, S.SESION);
     if (s) await auditar('logout', s.email, s.rol, {}, req.ip);

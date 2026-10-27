@@ -307,6 +307,7 @@ const schemas = {
           'ID legible de la asignación (ASG-000123). Identifica la asignación, no el rango: el mismo CIDR puede asignarse otra vez más adelante con otro ID.',
       },
       pool_id: { type: 'string' },
+      ambiente: { $ref: '#/components/schemas/Ambiente', description: 'Ambiente del pool (solo en la lista paginada).' },
       cidr: { $ref: '#/components/schemas/Cidr' },
       vpc: { type: 'string' },
       vlan: { type: ['integer', 'null'], minimum: 1, maximum: 4094, description: 'VLAN (opcional).' },
@@ -667,13 +668,18 @@ const schemas = {
   JiraEstado: {
     type: 'object',
     required: ['activa', 'faltantes'],
-    properties: { activa: { type: 'boolean' }, faltantes: { type: 'array', items: { type: 'string' } } },
-    example: { activa: false, faltantes: [] },
+    properties: {
+      activa: { type: 'boolean' },
+      faltantes: { type: 'array', items: { type: 'string' } },
+      simulador: { type: 'boolean', description: 'POST /api/v1/jira/simular está disponible (fuera de producción, o con ENABLE_SIMULADOR=true).' },
+    },
+    example: { activa: false, faltantes: [], simulador: true },
   },
   JiraTicket: {
     type: 'object',
     required: ['ticket', 'ambiente', 'tipo', 'mascara', 'vpc'],
-    description: 'Cuerpo del webhook de Jira. Va firmado: `x-hub-signature-256: sha256=HMAC(cuerpo, JIRA_WEBHOOK_SECRET)`.',
+    description:
+      'Cuerpo del webhook de Jira. Va firmado con la hora: `x-ipam-timestamp` y `x-hub-signature-256: sha256=HMAC(JIRA_WEBHOOK_SECRET, "<timestamp>.<cuerpo>")`.',
     properties: {
       ticket: { type: 'string' },
       ambiente: { $ref: '#/components/schemas/Ambiente' },
@@ -1001,6 +1007,41 @@ function rutasDeSistema(p) {
   };
 }
 
+function rutasDeListaDeAsignaciones(p) {
+  p['/api/v1/asignaciones'] = {
+    'x-alias-legado': '/api/asignaciones',
+    get: op({
+      tag: 'Asignaciones',
+      summary: 'Lista las asignaciones definitivas (paginada)',
+      description:
+        'Hasta 1000 por llamada (`limit`, 1000 por defecto) con `offset`; el total sin paginar viene en la cabecera `X-Total-Count`. Filtros: `pool`, `ambiente` y `q` ' +
+        '(texto en CIDR, ID, proyecto/VPC, solicitante o ticket, sin distinguir mayúsculas). Orden: `orden` y `dir` (por defecto, lo más nuevo primero).',
+      params: [
+        param('limit', 'query', 'Cantidad máxima de filas (1 a 1000).', { type: 'integer', minimum: 1, maximum: 1000, default: 1000 }, false),
+        param('offset', 'query', 'Filas que se saltan (para pasar de página).', { type: 'integer', minimum: 0, default: 0 }, false),
+        param('pool', 'query', 'Solo las de este pool.', { type: 'string' }, false),
+        param('ambiente', 'query', 'Solo las de pools de este ambiente.', { $ref: '#/components/schemas/Ambiente' }, false),
+        param('q', 'query', 'Texto a buscar en CIDR, ID, proyecto/VPC, solicitante o ticket.', { type: 'string', maxLength: 100 }, false),
+        param(
+          'orden',
+          'query',
+          'Columna de orden.',
+          { enum: ['fecha', 'cidr', 'pool', 'vpc', 'solicitante', 'ticket', 'origen', 'codigo', 'direcciones'] },
+          false,
+        ),
+        param('dir', 'query', 'Sentido del orden.', { enum: ['asc', 'desc'] }, false),
+      ],
+      ok: {
+        200: {
+          ...respuesta('Asignaciones.', { type: 'array', items: { $ref: '#/components/schemas/Asignacion' } }),
+          headers: { 'X-Total-Count': { description: 'Total de asignaciones que cumplen los filtros, sin paginar.', schema: { type: 'integer' } } },
+        },
+      },
+      extra: { 400: respuesta('Parámetro inválido (limit, offset, ambiente, orden, dir o q).', 'Error') },
+    }),
+  };
+}
+
 function rutasDePoolsYAsignaciones(p) {
   p['/api/v1/pools'] = {
     'x-alias-legado': '/api/pools',
@@ -1083,14 +1124,6 @@ function rutasDePoolsYAsignaciones(p) {
   p['/api/v1/resumen'] = {
     'x-alias-legado': '/api/resumen',
     get: op({ tag: 'Pools', summary: 'Resumen general', ok: { 200: respuesta('Totales.', 'Resumen') } }),
-  };
-  p['/api/v1/asignaciones'] = {
-    'x-alias-legado': '/api/asignaciones',
-    get: op({
-      tag: 'Asignaciones',
-      summary: 'Lista las asignaciones definitivas',
-      ok: { 200: respuesta('Asignaciones.', { type: 'array', items: { $ref: '#/components/schemas/Asignacion' } }) },
-    }),
   };
   p['/api/v1/asignaciones/{id}'] = {
     'x-alias-legado': '/api/asignaciones/{id}',
@@ -1474,7 +1507,7 @@ function rutasDeJira(p) {
       ok: { 200: respuesta('Reserva creada, pendiente de aprobación de un admin.', 'JiraResultado') },
       extra: {
         ...e403,
-        404: respuesta('Sin pool.', 'Error'),
+        404: respuesta('Sin pool, o el simulador no está habilitado en este entorno (producción sin ENABLE_SIMULADOR).', 'Error'),
         409: respuesta('Sin espacio o solapamiento.', 'Error'),
         422: respuesta('No hay pool para ese ambiente y tipo.', 'Error'),
       },
@@ -1485,8 +1518,11 @@ function rutasDeJira(p) {
       tag: 'Jira',
       summary: 'Webhook de Jira (firmado)',
       description:
-        'Firma HMAC-SHA256 en `x-hub-signature-256`, comparada en tiempo constante. En producción sin `JIRA_WEBHOOK_SECRET` queda deshabilitado (503). **No asigna directo:** crea una reserva tentativa (24 h por defecto) que un **admin debe aprobar** en la pestaña Reservas; recién ahí nace la asignación y se actualiza el ticket. Sin aprobación, expira sola. Es idempotente por ticket.',
-      params: [param('x-hub-signature-256', 'header', 'sha256=HMAC(cuerpo, JIRA_WEBHOOK_SECRET)', { type: 'string' }, true)],
+        'Firma HMAC-SHA256 en `x-hub-signature-256` sobre `<x-ipam-timestamp>.<cuerpo>`, comparada en tiempo constante, con una ventana de ±5 minutos (un reenvío dentro de ella es idempotente por ticket). En producción sin `JIRA_WEBHOOK_SECRET` queda deshabilitado (503). **No asigna directo:** crea una reserva tentativa (24 h por defecto) que un **admin debe aprobar** en la pestaña Reservas; recién ahí nace la asignación y se actualiza el ticket. Sin aprobación, expira sola. Es idempotente por ticket.',
+      params: [
+        param('x-ipam-timestamp', 'header', 'Segundos desde 1970 (UTC) en que se firmó; se rechaza lo de hace más de 5 minutos.', { type: 'string' }, true),
+        param('x-hub-signature-256', 'header', 'sha256=HMAC-SHA256(JIRA_WEBHOOK_SECRET, "<timestamp>.<cuerpo>")', { type: 'string' }, true),
+      ],
       body: cuerpo('JiraTicket', schemas.JiraTicket.example),
       ok: { 200: respuesta('Reserva creada, pendiente de aprobación.', 'JiraResultado') },
       seguridad: publico,
@@ -1506,6 +1542,7 @@ function rutas() {
   const p = {};
   rutasDeSistema(p);
   rutasDePoolsYAsignaciones(p);
+  rutasDeListaDeAsignaciones(p);
   rutasDeEdicionDePools(p);
   rutasDeDirecciones(p);
   rutasDeReservas(p);

@@ -4,10 +4,25 @@
 const { ConflictoDeDatos } = require('../../../aplicacion/resultado');
 const { reintentar } = require('./resiliencia');
 const { SOLICITANTE_JIRA } = require('../../../dominio/reserva');
+const { USO_POOL, COLUMNAS_DIRECCION } = require('./sql-comun');
+const { consultasDeExportacion } = require('./exportacion');
 
 const COLUMNAS_ASIGNACION = 'id, codigo, pool_id, cidr::text, vpc, vlan, vlan_nombre, solicitante, ticket, origen, creado_en';
-// Fracción del pool que ocupan los segmentos asignados (para la barra de uso de la interfaz).
-const USO_POOL = `coalesce(sum(2^(32-masklen(a.cidr))),0)::float8 / (2^(32-masklen(p.cidr)))::float8`;
+
+// Lista de asignaciones con alias de tabla (se une con pools para filtrar por ambiente).
+const COLUMNAS_ASIGNACION_A = 'a.id, a.codigo, a.pool_id, a.cidr::text, a.vpc, a.vlan, a.vlan_nombre, a.solicitante, a.ticket, a.origen, a.creado_en';
+// Lista blanca de órdenes admitidos: la API nunca arma el ORDER BY con texto del cliente.
+const ORDEN_ASIGNACIONES = {
+  fecha: 'a.id',
+  cidr: 'a.cidr',
+  pool: 'a.pool_id',
+  vpc: 'a.vpc',
+  solicitante: 'a.solicitante',
+  ticket: 'a.ticket',
+  origen: 'a.origen',
+  codigo: 'a.id',
+  direcciones: '(32 - masklen(a.cidr))',
+};
 
 // Reservas: el estado «real» considera el plazo con el reloj de la BASE (no el de cada réplica): una reserva «reservada» vencida cuenta como expirada.
 const ESTADO_EFECTIVO = `case when estado = 'reservada' and expira_en <= now() then 'expirada' else estado end`;
@@ -173,9 +188,6 @@ function consultas(x) {
     },
   };
 }
-
-const COLUMNAS_DIRECCION = `d.id, host(d.ip) as ip, d.pool_id, d.asignacion_id, d.dispositivo, d.interfaz, d.rol, d.dns, d.descripcion, d.excepcion,
-  d.creado_por, d.creado_en`;
 
 /** Direcciones IP fijas (interfaces, gateways, VIP…). `q` = pool o cliente de una transacción. */
 function consultasDeDirecciones(q) {
@@ -595,28 +607,36 @@ function crearRepositorio(db) {
         )
       ).rows[0];
     },
-    async listarAsignaciones() {
-      return (await db.query(`select ${COLUMNAS_ASIGNACION} from asignaciones order by id desc`)).rows;
-    },
-    async asignacionesParaExcel() {
-      const filas = (
-        await db.query(
-          `select a.id, a.codigo, a.pool_id, p.tipo, p.ambiente, p.proveedor, p.cidr::text as pool_cidr, a.cidr::text, a.vpc,
-                a.vlan, a.vlan_nombre, a.solicitante, a.ticket, a.origen, a.creado_en
-           from asignaciones a join pools p on p.id = a.pool_id order by p.ambiente desc, a.pool_id, a.cidr`,
-        )
-      ).rows;
-      const pools = (
-        await db.query(
-          `select p.id, p.tipo, p.ambiente, p.proveedor, p.cidr::text, count(a.id)::int as asignaciones, ${USO_POOL} as uso
-           from pools p left join asignaciones a on a.pool_id = p.id group by p.id order by p.ambiente desc, p.id`,
-        )
-      ).rows;
-      return { filas, pools };
+    /**
+     * Asignaciones paginadas, con filtros opcionales por pool, ambiente y texto (CIDR, ID, proyecto/VPC, solicitante o ticket) y orden
+     * por una columna de la lista blanca ORDEN_ASIGNACIONES. Devuelve { filas, total } (total = sin paginar, para el encabezado
+     * X-Total-Count). Lo único que se concatena son fragmentos FIJOS de esa lista y marcadores $n: nada de lo que envía el cliente.
+     */
+    async listarAsignaciones({ pool, ambiente, q: texto, orden = 'fecha', dir, limit = 1000, offset = 0 } = {}) {
+      const donde = [];
+      const par = [];
+      const agregar = (valor, condicion) => {
+        par.push(valor);
+        donde.push(condicion.replaceAll('$$', `$${par.length}`));
+      };
+      if (pool) agregar(pool, 'a.pool_id = $$');
+      if (ambiente) agregar(ambiente, 'p.ambiente = $$');
+      if (texto)
+        agregar(
+          `%${texto.replace(/[\\%_]/g, '\\$&')}%`,
+          '(a.cidr::text ilike $$ or a.codigo ilike $$ or a.vpc ilike $$ or a.solicitante ilike $$ or a.ticket ilike $$)',
+        );
+      const desde = `from asignaciones a join pools p on p.id = a.pool_id ${donde.length ? 'where ' + donde.join(' and ') : ''}`;
+      const sentido = (dir || (orden === 'fecha' ? 'desc' : 'asc')) === 'asc' ? 'asc' : 'desc';
+      const sqlTotal = `select count(*)::int as n ${desde}`; // solo fragmentos fijos y marcadores $n (ver arriba)
+      const total = (await db.query(sqlTotal, par)).rows[0].n;
+      const sql = `select ${COLUMNAS_ASIGNACION_A}, p.ambiente ${desde} order by ${ORDEN_ASIGNACIONES[orden] || ORDEN_ASIGNACIONES.fecha} ${sentido}, a.id ${sentido} limit $${par.length + 1} offset $${par.length + 2}`;
+      return { filas: (await db.query(sql, [...par, limit, offset])).rows, total };
     },
     exportarDatos: () => exportarDatos(db),
     ...consultasDeAdministracion(db),
+    ...consultasDeExportacion(db),
   };
 }
 
-module.exports = { crearRepositorio, consultas, traducir, COLUMNAS_ASIGNACION, USO_POOL, ESTADO_EFECTIVO, RESERVA_VIGENTE };
+module.exports = { crearRepositorio, consultas, traducir, ORDEN_ASIGNACIONES, COLUMNAS_ASIGNACION, USO_POOL, ESTADO_EFECTIVO, RESERVA_VIGENTE };

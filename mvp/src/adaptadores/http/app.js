@@ -8,6 +8,7 @@ const { crearSolicitud } = require('./middleware/solicitud');
 const { crearAcceso } = require('../auth/acceso');
 const { montarOidc } = require('../auth/oidc');
 const { montarBasic } = require('../auth/basic');
+const { crearRevalidador } = require('../auth/revalidacion');
 const { manejadorDeErrores, noEncontrada } = require('./errores');
 const { ruta } = require('./registro');
 const marca = require('./marca');
@@ -64,8 +65,27 @@ function crearApp(deps) {
         },
       },
       hsts: config.http.hsts,
+      referrerPolicy: { policy: 'no-referrer' },
     }),
   );
+  // helmet no trae Permissions-Policy: la interfaz no usa ninguna de estas capacidades del navegador, así que se desactivan.
+  const PERMISOS = [
+    'accelerometer',
+    'autoplay',
+    'camera',
+    'display-capture',
+    'geolocation',
+    'gyroscope',
+    'magnetometer',
+    'microphone',
+    'midi',
+    'payment',
+    'usb',
+  ];
+  app.use((_req, res, next) => {
+    res.set('Permissions-Policy', PERMISOS.map((p) => `${p}=()`).join(', '));
+    next();
+  });
 
   // Las respuestas de la API nunca se guardan en cachés intermedias ni del navegador (pueden traer datos sensibles, p. ej. un token recién creado).
   app.use((req, res, next) => {
@@ -88,8 +108,11 @@ function crearApp(deps) {
   montarOidc(app, { repo, auditar, ruta });
   montarBasic(app, { ruta });
 
+  const revalidador = crearRevalidador({ buscar: (e) => repo.usuarioPorEmail(e) });
+  app.locals.revalidador = revalidador; // para diagnóstico y pruebas (vaciar la caché de sesiones)
   app.use(
     crearAcceso({
+      revalidador,
       rechazo: (motivo) => metricas.authRechazo(motivo),
       autenticarToken: (t) => casos.tokens.autenticar(t),
       auditar,
@@ -107,7 +130,7 @@ function crearApp(deps) {
   sistema.montarSesion(app);
   const contrato = construirOpenApi({ servidor: config.http.publicUrl || '/' });
   const validacion = crearValidador(contrato);
-  const dep = { casos, audita, tickets, publicador, config, contrato, validacion };
+  const dep = { casos, audita, tickets, publicador, config, contrato, validacion, revalidador };
   asignacionesRutas.montar(app, dep);
   administracionRutas.montar(app, dep);
   jiraRutas.montar(app, dep);

@@ -3,6 +3,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
+const http = require('node:http');
+const ExcelJS = require('exceljs');
 
 const SECRET = 'secreto-de-pruebas';
 process.env.JIRA_WEBHOOK_SECRET = SECRET;
@@ -19,7 +21,10 @@ const opts = { skip: hay ? false : 'sin DATABASE_URL' };
 let server, base, db;
 const post = (ruta, cuerpo, h = {}) =>
   fetch(base + ruta, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'ipam', ...h }, body: JSON.stringify(cuerpo) });
-const firma = (txt) => 'sha256=' + crypto.createHmac('sha256', SECRET).update(txt).digest('hex');
+// La firma cubre «<timestamp>.<cuerpo>» (cabecera x-ipam-timestamp).
+const ahora = () => String(Math.floor(Date.now() / 1000));
+const firma = (txt, ts) => 'sha256=' + crypto.createHmac('sha256', SECRET).update(`${ts}.${txt}`).digest('hex');
+const cabecerasWebhook = (txt, ts = ahora()) => ({ 'Content-Type': 'application/json', 'x-ipam-timestamp': ts, 'x-hub-signature-256': firma(txt, ts) });
 
 test.before(async () => {
   if (!hay) return;
@@ -82,12 +87,11 @@ test('webhook de Jira: firma inválida → 401; firma válida → RESERVA y solo
   const cuerpo = JSON.stringify({ ticket: 'NET-9001', ambiente: 'qa', tipo: 'Nodos', mascara: 24, vpc: 'vpc-webhook' });
   const mal = await fetch(base + '/webhook/jira', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-hub-signature-256': 'sha256=00' },
+    headers: { 'Content-Type': 'application/json', 'x-ipam-timestamp': ahora(), 'x-hub-signature-256': 'sha256=00' },
     body: cuerpo,
   });
   assert.equal(mal.status, 401);
-  const enviar = () =>
-    fetch(base + '/webhook/jira', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-hub-signature-256': firma(cuerpo) }, body: cuerpo });
+  const enviar = () => fetch(base + '/webhook/jira', { method: 'POST', headers: cabecerasWebhook(cuerpo), body: cuerpo });
   const bien = await enviar();
   assert.equal(bien.status, 200);
   const d = await bien.json();
@@ -308,4 +312,285 @@ test('respaldo JSON: incluye las direcciones IP fijas y las restaura sin duplica
   assert.deepEqual([vuelta.ip, vuelta.excepcion], ['203.0.113.77', 'prueba de respaldo']);
   assert.equal((await (await post('/api/v1/importar', respaldo)).json()).direcciones, 0); // no duplica
   await fetch(`${base}/api/v1/direcciones/${vuelta.id}`, { method: 'DELETE', headers: H });
+});
+
+// ---------- Bloque 2 · seguridad ----------
+const H = { 'X-Requested-With': 'ipam' };
+const getJson = async (ruta) => (await fetch(base + ruta)).json();
+const conEntorno = async (vars, fn) => {
+  const previo = Object.fromEntries(Object.keys(vars).map((k) => [k, process.env[k]]));
+  Object.assign(process.env, vars);
+  try {
+    return await fn();
+  } finally {
+    for (const [k, v] of Object.entries(previo))
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+  }
+};
+const liberarReserva = (id) =>
+  fetch(`${base}/api/reservas/${id}/liberar`, { method: 'POST', headers: { ...H, 'Content-Type': 'application/json' }, body: '{}' });
+
+test(
+  'webhook con timestamp: exige la cabecera, la ventana de ±5 min y que la firma lo cubra; un reenvío dentro de la ventana es idempotente',
+  opts,
+  async () => {
+    const cuerpo = (ticket) => JSON.stringify({ ticket, ambiente: 'qa', tipo: 'Nodos', mascara: 28, vpc: 'vpc-ts' });
+    const enviar = (txt, headers) => fetch(base + '/webhook/jira', { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: txt });
+    const ts = Number(ahora());
+    // sin timestamp, aunque la firma antigua (solo del cuerpo) sea «correcta»
+    const viejo = cuerpo('NET-9201');
+    const sinTs = await enviar(viejo, { 'x-hub-signature-256': 'sha256=' + crypto.createHmac('sha256', SECRET).update(viejo).digest('hex') });
+    assert.equal(sinTs.status, 401);
+    assert.match((await sinTs.json()).motivo, /x-ipam-timestamp/);
+    // la firma debe cubrir ESE timestamp
+    const t2 = cuerpo('NET-9202');
+    const otro = await enviar(t2, { 'x-ipam-timestamp': String(ts), 'x-hub-signature-256': firma(t2, String(ts - 1)) });
+    assert.equal(otro.status, 401);
+    assert.equal((await otro.json()).motivo, 'firma inválida');
+    // fuera de la ventana (6 min atrás y 6 min adelante), bien firmado
+    for (const desfase of [-360, 360]) {
+      const txt = cuerpo('NET-9203');
+      const r = await enviar(txt, cabecerasWebhook(txt, String(ts + desfase)));
+      assert.equal(r.status, 401, `desfase ${desfase}`);
+      assert.match((await r.json()).motivo, /ventana/);
+    }
+    // dentro de la ventana (4 min atrás): vale; el reenvío exacto devuelve la misma reserva, sin duplicarla
+    const txt = cuerpo('NET-9205');
+    const h = cabecerasWebhook(txt, String(ts - 240));
+    const a = await enviar(txt, h);
+    assert.equal(a.status, 200);
+    const dA = await a.json();
+    const b = await (await enviar(txt, h)).json();
+    assert.equal(b.reserva, dA.reserva, 'reenvío idempotente por ticket');
+    await liberarReserva(dA.reserva);
+    const rechazos = (await getJson('/api/eventos')).filter((e) => e.tipo === 'jira_firma_invalida');
+    assert.ok(
+      rechazos.some((e) => /ventana/.test(e.detalle.motivo)),
+      'el motivo queda en los eventos',
+    );
+  },
+);
+
+test('simulador de Jira: disponible fuera de producción (firma con timestamp); en producción solo con ENABLE_SIMULADOR=true', opts, async () => {
+  const simular = () => post('/api/jira/simular', { ambiente: 'qa', tipo: 'Nodos', mascara: 28, vpc: 'vpc-sim' });
+  assert.equal((await getJson('/api/jira/estado')).simulador, true);
+  const r = await simular();
+  assert.equal(r.status, 200);
+  const d = await r.json();
+  await liberarReserva(d.reserva);
+  const ev = (await getJson('/api/eventos')).find((e) => e.tipo === 'jira_webhook_recibido' && e.detalle.ticket === d.ticket);
+  assert.match(ev.detalle.timestamp, /^\d{10}$/, 'el simulador firma con timestamp');
+
+  await conEntorno({ NODE_ENV: 'production' }, async () => {
+    assert.equal((await getJson('/api/jira/estado')).simulador, false);
+    const bloqueado = await simular();
+    assert.equal(bloqueado.status, 404);
+    assert.equal((await bloqueado.json()).error, 'simulador_deshabilitado');
+    await conEntorno({ ENABLE_SIMULADOR: 'true' }, async () => {
+      assert.equal((await getJson('/api/jira/estado')).simulador, true);
+      const ok = await simular();
+      assert.equal(ok.status, 200);
+      await liberarReserva((await ok.json()).reserva);
+    });
+  });
+});
+
+// Jira falso: crea tickets (clave JIRA-77), con fallos y demoras configurables.
+function jiraFalso({ fallos = 0, demoraMs = 0 } = {}) {
+  const f = { llamadas: [], n: 0 };
+  f.srv = http.createServer((req, res) => {
+    req.resume();
+    req.on('end', () => {
+      f.llamadas.push(`${req.method} ${req.url}`);
+      setTimeout(() => {
+        res.setHeader('content-type', 'application/json');
+        if (req.method === 'POST' && req.url === '/rest/api/3/issue') {
+          if (f.n++ < fallos) {
+            res.statusCode = 500;
+            return res.end('{"error":"boom"}');
+          }
+          return res.end('{"key":"JIRA-77"}');
+        }
+        res.end('{}');
+      }, demoraMs);
+    });
+  });
+  f.entorno = () => ({
+    JIRA_ENABLED: 'true',
+    JIRA_BASE_URL: `http://127.0.0.1:${f.srv.address().port}`,
+    JIRA_EMAIL: 'a@b.cl',
+    JIRA_API_TOKEN: 't',
+    JIRA_PROJECT: 'NET',
+    JIRA_REINTENTO_MS: '20',
+  });
+  f.listen = () => new Promise((ok) => f.srv.listen(0, '127.0.0.1', () => ok(f)));
+  return f;
+}
+const esperarEvento = async (tipo, filtro = () => true) => {
+  for (let i = 0; i < 100; i++) {
+    const e = (await getJson('/api/eventos')).find((x) => x.tipo === tipo && filtro(x));
+    if (e) return e;
+    await new Promise((ok) => setTimeout(ok, 50));
+  }
+  throw new Error(`no apareció el evento ${tipo}`);
+};
+
+test('Jira fuera del camino crítico: la respuesta no espera a Jira y el resultado queda en eventos', opts, async () => {
+  const j = await jiraFalso({ demoraMs: 1500 }).listen();
+  try {
+    await conEntorno(j.entorno(), async () => {
+      const t0 = Date.now();
+      const r = await post('/api/solicitudes', { pool: 'onprem-lan-dev', vpc: 'jira-bg', cidr: '192.168.91.0/24' });
+      const ms = Date.now() - t0;
+      assert.equal(r.status, 201);
+      assert.ok(ms < 1000, `respondió en ${ms} ms, no debe esperar a Jira (1,5 s)`);
+      const a = await r.json();
+      assert.match(a.ticket, /^NET-\d+$/, 'la respuesta trae el ticket interno');
+      const ev = await esperarEvento('jira_ticket_creado', (e) => e.detalle.rango === '192.168.91.0/24');
+      assert.equal(ev.detalle.ticket, 'JIRA-77');
+      const guardada = (await getJson('/api/asignaciones')).find((x) => x.id === a.id);
+      assert.equal(guardada.ticket, 'JIRA-77', 'la clave real reemplaza al ticket interno');
+      await fetch(`${base}/api/asignaciones/${a.id}`, { method: 'DELETE', headers: H });
+    });
+  } finally {
+    j.srv.close();
+  }
+});
+
+test('Jira con un fallo transitorio se reintenta; con Jira caído la asignación se conserva y queda jira_error tras los reintentos', opts, async () => {
+  const transitorio = await jiraFalso({ fallos: 1 }).listen();
+  try {
+    await conEntorno(transitorio.entorno(), async () => {
+      const a = await (await post('/api/solicitudes', { pool: 'onprem-lan-dev', vpc: 'jira-reint', cidr: '192.168.92.0/24' })).json();
+      await esperarEvento('jira_ticket_creado', (e) => e.detalle.rango === '192.168.92.0/24');
+      assert.equal(transitorio.llamadas.filter((l) => l === 'POST /rest/api/3/issue').length, 2, 'un intento fallido y uno bueno');
+      await fetch(`${base}/api/asignaciones/${a.id}`, { method: 'DELETE', headers: H });
+    });
+  } finally {
+    transitorio.srv.close();
+  }
+  const caido = await jiraFalso({ fallos: 99 }).listen();
+  try {
+    await conEntorno({ ...caido.entorno(), JIRA_REINTENTOS: '3' }, async () => {
+      const r = await post('/api/solicitudes', { pool: 'onprem-lan-dev', vpc: 'jira-caido', cidr: '192.168.93.0/24' });
+      assert.equal(r.status, 201);
+      const a = await r.json();
+      const ev = await esperarEvento('jira_error', (e) => e.detalle.ticket === a.ticket);
+      assert.equal(ev.detalle.intentos, 3);
+      assert.match(ev.detalle.motivo, /500/);
+      assert.equal(caido.llamadas.length, 3);
+      assert.equal((await getJson('/api/asignaciones')).find((x) => x.id === a.id).ticket, a.ticket, 'sigue con su ticket interno');
+      await fetch(`${base}/api/asignaciones/${a.id}`, { method: 'DELETE', headers: H });
+    });
+  } finally {
+    caido.srv.close();
+  }
+});
+
+test('Excel por streaming: hojas, estilos y más filas que un lote (segmentos e IPs)', opts, async () => {
+  const y = 2600;
+  try {
+    await db.query(
+      `insert into asignaciones (pool_id,cidr,vpc,solicitante,ticket,origen)
+     select 'onprem-lan-dev', set_masklen(inet '192.168.128.0' + i*4, 30)::cidr, 'bulk-xlsx', 'prueba', 'BULK-' || i, 'panel' from generate_series(0, $1::int - 1) i`,
+      [y],
+    );
+    await db.query(
+      `insert into direcciones_ip (ip, pool_id, rol, dispositivo, excepcion, creado_por)
+     select inet '192.168.200.0' + i, 'onprem-lan-dev', 'otro', 'bulk-ip-' || i, 'prueba de exportación', 'prueba' from generate_series(0, 1199) i`,
+    );
+    const r = await fetch(base + '/api/exportar.xlsx');
+    assert.equal(r.status, 200);
+    assert.match(r.headers.get('content-disposition'), /ipam-segmentos-\d{4}-\d{2}-\d{2}\.xlsx/);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(Buffer.from(await r.arrayBuffer()));
+    const seg = wb.getWorksheet('Segmentos');
+    assert.equal(seg.getCell('A1').value, 'ID');
+    assert.equal(seg.getCell('A1').font.bold, true);
+    assert.equal(seg.views[0].state, 'frozen');
+    const bulk = seg.getRows(2, seg.rowCount - 1).filter((f) => f.getCell('J').value === 'bulk-xlsx');
+    assert.equal(bulk.length, y, 'todas las filas, también las posteriores al primer lote');
+    assert.equal(bulk[0].getCell('D').numFmt, '#,##0');
+    assert.equal(bulk[0].getCell('D').value, 4);
+    assert.equal(wb.getWorksheet('Pools').getCell('A1').value, 'Pool');
+    assert.equal(wb.getWorksheet('Pools').getRow(2).getCell('G').numFmt, '0.0%');
+    const ips = wb.getWorksheet('Direcciones IP');
+    const delBulk = ips.getRows(2, ips.rowCount - 1).filter((f) => String(f.getCell('B').value).startsWith('bulk-ip-'));
+    assert.equal(delBulk.length, 1200, 'las IPs fijas también se exportan completas (antes se cortaban en 2.000)');
+  } finally {
+    await db.query("delete from direcciones_ip where dispositivo like 'bulk-ip-%'");
+    await db.query("delete from asignaciones where vpc = 'bulk-xlsx'");
+  }
+});
+
+test('cabeceras: Permissions-Policy y Referrer-Policy', opts, async () => {
+  const r = await fetch(base + '/api/health');
+  assert.equal(r.headers.get('referrer-policy'), 'no-referrer');
+  const pp = r.headers.get('permissions-policy');
+  for (const f of ['camera=()', 'microphone=()', 'geolocation=()', 'payment=()']) assert.ok(pp.includes(f), f);
+});
+
+// ---------- Bloque 3 · lista de asignaciones paginada ----------
+test('GET /api/asignaciones: paginación, filtros, orden y X-Total-Count', opts, async () => {
+  const get = (q) => fetch(`${base}/api/asignaciones?${q}`);
+  let r = await get('limit=5');
+  const total = Number(r.headers.get('x-total-count'));
+  assert.ok(total >= 12);
+  assert.equal((await r.json()).length, 5);
+  assert.equal((await (await get('limit=2&offset=2')).json()).length, 2);
+  r = await get('limit=2&offset=1000000');
+  assert.deepEqual(await r.json(), []);
+  assert.equal(Number(r.headers.get('x-total-count')), total, 'el total no depende de la página');
+  assert.equal(Number((await get('')).headers.get('x-total-count')), total, 'sin parámetros: lo de siempre, con el total en la cabecera');
+
+  r = await get('pool=gke-nodos-prod&orden=cidr&dir=asc');
+  assert.deepEqual(
+    (await r.json()).map((x) => x.cidr),
+    ['10.10.0.0/20', '10.10.16.0/20', '10.10.32.0/21'],
+  );
+  assert.equal(Number(r.headers.get('x-total-count')), 3);
+  assert.deepEqual(
+    (await (await get('pool=gke-nodos-prod&orden=cidr&dir=desc')).json()).map((x) => x.cidr),
+    ['10.10.32.0/21', '10.10.16.0/20', '10.10.0.0/20'],
+  );
+  assert.deepEqual((await (await get('pool=gke-nodos-prod&orden=direcciones&dir=desc')).json()).map((x) => x.cidr).slice(-1), ['10.10.32.0/21']);
+
+  const porTexto = await (await get('q=NET-142')).json();
+  assert.equal(porTexto.length, 1);
+  assert.equal(porTexto[0].vpc, 'vpc-clientes');
+  assert.equal(porTexto[0].ambiente, 'prod', 'cada fila trae el ambiente de su pool');
+  assert.ok(
+    (await (await get('q=10.64.8')).json()).some((x) => x.ticket === 'NET-142'),
+    'busca por CIDR',
+  );
+  assert.ok((await (await get('q=MLOPEZ')).json()).length >= 4, 'sin distinguir mayúsculas, por solicitante');
+  const unaConCodigo = porTexto[0];
+  assert.deepEqual(
+    (await (await get(`q=${unaConCodigo.codigo}`)).json()).map((x) => x.id),
+    [unaConCodigo.id],
+    'busca por el ID legible (ASG-…)',
+  );
+  assert.deepEqual(await (await get('q=%25')).json(), [], '% se busca literal, no como comodín');
+  assert.deepEqual(await (await get('q=_')).json(), [], '_ se busca literal');
+  const prod = await (await get('ambiente=prod')).json();
+  assert.ok(prod.length >= 9 && prod.every((x) => x.ambiente === 'prod'));
+  assert.equal((await (await get('ambiente=qa&pool=gke-nodos-prod')).json()).length, 0);
+
+  for (const q of [
+    'limit=0',
+    'limit=1001',
+    'limit=abc',
+    'offset=-1',
+    'orden=hack',
+    'orden=constructor',
+    'dir=up',
+    'ambiente=xx',
+    'q=' + 'a'.repeat(101),
+    'pool=a&pool=b',
+  ]) {
+    const e = await get(q);
+    assert.equal(e.status, 400, q);
+    assert.equal((await e.json()).error, 'parametro_invalido', q);
+  }
 });

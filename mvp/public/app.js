@@ -26,6 +26,16 @@ const MASCARAS = Array.from({ length: 25 }, (_, i) => i + 8);
 let YO = { modo: 'none', rol: 'admin', usuario: '', nombre: '' };
 const NIVEL = { lector: 0, agente: 1, solicitante: 2, admin: 3 };
 const puede = (min) => NIVEL[YO.rol] >= NIVEL[min];
+// La API entrega las asignaciones en páginas de hasta 1000 (X-Total-Count trae el total): la interfaz las reúne todas.
+async function todasLasAsignaciones() {
+  const todas = [];
+  for (let desde = 0; ; desde += 1000) {
+    const r = await api('/api/asignaciones?limit=1000&offset=' + desde);
+    if (!r.ok) throw new Error('Error ' + r.status);
+    todas.push(...r.data);
+    if (r.data.length < 1000 || todas.length >= (r.total || 0)) return todas;
+  }
+}
 const get = async (u) => {
   const r = await api(u);
   if (!r.ok) throw new Error('Error ' + r.status);
@@ -171,7 +181,7 @@ const ASIG = { formAbierto: false, aviso: null };
 const textoVlan = (x) => (x.vlan ? `${x.vlan}${x.vlan_nombre ? ' · ' + x.vlan_nombre : ''}` : x.vlan_nombre || '—');
 async function renderAsig() {
   try {
-    const [todosPools, todasAsig] = await Promise.all([get('/api/pools'), get('/api/asignaciones')]);
+    const [todosPools, todasAsig] = await Promise.all([get('/api/pools'), todasLasAsignaciones()]);
     const deEsePool = new Map(todosPools.map((p) => [p.id, p]));
     const q = busquedaAsig.trim().toLowerCase();
     const a = todasAsig
@@ -381,6 +391,12 @@ async function renderJira() {
    <label>Máscara</label><select id="j-len">${MASCARAS.map((n) => `<option ${n === 22 ? 'selected' : ''} value="${n}">/${n}</option>`).join('')}</select>
    <label>VPC</label><input id="j-vpc" value="vpc-nueva"><p><button class="btn" id="j-go">Enviar webhook</button></p><div id="j-res" role="status"></div></div>
   <div style="flex:2;min-width:260px"><b>Registro de eventos</b><div class="log">${esc(ev.map(linea).join('\n')) || '(sin eventos)'}</div></div></div></div>`;
+  if (je.simulador === false) {
+    // En producción el simulador no está disponible (se habilita con ENABLE_SIMULADOR=true): se explica en vez de ofrecer un botón que falla.
+    $('j-go').closest('div[style*="flex:1"]').innerHTML =
+      '<b>Simular ticket entrante</b><p class="muted">El simulador está deshabilitado en este entorno (producción). Se habilita con ENABLE_SIMULADOR=true.</p>';
+    return;
+  }
   if (ultimoJira) {
     $('j-res').className = ultimoJira.ok ? 'ok' : 'alert';
     $('j-res').textContent = ultimoJira.texto;
@@ -1523,7 +1539,7 @@ async function fichaPool(id) {
         nombre: 'Segmentos',
         construir: async (cerrar) => {
           const [asig, reservas] = await Promise.all([
-            get('/api/asignaciones'),
+            todasLasAsignaciones(),
             get('/api/v1/reservas?' + new URLSearchParams({ pool: id, estado: 'reservada' })),
           ]);
           const filas = [
@@ -1581,7 +1597,7 @@ async function fichaPool(id) {
 }
 
 async function fichaAsignacion(id) {
-  const [todas, pools] = await Promise.all([get('/api/asignaciones'), get('/api/v1/pools')]);
+  const [todas, pools] = await Promise.all([todasLasAsignaciones(), get('/api/v1/pools')]);
   const a = todas.find((x) => String(x.id) === String(id));
   if (!a) return alert('Esa asignación ya no existe (¿se liberó?).');
   const p = pools.find((x) => x.id === a.pool_id);

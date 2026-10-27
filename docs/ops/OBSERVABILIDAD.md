@@ -34,7 +34,7 @@ scrape_configs:
 | `ipam_reservas_expiradas_total` | contador | Expiraciones que marcó esta réplica |
 | `ipam_pool_utilizacion_ratio{pool}` | medidor | 0 a 1: asignaciones + reservas vigentes sobre el tamaño del pool |
 | `ipam_tokens_activos`, `ipam_tokens_por_vencer` | medidor | Tokens activos y los que vencen en menos de 7 días |
-| `ipam_auth_rechazos_total{motivo}` | contador | `token_desconocido`, `token_vencido`, `token_revocado`, `token_formato`, `credenciales_basic`, `sesion_invalida`, `csrf`, `fuerza_bruta`, `metrics_token`, `metrics_red` |
+| `ipam_auth_rechazos_total{motivo}` | contador | `token_desconocido`, `token_vencido`, `token_revocado`, `token_formato`, `credenciales_basic`, `sesion_invalida`, `sesion_revocada`, `csrf`, `fuerza_bruta`, `metrics_token`, `metrics_red` |
 | `ipam_rate_limit_excedido_total` | contador | Peticiones rechazadas con 429 por límite |
 | `ipam_barredor_ultima_ejecucion_timestamp` | medidor | Última ejecución del barredor en **cualquier** réplica (0 si nunca) |
 | `ipam_db_up` | medidor | 1 si la base responde |

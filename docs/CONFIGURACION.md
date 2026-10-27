@@ -23,10 +23,12 @@ Tipos: *texto*, *entero*, *booleano* (`true`/`false`) y *lista* (valores separad
 | `MIGRAR_AL_ARRANCAR` | booleano | false | EXCEPCIÓN: aplica el esquema al arrancar (para entornos sin job previo, p. ej. el POC). Por defecto la app NO toca el esquema.  |
 | `ALLOW_ANONYMOUS` | booleano | false | Permite arrancar en producción sin OIDC ni Basic (acceso abierto como admin). Solo para demos.  |
 | `AUTH_LOCAL` | booleano | false | Habilita cuentas locales con contraseña (solo en modo Basic): el admin las crea, desactiva, elimina y restablece desde la pestaña Usuarios. APP_USER/APP_PASS sigue siendo el administrador de emergencia. Para uso real, prefiere OIDC.  |
+| `RETENCION_DIAS` | entero | 365 | Días que se conservan los eventos. `npm run purgar` (usuario migrador) borra lo anterior; 0 = conservar todo. La auditoría no se purga (es de solo inserción).  |
 | `CONFIRMACION_EXIGE_APROBADOR` | booleano | true | Un token de servicio debe indicar quién aprobó (aprobado_por) y la referencia (MR) al confirmar. Regla human-in-the-loop.  |
 | `BARREDOR_INTERVALO_SEGUNDOS` | entero | 60 | Cada cuánto corre el barredor (limpia reservas vencidas y contadores).  |
 | `CUOTA_RESERVAS_POR_TOKEN` | entero | 20 | Reservas «reservada» vigentes simultáneas por token (se puede fijar otra al crearlo).  |
 | `LIMITE_ALMACEN` | texto | postgres | Dónde se cuentan las peticiones: «postgres» (varias réplicas) o «memoria» (solo pruebas). Opciones: postgres, memoria. |
+| `ENABLE_SIMULADOR` | booleano | false | Deja disponible POST /api/jira/simular en producción (fuera de producción siempre lo está). Solo demos: crea reservas reales.  |
 
 ## Límites de cuerpo
 
@@ -66,7 +68,8 @@ Tipos: *texto*, *entero*, *booleano* (`true`/`false`) y *lista* (valores separad
 | Variable | Tipo | Por defecto | Descripción |
 |---|---|---|---|
 | `SESSION_SECRET` | texto | (secreto) | Clave (≥ 32 caracteres) con la que se firma la cookie de sesión OIDC. Secreta. |
-| `SESSION_HORAS` | entero | 8 | Duración de la sesión OIDC.  |
+| `SESSION_HORAS` | entero | 4 | Duración máxima de la sesión OIDC (el rol y la existencia del usuario se revalidan antes: ver SESSION_REVALIDAR_SEG).  |
+| `SESSION_REVALIDAR_SEG` | entero | 300 | Cada cuántos segundos se vuelve a consultar en la base el rol y la existencia de quien tiene una sesión OIDC abierta (0 = en cada petición). Una baja o un cambio de rol rige en ese tiempo, sin esperar a que caduque la cookie; la caché es por réplica.  |
 | `COOKIE_SECURE` | texto | auto | Atributo Secure de las cookies: «auto» (si PUBLIC_URL es https o la petición llegó por HTTPS), «true» o «false». Opciones: auto, true, false. |
 
 ## Acceso con OIDC (SSO)
@@ -144,6 +147,8 @@ Tipos: *texto*, *entero*, *booleano* (`true`/`false`) y *lista* (valores separad
 |---|---|---|---|
 | `JIRA_WEBHOOK_SECRET` | texto | (secreto) | Clave HMAC del webhook entrante de Jira. En producción no tiene valor por defecto: sin ella el webhook queda deshabilitado. Secreta. |
 | `JIRA_ENABLED` | booleano | false | Activa la integración saliente con Jira.  |
+| `JIRA_REINTENTOS` | entero | 3 | Intentos de la sincronización saliente con Jira (corre en segundo plano). Si todos fallan, queda un evento jira_error.  |
+| `JIRA_REINTENTO_MS` | entero | 2000 | Espera base entre intentos con Jira (se multiplica por el número de intento).  |
 | `JIRA_BASE_URL` | texto | (vacío) | URL de Jira Cloud. Ej.: `https://empresa.atlassian.net` |
 | `JIRA_EMAIL` | texto | (vacío) | Correo de la cuenta de servicio de Jira.  |
 | `JIRA_API_TOKEN` | texto | (secreto) | Token de API de Jira. Secreta. |
