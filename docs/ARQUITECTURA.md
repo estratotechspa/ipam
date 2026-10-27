@@ -46,6 +46,14 @@ flowchart TB
 - `mvp/src/server.js` compone todo; `arranque.js` maneja el ciclo de vida y el apagado ordenado.
 - Una guardia automática (`make portabilidad`) falla si el núcleo importa un SDK o nombra un proveedor. Para añadir una pieza nueva: [CONTRIBUIR](CONTRIBUIR.md).
 
+### La interfaz web (`mvp/public/`)
+Sin framework ni paso de compilación: se sirve tal cual. Principios que conviene no romper:
+- `app.js` es un **módulo ES** que importa `iconos.js` (conjunto de iconos SVG) y `calculos.js` (cálculos de CIDR, uso y validación que también ejecutan las pruebas unitarias). Partirlo en más módulos está en el backlog.
+- **Sin scripts en línea:** la política de seguridad de contenido (CSP) los prohíbe; todo script va en su archivo. El texto de usuarios se inserta siempre como texto, nunca como HTML.
+- `app.css` define los **tokens de diseño** (colores, tipografía, espaciado, modo oscuro) en `:root`; los contrastes cumplen AA y una prueba (`ui.test.js`) lo mide.
+- La entrada (`login.html`, `login.js`) y las páginas de error (`adaptadores/http/paginas.js`) son públicas; el resto exige sesión.
+- Las confirmaciones y avisos usan `<dialog>` y un contenedor de avisos propios, no `confirm`/`alert`/`prompt`.
+
 ## 3 · Garantías en la base de datos
 La corrección no depende del código de la aplicación:
 - **Sin solapamientos:** restricción de exclusión (GiST) por pool; dos segmentos que se cruzan no pueden coexistir, ni con concurrencia.

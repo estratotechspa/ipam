@@ -4,7 +4,8 @@
 | Quiero… | Documento |
 |---|---|
 | Entender los términos | [GLOSARIO](../docs/GLOSARIO.md) |
-| **Usar el IPAM** (cada pestaña explicada) | [MANUAL-DE-USO](../docs/MANUAL-DE-USO.md) |
+| **Aprender a usar el IPAM** (paso a paso, con capturas) | [MANUAL-DE-USUARIO](../docs/MANUAL-DE-USUARIO.md) |
+| **Consultar cada pestaña** (referencia) | [MANUAL-DE-USO](../docs/MANUAL-DE-USO.md) |
 | Entender cómo está construido y por qué | [ARQUITECTURA](../docs/ARQUITECTURA.md) y los [ADR](../docs/adr/) |
 | Llamar a la API o integrar un agente | [API-Y-AGENTES](../docs/API-Y-AGENTES.md) y `/api/v1/openapi.json` |
 | Entender el YAML de redes del MVP | [CONTRATO-YAML-REDES](../docs/CONTRATO-YAML-REDES.md) |
