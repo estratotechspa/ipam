@@ -1,5 +1,7 @@
 # Manual de uso del IPAM
 
+Referencia de cada pantalla. Si prefieres una guía paso a paso con imágenes, lee el [Manual de usuario](MANUAL-DE-USUARIO.md).
+
 Para quien usa el IPAM día a día. Si buscas cómo instalarlo, ve a [DESPLIEGUE](ops/DESPLIEGUE.md); si eres un agente o un pipeline, ve a [API-Y-AGENTES](API-Y-AGENTES.md). Los términos técnicos están en el [GLOSARIO](GLOSARIO.md).
 > Los rangos de los ejemplos son **ficticios** (`10.210/220/230/240.0.0/16`).
 
@@ -35,13 +37,14 @@ Los **agentes** (tokens de servicio) tienen rol `lector` o `agente` y no usan la
 ## 3 · Las pestañas, una por una
 
 ### Pools — «¿cómo está todo?»
-Es la pantalla de inicio. Arriba hay cuatro números:
+Es la pantalla de inicio. Arriba hay cinco números:
 - **Pools:** cuántos rangos grandes existen.
 - **Asignaciones activas:** cuántos segmentos están entregados.
 - **Uso total:** direcciones **ocupadas** (asignadas + reservadas) de todos los pools ÷ direcciones totales. Está **ponderado por tamaño**: un `/12` pesa más que un `/28`. Con el filtro activo, es solo de los pools mostrados.
-- **Solapamientos:** siempre debe ser **0**; la base de datos los impide, así que el número está para tu tranquilidad.
+- **Pools sobre 80 %:** cuántos pools están casi llenos (se pinta en rojo si hay alguno).
+- **Espacio libre (direcciones):** cuántas direcciones quedan en total. Debajo, una nota recuerda que los solapamientos no son un indicador: la base de datos los impide con una restricción de exclusión.
 
-Debajo, una fila por pool: su **tipo** (Nodos, Pods, Servicios), **ambiente**, **proveedor** (p. ej. GCP), **CIDR base** (el rango grande), cuántas **asignaciones** y **reservas vigentes** tiene, y la **barra de uso** en dos colores: **azul = asignado** (definitivo) y **ámbar = reservado** (apartado, esperando aprobación); el número es la suma. Es la misma cuenta que se ve en la ficha y al elegir un pool en un formulario. Con alertas configuradas ([OBSERVABILIDAD](ops/OBSERVABILIDAD.md)) avisan al pasar de 80 % y 90 %.
+Debajo, una fila por pool: su **tipo** (Nodos, Pods, Servicios), **ambiente**, **proveedor** (p. ej. GCP), **CIDR base** (el rango grande), cuántas **asignaciones** y **reservas vigentes** tiene, y la **barra de uso**, que suma **asignado** (definitivo) y **reservado** (apartado, esperando aprobación). Es **verde** por debajo de 70 %, **ámbar** entre 70 % y 90 % y **roja** por encima de 90 % (con un ícono de alerta); el número es la suma. Es la misma cuenta que se ve en la ficha y al elegir un pool en un formulario. Con alertas configuradas ([OBSERVABILIDAD](ops/OBSERVABILIDAD.md)) avisan al pasar de 80 % y 90 %.
 
 **Cómo se calcula el uso de un pool:** se suman las direcciones de cada segmento asignado o reservado (un `/24` son 256, incluidas la de red y la de difusión) y se dividen por las direcciones del pool. Ejemplo: un `/20` (4.096) con un `/24` asignado y un `/25` reservado → 256 + 128 = 384 → **9,4 %** (6,3 % asignado + 3,1 % reservado).
 
@@ -131,7 +134,7 @@ Nadie puede desactivarse ni eliminarse a sí mismo. Todo queda registrado en la 
 
 **¿Y la pestaña Auditoría?** Se quitó de la barra: el historial de cada pool y segmento se ve en su **ficha**. La bitácora completa se sigue registrando (es de solo inserción) y un admin la puede consultar por la API (`GET /api/v1/auditoria`, con filtros `pool` y `cidr`) para investigar un incidente; el `request_id` enlaza con los logs.
 
-> **Novedades de la interfaz:** las confirmaciones ahora son un cuadro propio (Esc cancela, Enter acepta) y los avisos aparecen arriba a la derecha; en «Nueva asignación» el segmento se valida mientras escribes; en la ficha de un pool, la pestaña Detalle muestra el mapa de bloques (asignado / reservado / libre); y las barras de uso se ponen ámbar desde 80 % y rojas desde 90 %.
+> **Novedades de la interfaz:** las confirmaciones ahora son un cuadro propio (Esc cancela, Enter acepta) y los avisos aparecen arriba a la derecha; en «Nueva asignación» el segmento se valida mientras escribes; en la ficha de un pool, la pestaña Detalle muestra el mapa de bloques (asignado / reservado / libre); y las barras de uso pasan a ámbar desde 70 % y a rojo por encima de 90 %.
 
 ## 4 · Tareas comunes
 **Dar un rango a un proyecto nuevo (flujo automático, el recomendado)**

@@ -40,7 +40,8 @@ Con el compose, el acceso queda abierto como administrador (`ALLOW_ANONYMOUS=tru
 ## Documentación
 | Quiero… | Documento |
 |---|---|
-| **Usar el IPAM** (cada pestaña explicada) | [`docs/MANUAL-DE-USO.md`](docs/MANUAL-DE-USO.md) |
+| **Aprender a usar el IPAM** (paso a paso, con capturas) | [`docs/MANUAL-DE-USUARIO.md`](docs/MANUAL-DE-USUARIO.md) |
+| **Consultar cada pestaña** (referencia) | [`docs/MANUAL-DE-USO.md`](docs/MANUAL-DE-USO.md) |
 | Entender los términos | [`docs/GLOSARIO.md`](docs/GLOSARIO.md) |
 | Entender cómo está construido | [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md) y los [ADR](docs/adr/) |
 | Llamar a la API o integrar un agente | [`docs/API-Y-AGENTES.md`](docs/API-Y-AGENTES.md) |

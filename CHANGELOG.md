@@ -15,9 +15,13 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y 
 - El Excel se genera por streaming (lotes de 1000, instantánea consistente) e incluye todas las IPs fijas (antes, 2000).
 - `npm run purgar` (usuario migrador) borra eventos anteriores a `RETENCION_DIAS` (365), por lotes; la auditoría no se purga (solo inserción). Índice `eventos_ts_idx` (idempotente, sin cambiar la versión del esquema).
 
+### Documentación
+- Nuevo [Manual de usuario](docs/MANUAL-DE-USUARIO.md) (guía paso a paso, con capturas en `docs/img/`); el [Manual de uso](docs/MANUAL-DE-USO.md) queda como referencia pantalla por pantalla y se corrigió: los cinco indicadores de Pools y los umbrales de las barras.
+- `main` pasa a ser la línea hexagonal (reservas, tokens, pools, cuentas locales); el monolito anterior queda en la etiqueta `main-monolito-antes-de-unificar`.
+
 ### Interfaz (bloque 4a)
 - **Diseño y accesibilidad:** tokens de diseño (tipografía, espaciado, radios) con modo oscuro, contraste AA medido, foco visible, enlace «saltar al contenido», navegación con `aria-current`, tablas con `scope`/`aria-sort` y conjunto de iconos propio (`/iconos.js`) en lugar de glifos.
-- **Visualización:** barras de uso con umbrales (80 %/90 %) e indicador de alerta, indicadores «Pools sobre 80 %» y «Espacio libre», mapa de bloques en la ficha del pool, Asignaciones con búsqueda, orden por columna y paginación.
+- **Visualización:** barras de uso con umbrales (verde < 70 %, ámbar hasta 90 %, rojo por encima) e indicador de alerta, indicadores «Pools sobre 80 %» y «Espacio libre», mapa de bloques en la ficha del pool, Asignaciones con búsqueda, orden por columna y paginación.
 - **Facilidad de uso:** diálogo de confirmación accesible y avisos (toasts) en lugar de `confirm`/`alert`/`prompt`; validación de CIDR en vivo; liberar un segmento pide motivo; pestaña Jira muestra primero el estado real y pliega los diagramas.
 - **Entrada:** página `/login` (solo SSO) y páginas de error propias (dominio no permitido, sin rol, correo sin verificar, sesión expirada o cerrada, demasiados intentos); errores del proveedor redirigen a `/login?error=…`. Favicon de la marca en `/favicon.svg`.
 - Pruebas: `calculos.test.js`, `ui.test.js`, ampliación de `auth.test.js` y `e2e/bloque4.spec.js`.
