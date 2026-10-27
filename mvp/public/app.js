@@ -175,7 +175,7 @@ async function renderPools() {
   <div class="card"><div class="kpi">${_fmt(Math.max(0, Math.round(total - ocupadas)))}</div><div class="sub">Espacio libre (direcciones)</div></div></div>
   <p class="nota">${I('info')} Los solapamientos no son un indicador: la base de datos los impide con una restricción de exclusión.</p>
   <div id="pool-nuevo"></div><div id="pools-msg" aria-live="polite"></div>
-  <p class="muted leyenda"><span class="muestra asig"></span> asignado <span class="muestra res"></span> reservado · Haz clic en un pool para ver su ficha.</p>
+  <p class="muted leyenda"><span><span class="muestra asig"></span> asignado</span> <span><span class="muestra res"></span> reservado</span> <span>Haz clic en un pool para ver su ficha.</span></p>
   <div class="card tablewrap" tabindex="0" role="region" aria-label="Pools"><table><thead><tr><th scope="col">Pool</th><th scope="col">Tipo</th><th scope="col">Ambiente</th><th scope="col">Proveedor</th><th scope="col">CIDR base</th><th scope="col">Asig.</th><th scope="col">Reservas</th><th scope="col">Uso</th></tr></thead><tbody>
   ${pools
     .map(
