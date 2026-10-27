@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { aceptar } = require('./ayudas');
 const AxeBuilder = require('@axe-core/playwright').default;
 
 test('importar segmentos: simular no escribe, el solapamiento con otro pool exige aprobación, aplicar importa y queda como «importado»', async ({ page }) => {
@@ -42,8 +43,8 @@ test('importar segmentos: simular no escribe, el solapamiento con otro pool exig
     .getByRole('checkbox')
     .check();
   await expect(page.locator('#imp-aplicar')).toHaveText('Importar 3 segmentos');
-  page.once('dialog', (d) => d.accept());
   await page.click('#imp-aplicar');
+  await aceptar(page, 'Importar');
   await expect(page.locator('#imp-msg')).toContainText('Importados 3 segmentos');
 
   const importadas = await yaEsta();

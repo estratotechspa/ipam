@@ -37,6 +37,7 @@ Los usuarios pueden ser `lector`, `solicitante` o `admin`; los tokens, `lector` 
 - Nadie puede desactivarse ni eliminarse a sí mismo; todo queda en la auditoría sin claves.
 - **La pestaña Usuarios la ve todo admin.** Con SSO o con `AUTH_LOCAL=true` trae las cuentas; sin ellas (Basic sin `AUTH_LOCAL`, o acceso abierto) explica cómo habilitarlas en vez de ocultarse. En Helm: `auth.local=true`.
 - **Cambiar la clave:** cada cuenta local tiene su botón «Mi contraseña». El administrador de emergencia (`APP_USER`/`APP_PASS`) no la cambia desde la interfaz: vive en el Secret/variable (usa un hash `scrypt$…`, ver `npm run hash-password`). Con `AUTH_LOCAL=true` lo habitual es crear cuentas `admin` propias y dejar el de emergencia guardado.
+- **Entrar y errores (SSO):** quien no tiene sesión llega a `/login` (pública, sin script en línea); si el proveedor devuelve un error o la persona no está autorizada, ve una página con el motivo y qué hacer, no un JSON. Los eventos «correo sin verificar» quedan auditados.
 - **Cerrar sesión:** con SSO, «Salir» borra la cookie. Con Basic no hay sesión que cerrar (el navegador guarda las credenciales): «Salir» llama a `/auth/salir`, que responde 401, y con credenciales falsas hace que Chromium y Firefox **olviden** las guardadas, y lleva a la página «Sesión cerrada». Es un recurso de mejor esfuerzo (Safari puede seguir recordándolas): en un equipo compartido, cierra además la ventana del navegador.
 
 ## 2c · Sesiones OIDC, webhook de Jira y cabeceras

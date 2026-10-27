@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { aceptar } = require('./ayudas');
 const AxeBuilder = require('@axe-core/playwright').default;
 
 // Abre «Nueva asignación» (dentro de Asignaciones; reemplaza a la antigua pestaña «Asignar directo»).
@@ -40,8 +41,8 @@ test('nueva asignación con VLAN → ver en la tabla → ficha con historial →
   const [descarga] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: /Exportar a Excel/ }).click()]);
   expect(descarga.suggestedFilename()).toMatch(/^ipam-segmentos-\d{4}-\d{2}-\d{2}\.xlsx$/);
 
-  page.once('dialog', (d) => d.accept('prueba e2e: ya no se necesita'));
   await fila.getByRole('button', { name: 'Liberar' }).click();
+  await aceptar(page, 'Liberar segmento', { motivo: 'prueba e2e: ya no se necesita' });
   await expect(page.locator('tr', { hasText: vpc })).toHaveCount(0);
   // El motivo queda registrado.
   const aud = await (await page.request.get('/api/v1/auditoria')).json();

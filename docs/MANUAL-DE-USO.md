@@ -131,6 +131,8 @@ Nadie puede desactivarse ni eliminarse a sí mismo. Todo queda registrado en la 
 
 **¿Y la pestaña Auditoría?** Se quitó de la barra: el historial de cada pool y segmento se ve en su **ficha**. La bitácora completa se sigue registrando (es de solo inserción) y un admin la puede consultar por la API (`GET /api/v1/auditoria`, con filtros `pool` y `cidr`) para investigar un incidente; el `request_id` enlaza con los logs.
 
+> **Novedades de la interfaz:** las confirmaciones ahora son un cuadro propio (Esc cancela, Enter acepta) y los avisos aparecen arriba a la derecha; en «Nueva asignación» el segmento se valida mientras escribes; en la ficha de un pool, la pestaña Detalle muestra el mapa de bloques (asignado / reservado / libre); y las barras de uso se ponen ámbar desde 80 % y rojas desde 90 %.
+
 ## 4 · Tareas comunes
 **Dar un rango a un proyecto nuevo (flujo automático, el recomendado)**
 1. El agente reserva los rangos desde el pipeline.

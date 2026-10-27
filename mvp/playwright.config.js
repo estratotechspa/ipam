@@ -21,7 +21,7 @@ module.exports = defineConfig({
   projects: [
     {
       name: 'abierto',
-      testMatch: /(flujo|reservas-tokens|xss|importar|pools-ips)\.spec\.js/,
+      testMatch: /(flujo|reservas-tokens|xss|importar|pools-ips|bloque4)\.spec\.js/,
       use: { baseURL: process.env.E2E_BASE_URL || 'http://127.0.0.1:8099', httpCredentials: credenciales },
     },
     ...(externo

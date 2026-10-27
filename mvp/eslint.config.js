@@ -67,7 +67,7 @@ module.exports = [
   // La interfaz web corre en el navegador.
   {
     files: ['public/**/*.js'],
-    languageOptions: { sourceType: 'script', globals: { ...globals.browser } },
+    languageOptions: { sourceType: 'module', globals: { ...globals.browser } }, // la interfaz son módulos ES (sin paso de compilación)
     rules: {
       'no-restricted-properties': 'off',
       'no-console': 'off',

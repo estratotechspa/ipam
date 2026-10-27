@@ -45,7 +45,19 @@ function logo() {
   }
 }
 
+// Favicon por defecto: cuatro bloques (el espacio de direcciones) en el color principal de la marca. Si la marca trae logo, las
+// páginas usan el logo como icono y este no se pide.
+function favicon() {
+  const c = color(cfg.marca.color, '#2d6cdf');
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="${c}"/>` +
+    '<g fill="#fff"><rect x="6" y="6" width="9" height="9" rx="2"/><rect x="17" y="6" width="9" height="9" rx="2" opacity=".55"/>' +
+    '<rect x="6" y="17" width="9" height="9" rx="2" opacity=".55"/><rect x="17" y="17" width="9" height="9" rx="2"/></g></svg>'
+  );
+}
+
 function montar(app) {
+  ruta(app, 'get', '/favicon.svg', (_q, res) => res.type('image/svg+xml').set('Cache-Control', 'no-cache').send(favicon()));
   ruta(app, 'get', '/brand.css', (_q, res) => res.type('text/css').set('Cache-Control', 'no-cache').send(css()));
   ruta(app, 'get', '/api/config', (_q, res) => res.json(config()));
   ruta(app, 'get', '/brand/logo', (_q, res) => {
@@ -62,4 +74,4 @@ function montar(app) {
   });
 }
 
-module.exports = { montar, config, css };
+module.exports = { montar, config, css, favicon };

@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { aceptar } = require('./ayudas');
 const AxeBuilder = require('@axe-core/playwright').default;
 
 const H = { 'X-Requested-With': 'ipam' };
@@ -26,8 +27,8 @@ test('pools: un admin crea un bloque base, lo edita desde su ficha y lo elimina'
   await ficha.getByRole('button', { name: 'Guardar' }).click();
   await expect(page.getByRole('dialog')).toContainText('LAN sucursal');
   await page.getByRole('dialog').getByText('Editar o eliminar este pool').click();
-  page.once('dialog', (d) => d.accept());
   await page.getByRole('dialog').getByRole('button', { name: 'Eliminar pool' }).click();
+  await aceptar(page, 'Eliminar pool');
   await expect(page.locator('#pools-msg')).toContainText(`Pool ${id} eliminado`);
   await expect(page.locator('#pools').getByRole('button', { name: id, exact: true })).toHaveCount(0);
 });
