@@ -18,11 +18,11 @@ Decisiones tomadas a propósito para la prueba de concepto (POC). Cada punto dic
 ## 3. Entrega en YAML plano (sin Helm)
 - **Contexto:** el cliente indicó que la aplicación debe poder desplegarse en su infraestructura con todos los componentes en YAML. Hoy se entrega un chart de Helm (plantillas con lógica), no manifiestos planos.
 - **Propuesta (sin hacer):**
-  1. Publicar en `deploy/` los manifiestos planos generados con `helm template` desde el mismo chart, y que el CI falle si quedan desactualizados (una sola fuente de verdad).
+  1. Publicar en `despliegue/kubernetes/` los manifiestos planos generados con `helm template` desde el chart (`mvp/chart/ipam`), y que el CI falle si quedan desactualizados (una sola fuente de verdad).
   2. Estructura Kustomize (`base/` + `overlays/`) para cambiar dominio, imagen, recursos, marca y bucket de respaldos con parches; el chart de Helm se conserva.
 - **Ajustes necesarios al pasar a YAML plano:**
   - **Secretos:** no pueden llevar valores generados; entregar un `secret.example.yaml` vacío o referencias a su gestor (External Secrets, Sealed Secrets, Vault).
-  - **Job de esquema:** hoy es un hook de Helm y un Job no se puede reaplicar con el mismo nombre; moverlo a un `initContainer` del Deployment (el esquema es idempotente) o a un hook PreSync si usan Argo CD.
-  - **Valores del cliente** (ingress class, StorageClass, dominio, imagen, bucket) como parches del overlay en lugar de `values.yaml`.
+  - **Job de esquema:** hoy es un hook de Helm (`migrate-job.yaml`) y un Job no se puede reaplicar con el mismo nombre; moverlo a un `initContainer` del Deployment (el esquema es idempotente) o a un hook PreSync si usan Argo CD.
+  - **Valores del cliente** (ingress class, StorageClass, dominio, imagen, bucket) como parches del overlay en lugar de `values.yaml` (hoy están en `despliegue/kubernetes/values-*.yaml`).
   - **Respaldos (pgBackRest):** variante opcional (overlay `con-respaldos`); con una base administrada (Cloud SQL) se elimina el StatefulSet.
 - **Por decidir con el cliente:** herramienta de despliegue (`kubectl`, Kustomize, Argo CD, Flux), Kubernetes estándar (GKE) u OpenShift (cambian UID, Routes), y base administrada o incluida.
