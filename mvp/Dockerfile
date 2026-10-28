@@ -8,7 +8,9 @@
 #  - sin registry fijo: se etiqueta y publica donde diga la variable de CI (ver scripts/ci/).
 #  - multi-arquitectura (amd64 y arm64): `docker buildx build --platform linux/amd64,linux/arm64 …` (lo hace el CI).
 ARG BUILD_IMAGE=node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402
-ARG BASE_IMAGE=cgr.dev/chainguard/node@sha256:939413e9b81609d6d7188037f76faf627566de86fa786f9a25baf6764a51b618
+# Node 22 LTS (la versión con la que se prueba todo: CI y desarrollo). Chainguard gratuito solo publica `latest` (hoy Node 26), así que
+# no permite fijar la versión mayor; distroless sí, y mantiene lo importante: sin shell ni gestor de paquetes, usuario no root, amd64 y arm64.
+ARG BASE_IMAGE=gcr.io/distroless/nodejs22-debian13@sha256:10747a1323be68f206aed893599d43e6697ad67257e7c42703553f99fbce3d33
 
 # La etapa de dependencias corre SIEMPRE en la arquitectura del equipo que construye ($BUILDPLATFORM), no en la de destino: las
 # dependencias de producción son JavaScript puro (sin módulos nativos; los scripts de instalación se omiten con --ignore-scripts),

@@ -21,6 +21,9 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y 
 ### Seguridad de la interfaz
 - **Liberar un segmento pide una segunda confirmación** («Última confirmación»): además del motivo, hay que escribir el CIDR exacto para continuar. Aplica a Asignaciones, a la ficha del segmento y a liberar una reserva ya confirmada. Es una protección de la interfaz; la API no cambia.
 
+### Imagen
+- **El runtime pasa a Node 22.** La base Chainguard gratuita solo publica `latest` (Node 26): producción corría una versión mayor distinta de la que prueba el CI. Ahora es `gcr.io/distroless/nodejs22-debian13` fijada por digest: sin shell ni gestor de paquetes, usuario `65532`, amd64 y arm64. Verificado con sistema de archivos de solo lectura, sin capacidades y `no-new-privileges`: arranca, `/healthz` y `/readyz` responden y el healthcheck queda `healthy`.
+
 ### CI
 - **El job «construir» ya no falla al azar.** La etapa `deps` del Dockerfile corre en la arquitectura del que construye (`FROM --platform=$BUILDPLATFORM`) y no bajo emulación QEMU: ahí `npm ci` terminaba con `Illegal instruction` (SIGILL) en la mayoría de las primeras pasadas del build arm64. Es seguro porque las dependencias de producción son JavaScript puro; una prueba nueva (`arquitectura.test.js`) falla si se agrega una dependencia nativa o por plataforma. Verificado construyendo y cargando las dependencias en amd64 y arm64.
 

@@ -70,7 +70,7 @@ Cabeceras de seguridad (CSP estricta, HSTS opcional, `nosniff`, sin `X-Powered-B
 `/metrics` **nace cerrado** (404): se abre con `METRICS_TOKEN` o con `METRICS_ALLOW_CIDRS`.
 
 ## 7 · Contenedor y despliegue
-Imagen mínima (Chainguard) fijada por digest, usuario no root (65532), sistema de archivos de solo lectura, `cap_drop: ALL`; en Kubernetes, `NetworkPolicy` y contexto de seguridad estrictos en el chart.
+Imagen mínima (distroless, Node 22) fijada por digest, usuario no root (65532), sistema de archivos de solo lectura, `cap_drop: ALL`; en Kubernetes, `NetworkPolicy` y contexto de seguridad estrictos en el chart.
 
 ## 8 · Qué hacer ante un incidente
 1. Revoca los tokens sospechosos (pestaña Tokens).

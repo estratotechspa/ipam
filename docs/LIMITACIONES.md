@@ -23,7 +23,6 @@ El IPAM exige `aprobado_por` y `referencia` para que un agente confirme, y los g
 ## Sobre lo verificado
 - Las pruebas automáticas corren contra PostgreSQL 14, 15, 16 y 17 reales.
 - Los pipelines de GitHub y GitLab, los manifiestos de GKE/EKS/AKS/Cloud Run y los ejemplos de OpenTofu **no se ejecutaron contra cuentas reales**; se validaron sintácticamente y, donde fue posible, en contenedores locales.
-- La imagen de runtime (Chainguard, fijada por digest) trae una versión de Node más nueva que la que prueba el CI (22).
 - `exceljs` arrastra una dependencia con un aviso de severidad moderada en `npm audit` (aceptado; la severidad alta bloquea el CI).
 - El contrato YAML de redes es una **propuesta pendiente de validar** con el equipo dueño de `cd-agents`.
 - La herramienta de escaneo mencionada como «Whisky» está **por confirmar**; hoy se usan Trivy y Checkov.
