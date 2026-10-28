@@ -93,7 +93,7 @@ Nada de «EstratoTech» está escrito en el código ni en la imagen: nombre, col
 - La contraseña de la base, los secretos de OIDC/Jira y la marca viven en Secret/ConfigMap/values: se reinstala el chart en el nuevo clúster con otros valores y se importa el JSON.
 
 ## Seguridad del contenedor y del chart
-- **Imagen:** dos etapas; runtime `cgr.dev/chainguard/node` fijado por digest (sin shell ni gestor de paquetes; Trivy: 0 CRITICAL/HIGH con parche). Usuario `65532`, sistema de archivos de solo lectura, sin capacidades Linux.
+- **Imagen:** dos etapas; runtime `gcr.io/distroless/nodejs22-debian13` (Node 22, la versión con la que se prueba todo) fijado por digest (sin shell ni gestor de paquetes; Trivy bloquea CRITICAL/HIGH con parche en el CI). Usuario `65532`, sistema de archivos de solo lectura, sin capacidades Linux.
 - **Imagen propia del cliente:** `docker build --build-arg BASE_IMAGE=<su-imagen-node> --build-arg BUILD_IMAGE=<su-imagen-node> .` (Node ≥ 20 en el PATH, usuario no root).
 - **Chart:** `seccomp RuntimeDefault`, ServiceAccount propia sin token montado, `NetworkPolicy` (`networkPolicy.*`; `ingressFrom` para limitar quién llega a la app), Postgres y Job con filesystem de solo lectura y límites de recursos.
 - **Cabeceras HTTP:** `helmet` con CSP estricta (`script-src 'self'`). Detrás de un ingress: `TRUST_PROXY=1`; con acceso solo por HTTPS: `HSTS=true`.
