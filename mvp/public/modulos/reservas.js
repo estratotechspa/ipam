@@ -81,7 +81,9 @@ export function tictac() {
   });
 }
 
+let ULTIMA_CARGA = 0; // número de la carga más reciente: una respuesta vieja no debe pisar a una nueva ni rehacer el formulario mientras se escribe
 export async function renderReservas() {
+  const mia = ++ULTIMA_CARGA;
   const raiz = $('reservas'),
     puedeOperar = (r) => puede('agente') && (YO.rol === 'admin' || r.solicitante === YO.usuario);
   try {
@@ -90,6 +92,7 @@ export async function renderReservas() {
     if (f.estado) qs.set('estado', f.estado);
     if (f.pool) qs.set('pool', f.pool);
     const [pools, todas] = await Promise.all([get('/api/v1/pools'), get('/api/v1/reservas' + (String(qs) ? '?' + qs : ''))]);
+    if (mia !== ULTIMA_CARGA) return;
     const poolDe = new Map(pools.map((p) => [p.id, p]));
     const lista = todas.filter(
       (r) =>

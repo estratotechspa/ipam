@@ -102,6 +102,7 @@ test('reservas: listar, filtrar, confirmar y liberar con confirmación y cuenta 
   await page.getByLabel('Estado').selectOption('confirmada');
   await expect(page.locator('tr', { hasText: r.vpc })).toHaveCount(0);
   await page.getByLabel('Estado').selectOption('');
+  await expect(page.getByLabel('Estado')).toBeFocused(); // la interfaz devuelve el foco al terminar de redibujar: recién ahí se puede escribir sin que se pierda
   await page.getByLabel('Solicitante').fill('svc:' + t.nombre);
   await expect(page.locator('#reservas tbody tr')).toHaveCount(1);
   await page.locator('#res-f-pool').selectOption(r.pool_id);
