@@ -10,8 +10,13 @@
 ARG BUILD_IMAGE=node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402
 ARG BASE_IMAGE=cgr.dev/chainguard/node@sha256:939413e9b81609d6d7188037f76faf627566de86fa786f9a25baf6764a51b618
 
-# hadolint ignore=DL3006
-FROM ${BUILD_IMAGE} AS deps
+# La etapa de dependencias corre SIEMPRE en la arquitectura del equipo que construye ($BUILDPLATFORM), no en la de destino: las
+# dependencias de producción son JavaScript puro (sin módulos nativos; los scripts de instalación se omiten con --ignore-scripts),
+# así que node_modules es idéntico para amd64 y arm64. Así `npm ci` no se ejecuta bajo emulación QEMU, donde Node fallaba al azar con
+# «Illegal instruction» (SIGILL) al construir arm64 en el CI. Si algún día se agrega una dependencia nativa, quita esta línea
+# (src/arquitectura.test.js lo detecta).
+# hadolint ignore=DL3006,DL3029
+FROM --platform=$BUILDPLATFORM ${BUILD_IMAGE} AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
