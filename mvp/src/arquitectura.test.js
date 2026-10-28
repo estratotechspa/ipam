@@ -55,3 +55,16 @@ test('el dominio y la aplicación son puros: no importan Express, SQL, red ni ad
     }
   }
 });
+
+test('las dependencias de producción son JavaScript puro: el Dockerfile instala node_modules en la arquitectura del que construye', () => {
+  // `FROM --platform=$BUILDPLATFORM … AS deps` copia el MISMO node_modules a las imágenes amd64 y arm64. Eso solo es válido sin
+  // módulos nativos ni paquetes por plataforma (os/cpu); si alguien agrega uno, esta prueba obliga a revisar el Dockerfile.
+  const lock = JSON.parse(fs.readFileSync(path.join(MVP, 'package-lock.json'), 'utf8'));
+  const PERMITIDOS = new Set(['node_modules/@scarf/scarf']); // telemetría de swagger-ui: su script de instalación se omite con --ignore-scripts
+  const raros = Object.entries(lock.packages)
+    .filter(([ruta, p]) => ruta && !p.dev && (p.hasInstallScript || p.os || p.cpu) && !PERMITIDOS.has(ruta))
+    .map(([ruta]) => ruta);
+  assert.deepEqual(raros, [], 'dependencia con script de instalación o específica de plataforma: revisa la etapa deps del Dockerfile');
+  assert.match(fs.readFileSync(path.join(MVP, 'Dockerfile'), 'utf8'), /^FROM --platform=\$BUILDPLATFORM \$\{BUILD_IMAGE\} AS deps$/m);
+  assert.match(fs.readFileSync(path.join(MVP, 'Dockerfile'), 'utf8'), /npm ci --omit=dev --ignore-scripts/);
+});
