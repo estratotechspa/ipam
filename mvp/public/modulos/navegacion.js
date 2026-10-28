@@ -1,8 +1,8 @@
 // Navegación entre pestañas y despacho de cada vista.
 import { $, ESTADO, puede } from './base.js';
-import { RES, renderReservas } from './reservas.js';
+import { RES } from './reservas.js';
 import { renderPools } from './pools.js';
-import { renderAsig } from './asignaciones.js';
+import { renderSegmentos } from './segmentos.js';
 import { renderJira } from './jira.js';
 import { renderTokens } from './tokens.js';
 import { renderUsuarios } from './usuarios.js';
@@ -30,8 +30,7 @@ export function show(t) {
 export function render(t) {
   ({
     pools: renderPools,
-    asig: renderAsig,
-    reservas: renderReservas,
+    segmentos: renderSegmentos,
     jira: renderJira,
     tokens: renderTokens,
     usuarios: renderUsuarios,

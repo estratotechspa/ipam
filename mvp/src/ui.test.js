@@ -117,7 +117,10 @@ test('iconos: un solo set, SVG con aria-hidden, currentColor y 16/20 px', async 
 
 test('iconos usados en la interfaz existen, y no quedan glifos Unicode como icono', async () => {
   const { ICONOS } = await cargarIconos();
-  const fuentes = fs.readdirSync(PUBLICO).filter((f) => /\.(js|html)$/.test(f) && f !== 'api.js' && f !== 'api.html');
+  const fuentes = [
+    ...fs.readdirSync(PUBLICO).filter((f) => /\.(js|html)$/.test(f) && f !== 'api.js' && f !== 'api.html'),
+    ...MODULOS.map((f) => 'modulos/' + f),
+  ];
   const usados = new Set();
   for (const f of fuentes) {
     const t = leer(f);
@@ -189,7 +192,7 @@ test('index.html: enlace para saltar, h1, main, navegación con iconos y aviso d
   assert.match(html, /id="toasts"[^>]*aria-live="polite"/);
   assert.match(html, /<link id="favicon" rel="icon" href="\/favicon\.svg"/);
   const botones = [...html.matchAll(/<button[^>]*data-t="(\w+)"[^>]*>/g)];
-  assert.ok(botones.length >= 7);
+  assert.ok(botones.length >= 6);
   for (const [b] of botones) assert.match(b, /data-ic="\w+"/, b);
 });
 

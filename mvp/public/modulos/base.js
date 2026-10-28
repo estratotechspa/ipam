@@ -6,6 +6,7 @@ export const ESTADO = {
   vista: 'pools',
   busquedaAsig: '', // texto del buscador de Asignaciones
   ultimoJira: null, // resultado de la última simulación (se muestra tras recargar la pestaña)
+  vistaSegmentos: 'todos', // filtro de la pestaña Segmentos: todos | asignados | reservados | historial
   poolsAviso: null, // aviso que Pools muestra tras crear o eliminar un pool
 };
 

@@ -1,7 +1,7 @@
-// Filtro por ambiente y proveedor, común a Pools, Asignaciones y Reservas.
+// Filtro por ambiente y proveedor, común a Pools y Segmentos.
 import { h } from './base.js';
 
-// Filtro global por ambiente y proveedor: vale para Pools, Asignaciones y Reservas (se conserva al cambiar de pestaña).
+// Filtro global por ambiente y proveedor: vale para Pools y Segmentos (se conserva al cambiar de pestaña).
 export const FILTRO = { ambiente: '', proveedor: '' };
 
 export const pasaFiltro = (p) => (!FILTRO.ambiente || p.ambiente === FILTRO.ambiente) && (!FILTRO.proveedor || p.proveedor === FILTRO.proveedor);

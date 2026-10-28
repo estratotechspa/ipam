@@ -89,54 +89,57 @@ test('el diálogo de token se maneja con teclado: Escape cierra y devuelve el fo
 test('reservas: listar, filtrar, confirmar y liberar con confirmación y cuenta regresiva', async ({ page, request }) => {
   const t = await tokenPorApi(request);
   const r = await (await reservarComo(request, t.token)).json();
-  await irA(page, 'Reservas');
-  await expect(page.getByRole('heading', { name: 'Reservas', exact: true })).toBeVisible();
+  await irA(page, 'Segmentos');
+  await expect(page.getByRole('heading', { name: 'Segmentos', exact: true })).toBeVisible();
   const fila = page.locator('tr', { hasText: r.vpc });
   await expect(fila).toBeVisible();
   await expect(fila).toContainText(r.cidr);
   await expect(fila).toContainText('svc:' + t.nombre);
-  await expect(fila).toContainText('reservada');
+  await expect(fila).toContainText('Reservado');
   await expect(fila.locator('time.restante')).toContainText(/^23 h \d+ min$|^1 d 0 h$|^24 h$/); // cuenta regresiva del TTL (24 h)
 
-  // Filtros por estado, pool y solicitante.
-  await page.getByLabel('Estado').selectOption('confirmada');
+  // Filtros por estado (botones), búsqueda por solicitante y ambiente/proveedor.
+  await page.getByRole('button', { name: /^Asignados/ }).click();
+  await expect(page.getByRole('button', { name: /^Asignados/ })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('tr', { hasText: r.vpc })).toHaveCount(0);
-  await page.getByLabel('Estado').selectOption('');
-  await expect(page.getByLabel('Estado')).toBeFocused(); // la interfaz devuelve el foco al terminar de redibujar: recién ahí se puede escribir sin que se pierda
-  await page.getByLabel('Solicitante').fill('svc:' + t.nombre);
-  await expect(page.locator('#reservas tbody tr')).toHaveCount(1);
-  await page.locator('#res-f-pool').selectOption(r.pool_id);
+  await page.getByRole('button', { name: /^Reservados/ }).click();
+  await expect(page.locator('tr', { hasText: r.vpc })).toBeVisible();
+  await page.getByRole('button', { name: /^Todos/ }).click();
+  await expect(page.getByRole('button', { name: /^Todos/ })).toHaveAttribute('aria-pressed', 'true'); // solo la pantalla ya redibujada lo tiene: recién ahí se puede escribir sin que se pierda
+  await page.locator('#f-buscar').pressSequentially('svc:' + t.nombre);
+  await expect(page.locator('#segmentos tbody tr')).toHaveCount(1);
   await expect(page.locator('tr', { hasText: r.vpc })).toBeVisible();
 
-  // Confirmar pide confirmación; al aceptar pasa a confirmada (definitiva).
+  // Confirmar pide confirmación; al aceptar la reserva pasa a ser una asignación (definitiva).
   await page
     .locator('tr', { hasText: r.vpc })
     .getByRole('button', { name: /Confirmar/ })
     .click();
   await cancelar(page, { contiene: r.cidr });
-  await expect(page.locator('tr', { hasText: r.vpc })).toContainText('reservada');
+  await expect(page.locator('tr', { hasText: r.vpc })).toContainText('Reservado');
   await page
     .locator('tr', { hasText: r.vpc })
     .getByRole('button', { name: /Confirmar/ })
     .click();
   await aceptar(page, 'Confirmar');
-  await expect(page.getByRole('status')).toContainText('confirmada');
-  const confirmada = page.locator('tr', { hasText: r.vpc });
-  await expect(confirmada).toContainText('confirmada');
+  await expect(page.locator('#seg-msg')).toContainText('confirmada');
+  const asignada = page.locator('tr', { hasText: r.vpc });
+  await expect(asignada).toContainText('Asignado');
+  await expect(asignada).toContainText(/ASG-\d+/);
   expect((await (await page.request.get('/api/v1/asignaciones')).json()).some((a) => a.cidr === r.cidr && a.origen === 'agente')).toBe(true);
 
-  // Liberar una confirmada avisa que borra la asignación y la libera.
-  await confirmada.getByRole('button', { name: /Liberar/ }).click();
-  await aceptar(page, 'Liberar', { contiene: 'asignación definitiva', encadenado: true });
+  // Liberar una asignación (nacida de una reserva) pide motivo y la segunda confirmación, y borra la asignación.
+  await asignada.getByRole('button', { name: /Liberar/ }).click();
+  await aceptar(page, 'Liberar segmento', { motivo: 'prueba e2e', encadenado: true });
   await confirmarLiberacion(page, r.cidr);
-  await expect(page.locator('tr', { hasText: r.vpc })).toContainText('liberada');
+  await expect(page.locator('tr', { hasText: r.vpc })).toHaveCount(0);
   expect((await (await page.request.get('/api/v1/asignaciones')).json()).some((a) => a.cidr === r.cidr)).toBe(false);
 });
 
 test('la cuenta regresiva avanza sola y marca como vencida una reserva sin tiempo', async ({ page, request }) => {
   const t = await tokenPorApi(request);
   const r = await (await reservarComo(request, t.token, { ttl_horas: 1 })).json(); // con menos de 1 h se muestran los segundos
-  await irA(page, 'Reservas');
+  await irA(page, 'Segmentos');
   const tiempo = page.locator('tr', { hasText: r.vpc }).locator('time.restante');
   await expect(tiempo).toHaveText(/^\d+ min \d+ s$/);
   await expect(tiempo).toHaveClass(/poco/); // menos de una hora: se resalta
@@ -158,22 +161,22 @@ test('seguridad de la interfaz: lo que escribe un usuario se muestra como texto,
   await page.addInitScript(() => {
     window.__xss = undefined;
   });
-  await irA(page, 'Reservas');
+  await irA(page, 'Segmentos');
   await expect(page.getByText(malicioso, { exact: true })).toBeVisible();
   expect(await page.evaluate(() => window.__xss)).toBeUndefined();
-  expect(await page.locator('#reservas img').count()).toBe(0);
-  await page.locator('#nav').getByRole('button', { name: 'Asignaciones', exact: true }).click();
+  expect(await page.locator('#segmentos img').count()).toBe(0);
+  await page.locator('#nav').getByRole('button', { name: 'Segmentos', exact: true }).click();
   await page.locator('#nav').getByRole('button', { name: 'Pools', exact: true }).click();
   expect(await page.evaluate(() => window.__xss)).toBeUndefined();
   await request.delete(`/api/v1/reservas/${r.id}`, { headers: CAB });
 });
 
-test('accesibilidad (axe): las pestañas Reservas y Tokens y el diálogo no tienen infracciones serias', async ({ page, request }) => {
+test('accesibilidad (axe): las pestañas Segmentos y Tokens y el diálogo no tienen infracciones serias', async ({ page, request }) => {
   const t = await tokenPorApi(request);
   await reservarComo(request, t.token);
-  await irA(page, 'Reservas');
-  await expect(page.locator('#reservas tbody tr').first()).toBeVisible();
-  const reservas = await new AxeBuilder({ page }).include('#reservas').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
+  await irA(page, 'Segmentos');
+  await expect(page.locator('#segmentos tbody tr').first()).toBeVisible();
+  const reservas = await new AxeBuilder({ page }).include('#segmentos').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
   expect(reservas.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(' | ')}`)).toEqual([]);
   await page.locator('#nav').getByRole('button', { name: 'Tokens', exact: true }).click();
   await expect(page.locator('#tokens tbody tr').first()).toBeVisible();
@@ -200,15 +203,15 @@ test('Jira → reserva → aprobación manual de un admin → asignación (nada 
   const sinAprobar = (await (await page.request.get('/api/v1/asignaciones')).json()).some((a) => a.vpc === vpc);
   expect(sinAprobar).toBe(false);
   // …sí hay una reserva de «jira-webhook» esperando.
-  await irA(page, 'Reservas');
+  await irA(page, 'Segmentos');
   const fila = page.locator('tr', { hasText: vpc });
   await expect(fila).toContainText('jira-webhook');
-  await expect(fila).toContainText('reservada');
+  await expect(fila).toContainText('Reservado');
 
   // Un admin la aprueba: recién entonces se asigna, con origen «jira».
   await fila.getByRole('button', { name: /Confirmar/ }).click();
   await aceptar(page, 'Confirmar');
-  await expect(page.locator('tr', { hasText: vpc })).toContainText('confirmada');
+  await expect(page.locator('tr', { hasText: vpc })).toContainText('Asignado');
   const asignadas = await (await page.request.get('/api/v1/asignaciones')).json();
   const a = asignadas.find((x) => x.vpc === vpc);
   expect(a.origen).toBe('jira');
@@ -218,22 +221,22 @@ test('Jira → reserva → aprobación manual de un admin → asignación (nada 
   await page.request.delete(`/api/v1/asignaciones/${a.id}`, { headers: { 'X-Requested-With': 'ipam' } });
 });
 
-test('Nueva reserva desde la interfaz: se crea, queda pendiente y un admin la aprueba', async ({ page }) => {
+test('Reservar desde la interfaz: se crea, queda pendiente y un admin la aprueba', async ({ page }) => {
   const vpc = `nueva-res-${Date.now()}`;
-  await irA(page, 'Reservas');
-  await page.locator('#reservas summary').click();
+  await irA(page, 'Segmentos');
+  await page.locator('#segmentos summary', { hasText: 'Reservar un segmento' }).click();
   await page.selectOption('#nr-pool', 'gke-nodos-qa');
   await page.fill('#nr-vpc', vpc);
   await page.selectOption('#nr-mascara', '26');
   await page.fill('#nr-vlan', '300');
   await page.click('#nr-go');
-  await expect(page.getByRole('status')).toContainText('Falta la aprobación de un admin');
+  await expect(page.locator('#seg-msg')).toContainText('Falta la aprobación de un admin');
   const fila = page.locator('tr', { hasText: vpc });
-  await expect(fila).toContainText('reservada');
+  await expect(fila).toContainText('Reservado');
   expect((await (await page.request.get('/api/v1/asignaciones')).json()).some((a) => a.vpc === vpc)).toBe(false);
   await fila.getByRole('button', { name: /Confirmar/ }).click();
   await aceptar(page, 'Confirmar');
-  await expect(page.locator('tr', { hasText: vpc })).toContainText('confirmada');
+  await expect(page.locator('tr', { hasText: vpc })).toContainText('Asignado');
   const a = (await (await page.request.get('/api/v1/asignaciones')).json()).find((x) => x.vpc === vpc);
   expect(a.cidr).toMatch(/\/26$/);
   expect(a.vlan).toBe(300); // la VLAN de la reserva pasa a la asignación
