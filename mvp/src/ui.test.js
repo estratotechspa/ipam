@@ -151,13 +151,33 @@ test('todas las etiquetas de estado (.tag.X) con texto blanco cumplen 4,5:1', ()
   for (const [, nombre, color] of hex) assert.ok(ratio('#ffffff', color) >= 4.5, `.tag.${nombre} ${color}: ${ratio('#ffffff', color).toFixed(2)}:1`);
 });
 
-test('la interfaz no usa diálogos nativos (confirm, alert, prompt) ni glifos Unicode como icono, y es un módulo ES', () => {
-  const t = leer('app.js');
-  const codigo = t.replace(/^\s*(\/\/|\*|\/\*).*$/gm, '').replace(/\s\/\/ .*$/gm, '');
-  assert.ok(!/\b(alert|confirm|prompt)\(/.test(codigo), 'diálogos nativos');
+const MODULOS = fs.readdirSync(path.join(PUBLICO, 'modulos')).filter((f) => f.endsWith('.js'));
+const fuentes = () => ['app.js', ...MODULOS.map((f) => 'modulos/' + f)];
+
+test('la interfaz no usa diálogos nativos (confirm, alert, prompt) ni patrones que la CSP no admite, y es un módulo ES', () => {
   assert.match(leer('index.html'), /<script type="module" src="\/app\.js">/);
-  assert.match(t, /^import \{ icono \} from '\/iconos\.js';/m);
-  assert.ok(!/eval\(|new Function|document\.write/.test(codigo), 'patrones que la CSP no admite');
+  for (const f of fuentes()) {
+    const codigo = leer(f)
+      .replace(/^\s*(\/\/|\*|\/\*).*$/gm, '')
+      .replace(/\s\/\/ .*$/gm, '');
+    assert.ok(!/\b(alert|confirm|prompt)\(/.test(codigo), `${f}: diálogos nativos`);
+    assert.ok(!/eval\(|new Function|document\.write|insertAdjacentHTML/.test(codigo), `${f}: patrones que la CSP o el escáner no admiten`);
+  }
+  assert.match(leer('modulos/base.js'), /^import \{ icono \} from '\.\.\/iconos\.js';/m);
+});
+
+test('módulos de la interfaz: cada importación existe, ninguno importa el punto de entrada y ninguno es gigante', () => {
+  assert.ok(MODULOS.length >= 12, `se esperaban los módulos por pestaña (hay ${MODULOS.length})`);
+  for (const f of fuentes()) {
+    const t = leer(f);
+    for (const [, ruta] of t.matchAll(/^import [^;]*? from '([^']+)';/gms)) {
+      assert.ok(ruta.startsWith('.') || ruta.startsWith('/'), `${f}: ruta ${ruta}`);
+      const destino = path.normalize(path.join(PUBLICO, path.dirname(f), ruta));
+      assert.ok(fs.existsSync(destino), `${f} importa ${ruta}, que no existe`);
+      assert.ok(!/app\.js$/.test(ruta), `${f} no debe importar el punto de entrada`);
+    }
+    assert.ok(t.split('\n').length <= 400, `${f} supera 400 líneas: divídelo`);
+  }
 });
 
 test('index.html: enlace para saltar, h1, main, navegación con iconos y aviso de notificaciones', () => {

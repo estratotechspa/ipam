@@ -19,6 +19,9 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y 
 - Nuevo [Manual de usuario](docs/MANUAL-DE-USUARIO.md) (guía paso a paso, con capturas en `docs/img/`); el [Manual de uso](docs/MANUAL-DE-USO.md) queda como referencia pantalla por pantalla y se corrigió: los cinco indicadores de Pools y los umbrales de las barras.
 - `main` pasa a ser la línea hexagonal (reservas, tokens, pools, cuentas locales); el monolito anterior queda en la etiqueta `main-monolito-antes-de-unificar`.
 
+### Interfaz (bloque 4b)
+- `public/app.js` (2.400 líneas) se divide en un punto de entrada y 15 módulos ES en `public/modulos/` (uno por pestaña o responsabilidad). Sin cambios de comportamiento: las 35 pruebas e2e y las unitarias pasan igual. Nueva prueba que valida las importaciones y el tamaño de cada módulo.
+
 ### Interfaz (bloque 4a)
 - **Diseño y accesibilidad:** tokens de diseño (tipografía, espaciado, radios) con modo oscuro, contraste AA medido, foco visible, enlace «saltar al contenido», navegación con `aria-current`, tablas con `scope`/`aria-sort` y conjunto de iconos propio (`/iconos.js`) en lugar de glifos.
 - **Visualización:** barras de uso con umbrales (verde < 70 %, ámbar hasta 90 %, rojo por encima) e indicador de alerta, indicadores «Pools sobre 80 %» y «Espacio libre», mapa de bloques en la ficha del pool, Asignaciones con búsqueda, orden por columna y paginación.
