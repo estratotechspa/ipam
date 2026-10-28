@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { aceptar, cancelar } = require('./ayudas');
+const { aceptar, cancelar, confirmarLiberacion } = require('./ayudas');
 const AxeBuilder = require('@axe-core/playwright').default;
 
 const CAB = { 'X-Requested-With': 'ipam' };
@@ -127,7 +127,8 @@ test('reservas: listar, filtrar, confirmar y liberar con confirmación y cuenta 
 
   // Liberar una confirmada avisa que borra la asignación y la libera.
   await confirmada.getByRole('button', { name: /Liberar/ }).click();
-  await aceptar(page, 'Liberar', { contiene: 'asignación definitiva' });
+  await aceptar(page, 'Liberar', { contiene: 'asignación definitiva', encadenado: true });
+  await confirmarLiberacion(page, r.cidr);
   await expect(page.locator('tr', { hasText: r.vpc })).toContainText('liberada');
   expect((await (await page.request.get('/api/v1/asignaciones')).json()).some((a) => a.cidr === r.cidr)).toBe(false);
 });

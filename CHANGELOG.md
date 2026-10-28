@@ -18,6 +18,9 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y 
 ### Rendimiento de la base de datos
 - Cinco índices de apoyo (idempotentes, opcionales, sin cambiar la versión del esquema): historial de auditoría por pool y por segmento (de hasta ≈ 330 ms a < 1 ms con 1.000.000 de filas y creciendo sin tope), clave foránea `reservas.asignacion_id`, lista de asignaciones por pool e IPs por pool. Mediciones con 100.000 segmentos en [BASE-DE-DATOS](docs/BASE-DE-DATOS.md). Nueva prueba `indices.test.js` que exige que las consultas reales usen sus índices. Se aplican con `npm run migrar`; incluyen `eventos_ts_idx` de la purga por retención.
 
+### Seguridad de la interfaz
+- **Liberar un segmento pide una segunda confirmación** («Última confirmación»): además del motivo, hay que escribir el CIDR exacto para continuar. Aplica a Asignaciones, a la ficha del segmento y a liberar una reserva ya confirmada. Es una protección de la interfaz; la API no cambia.
+
 ### Correcciones
 - Reservas: si se cambiaba un filtro y enseguida se escribía en otro (o dos cargas se cruzaban), una respuesta vieja podía redibujar la pantalla y hacer perder lo escrito. Ahora solo la carga más reciente redibuja. Detectado por una prueba intermitente (≈ 1 de cada 60 ejecuciones).
 

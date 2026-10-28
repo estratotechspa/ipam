@@ -78,7 +78,7 @@ La lista oficial de segmentos definitivos: **ID** (`ASG-000123`, único por asig
 - Un clic en el **ID** abre la **ficha** del segmento.
 - **Exportar a Excel** para auditorías o reportes (incluye el ID y la VLAN).
 - **Respaldo JSON** (solo admin): copia lógica completa para llevar el IPAM a otra infraestructura ([MIGRACION](ops/MIGRACION.md)).
-- **Liberar** (solo admin): devuelve el segmento al pool. Pide el **motivo**, que queda en el historial junto con quién lo hizo. Hazlo solo cuando la red realmente se eliminó.
+- **Liberar** (solo admin): devuelve el segmento al pool. Pide el **motivo**, que queda en el historial junto con quién lo hizo, y luego una **segunda confirmación** en la que hay que escribir el CIDR exacto del segmento. Hazlo solo cuando la red realmente se eliminó. Es solo una protección de la interfaz: la API (agentes y pipelines) no la pide.
 
 **Nueva asignación — «entrégalo ya, definitivo» (solo admin).** Entrega un segmento **de inmediato y de forma definitiva**, **sin reserva y sin aprobación de otra persona**; queda en el historial a nombre del admin que lo hizo.
 1. Elige el **pool**. **Ningún pool viene elegido** de antemano, y la **máscara** se habilita recién al elegirlo.

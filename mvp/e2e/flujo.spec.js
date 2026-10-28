@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { aceptar } = require('./ayudas');
+const { aceptar, cancelar, confirmarLiberacion, dialogo } = require('./ayudas');
 const AxeBuilder = require('@axe-core/playwright').default;
 
 // Abre «Nueva asignación» (dentro de Asignaciones; reemplaza a la antigua pestaña «Asignar directo»).
@@ -41,8 +41,20 @@ test('nueva asignación con VLAN → ver en la tabla → ficha con historial →
   const [descarga] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: /Exportar a Excel/ }).click()]);
   expect(descarga.suggestedFilename()).toMatch(/^ipam-segmentos-\d{4}-\d{2}-\d{2}\.xlsx$/);
 
+  // Liberar pide DOS confirmaciones. Cancelar en la segunda deja el segmento intacto; un CIDR mal escrito no la acepta.
+  const cidr = (await fila.locator('code').nth(1).textContent()).trim();
   await fila.getByRole('button', { name: 'Liberar' }).click();
-  await aceptar(page, 'Liberar segmento', { motivo: 'prueba e2e: ya no se necesita' });
+  await aceptar(page, 'Liberar segmento', { motivo: 'prueba e2e: ya no se necesita', encadenado: true });
+  await cancelar(page, { contiene: 'Última confirmación' });
+  await expect(page.locator('tr', { hasText: vpc })).toHaveCount(1);
+  await fila.getByRole('button', { name: 'Liberar' }).click();
+  await aceptar(page, 'Liberar segmento', { motivo: 'prueba e2e: ya no se necesita', encadenado: true });
+  const segunda = dialogo(page);
+  await segunda.getByLabel(`Escribe ${cidr} para confirmar`).fill('10.0.0.0/8');
+  await segunda.getByRole('button', { name: 'Sí, liberar ahora' }).click();
+  await expect(segunda).toContainText(`Escribe exactamente ${cidr}`);
+  await expect(page.locator('tr', { hasText: vpc })).toHaveCount(1);
+  await confirmarLiberacion(page, cidr);
   await expect(page.locator('tr', { hasText: vpc })).toHaveCount(0);
   // El motivo queda registrado.
   const aud = await (await page.request.get('/api/v1/auditoria')).json();

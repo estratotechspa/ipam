@@ -146,7 +146,12 @@ Las IPs fijas de routers, switches, firewalls, gateways y servidores. Escribe el
 
 1. **Asignaciones** → **Liberar** en la fila del segmento. Hazlo solo cuando la red realmente se eliminó.
 2. Escribe el **motivo** (es obligatorio y queda en el historial) y confirma con **Liberar segmento**. **Esc** cancela.
-3. No se puede liberar un segmento que aún tiene IPs registradas: elimínalas primero.
+3. Aparece una **segunda confirmación**, «Última confirmación»: hay que **escribir el CIDR exacto** del segmento (por ejemplo `10.64.8.0/21`) y pulsar **Sí, liberar ahora**. Si el texto no coincide, no avanza. Existe para que no se libere por error un bloque que sigue en uso; **Cancelar** o **Esc** en cualquier paso lo deja todo como estaba.
+4. No se puede liberar un segmento que aún tiene IPs registradas: elimínalas primero.
+
+![Segunda confirmación: escribir el CIDR del segmento](img/12-liberar-confirmacion-final.png)
+
+> La misma segunda confirmación aparece al **liberar una reserva ya confirmada** desde la pestaña Reservas, porque también borra la asignación definitiva.
 
 ### Cargar el inventario que ya existe (administrador)
 ![Pantalla de importación](img/11-importar.png)

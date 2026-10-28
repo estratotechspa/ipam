@@ -4,7 +4,7 @@ import { parseCidr, tamanoCidr } from '../calculos.js';
 import { $, ESTADO, I, api, errorApi, esc, fail, fecha, fmt, get, h, ico, msg, puede, size, todasLasAsignaciones } from './base.js';
 import { FILTRO, barraFiltro, pasaFiltro } from './filtro.js';
 import { fichaAsignacion } from './fichas.js';
-import { dialogoSimple, toast, vincularCidr } from './ui.js';
+import { confirmarLiberacionDefinitiva, dialogoSimple, toast, vincularCidr } from './ui.js';
 import { cargarDisponibilidad } from './disponibilidad.js';
 
 // Orden por columna y paginación de Asignaciones (en el navegador, sobre la lista ya filtrada). Se conservan al cambiar de pestaña.
@@ -169,6 +169,7 @@ export async function liberarAsignacion(id, cidr, despues) {
     campo: { etiqueta: 'Motivo', obligatorio: true },
   });
   if (!aceptado) return false;
+  if (!(await confirmarLiberacionDefinitiva(cidr))) return false;
   const r = await api('/api/asignaciones/' + id, { method: 'DELETE', body: { motivo } });
   if (r.ok) toast(`Segmento ${cidr} liberado.`);
   else toast((r.data && (r.data.mensaje || r.data.error)) || 'No se pudo liberar', 'error');
