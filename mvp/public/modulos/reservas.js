@@ -1,7 +1,7 @@
 // Pestaña Reservas: lista, cuenta regresiva, alta, confirmar y liberar.
 import { $, YO, api, errorApi, fail, fechaHora, get, h, ico, msg, puede } from './base.js';
 import { camposVlan, cuerpoVlan, selectorPoolMascara, textoVlan } from './asignaciones.js';
-import { confirmar, tabla, vincularCidr } from './ui.js';
+import { confirmar, confirmarLiberacionDefinitiva, tabla, vincularCidr } from './ui.js';
 import { camposFiltro, pasaFiltro } from './filtro.js';
 
 // Formulario «Nueva reserva» (solicitante y admin): aparta un rango por un tiempo; un admin debe aprobarla para que sea asignación.
@@ -253,6 +253,8 @@ export async function accionReserva(r, que, zona) {
     }))
   )
     return;
+  // Liberar una reserva ya confirmada borra la asignación definitiva: pide la misma segunda confirmación que Asignaciones.
+  if (!confirmando && r.estado === 'confirmada' && !(await confirmarLiberacionDefinitiva(r.cidr))) return;
   const x = confirmando ? await api(`/api/v1/reservas/${r.id}/confirmar`, { body: {} }) : await api(`/api/v1/reservas/${r.id}`, { method: 'DELETE', body: {} });
   await renderReservas();
   $('res-titulo').focus();

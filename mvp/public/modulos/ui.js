@@ -96,6 +96,12 @@ export function dialogoSimple({ titulo, mensaje, confirmar: textoOk = 'Aceptar',
         entrada.focus();
         return;
       }
+      if (campo && campo.debeCoincidir && entrada.value.trim() !== campo.debeCoincidir) {
+        error.textContent = `Escribe exactamente ${campo.debeCoincidir} para confirmar.`;
+        entrada.setAttribute('aria-invalid', 'true');
+        entrada.focus();
+        return;
+      }
       aceptado = true;
       d.close();
     });
@@ -112,6 +118,19 @@ export function dialogoSimple({ titulo, mensaje, confirmar: textoOk = 'Aceptar',
 }
 
 export const confirmar = async (opciones) => (await dialogoSimple(opciones)).aceptado;
+
+/**
+ * Segunda confirmación antes de liberar un segmento ya entregado: si el bloque está en uso, liberarlo por error es grave. Hay que
+ * escribir el CIDR exacto, así un clic o una tecla de más no basta. Devuelve true solo si se confirmó.
+ */
+export const confirmarLiberacionDefinitiva = (cidr) =>
+  confirmar({
+    titulo: 'Última confirmación',
+    mensaje: `Vas a liberar ${cidr}. Si este bloque está en uso, las redes que lo usan podrían quedar sin direcciones o chocar con la próxima persona a la que se le entregue. Hazlo solo si la red ya se eliminó.`,
+    confirmar: 'Sí, liberar ahora',
+    peligro: true,
+    campo: { etiqueta: `Escribe ${cidr} para confirmar`, obligatorio: true, debeCoincidir: cidr },
+  });
 
 export function tabla(titulo, cabeceras, filas, vacio) {
   if (!filas.length) return h('div', { class: 'card vacio' }, vacio);
