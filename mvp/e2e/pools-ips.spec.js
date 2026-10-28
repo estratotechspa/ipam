@@ -40,9 +40,9 @@ test('IPs fijas: se registran desde la ficha del segmento, se buscan por equipo 
   const ip = `${n[0]}.${n[1]}.${n[2]}.${n[3] + 1}`;
 
   await page.goto('/');
-  await page.locator('#nav').getByRole('button', { name: 'Asignaciones', exact: true }).click();
+  await page.locator('#nav').getByRole('button', { name: 'Segmentos', exact: true }).click();
   await page
-    .locator('#asig tr', { hasText: `vpc-${equipo}` })
+    .locator('#segmentos tr', { hasText: `vpc-${equipo}` })
     .locator('button.enlace')
     .click();
   const ficha = page.getByRole('dialog');

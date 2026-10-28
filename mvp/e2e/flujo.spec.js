@@ -2,11 +2,11 @@ const { test, expect } = require('@playwright/test');
 const { aceptar, cancelar, confirmarLiberacion, dialogo } = require('./ayudas');
 const AxeBuilder = require('@axe-core/playwright').default;
 
-// Abre «Nueva asignación» (dentro de Asignaciones; reemplaza a la antigua pestaña «Asignar directo»).
+// Abre «Asignar ahora» (dentro de Segmentos).
 async function abrirNuevaAsignacion(page) {
   await page.goto('/');
-  await page.locator('#nav').getByRole('button', { name: 'Asignaciones', exact: true }).click();
-  await page.locator('#asig summary', { hasText: 'Nueva asignación' }).click();
+  await page.locator('#nav').getByRole('button', { name: 'Segmentos', exact: true }).click();
+  await page.locator('#segmentos summary', { hasText: 'Asignar ahora' }).click();
 }
 
 test('nueva asignación con VLAN → ver en la tabla → ficha con historial → exportar a Excel → liberar', async ({ page }) => {
@@ -21,9 +21,9 @@ test('nueva asignación con VLAN → ver en la tabla → ficha con historial →
   await page.fill('#na-vlan', '210');
   await page.fill('#na-vlan-nombre', 'e2e-vlan');
   await page.click('#na-go');
-  await expect(page.locator('#asig-msg .ok')).toContainText('Asignado');
+  await expect(page.locator('#seg-msg .ok')).toContainText('Asignado');
 
-  const fila = page.locator('#asig tr', { hasText: vpc });
+  const fila = page.locator('#segmentos tr', { hasText: vpc });
   await expect(fila).toBeVisible();
   await expect(fila).toContainText('210 · e2e-vlan');
 
@@ -71,7 +71,7 @@ test('un CIDR solapado muestra la alerta y sugiere segmentos libres', async ({ p
   await expect(page.locator('#na-res .sug').first()).toBeVisible();
 });
 
-test('el filtro por ambiente y proveedor acota Pools, Asignaciones y Reservas', async ({ page }) => {
+test('el filtro por ambiente y proveedor acota Pools y Segmentos', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Estado de pools' })).toBeVisible();
   const filas = page.locator('#pools tbody tr').filter({ has: page.locator('td') });
@@ -84,8 +84,8 @@ test('el filtro por ambiente y proveedor acota Pools, Asignaciones y Reservas', 
   expect(prod).toBeLessThan(total);
   for (const t of await page.locator('#pools tbody tr td:nth-child(3)').allTextContents()) expect(t.toLowerCase()).toContain('prod');
   // El filtro se conserva en otra pestaña.
-  await page.getByRole('button', { name: 'Asignaciones', exact: true }).click();
-  await expect(page.locator('#asig #f-ambiente')).toHaveValue('prod');
+  await page.getByRole('button', { name: 'Segmentos', exact: true }).click();
+  await expect(page.locator('#segmentos #f-ambiente')).toHaveValue('prod');
   await page.getByRole('button', { name: 'Limpiar filtro' }).first().click();
   await page.getByRole('button', { name: 'Pools', exact: true }).click();
   await expect(page.locator('#pools #f-ambiente')).toHaveValue('');
@@ -93,11 +93,12 @@ test('el filtro por ambiente y proveedor acota Pools, Asignaciones y Reservas', 
 
 test('cada asignación muestra su ID (ASG-000123) y se puede buscar por él', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Asignaciones', exact: true }).click();
-  const filas = page.locator('#asig tbody tr').filter({ has: page.locator('td') });
+  await page.getByRole('button', { name: 'Segmentos', exact: true }).click();
+  // Solo las filas asignadas tienen ID ASG-…; las reservas pendientes llevan RES-…
+  const filas = page.locator('#segmentos tbody tr').filter({ has: page.locator('button.enlace') });
   await expect(filas.first()).toBeVisible();
   const total = await filas.count();
-  const id = (await filas.first().locator('td').first().textContent()).trim();
+  const id = (await filas.first().locator('button.enlace').textContent()).trim();
   expect(id).toMatch(/^ASG-\d{6,}$/);
   await page.fill('#f-buscar', id);
   await expect(filas).toHaveCount(1);
@@ -122,9 +123,9 @@ test('al elegir un pool se ve cuántas direcciones y bloques libres quedan, y so
   // Un clic en una fila elige esa máscara.
   await tabla.locator('tr', { has: page.locator('code', { hasText: /^\/26$/ }) }).click();
   await expect(page.locator('#na-mascara')).toHaveValue('26');
-  // La misma información está en «Nueva reserva».
-  await page.getByRole('button', { name: 'Reservas', exact: true }).click();
-  await page.locator('#reservas summary').click();
+  // La misma información está en «Reservar un segmento».
+  await page.getByRole('button', { name: 'Segmentos', exact: true }).click();
+  await page.locator('#segmentos summary', { hasText: 'Reservar un segmento' }).click();
   await expect(page.locator('#nr-pool')).toHaveValue('');
   await page.selectOption('#nr-pool', 'gke-nodos-qa');
   await expect(page.locator('#nr-disp').getByRole('table', { name: 'Disponibilidad por máscara' })).toBeVisible();

@@ -53,10 +53,10 @@ Debajo, una fila por pool: su **tipo** (Nodos, Pods, Servicios), **ambiente**, *
 - **Importar segmentos** (solo admin) abre la importación masiva (ver más abajo); **← Volver a Pools** regresa.
 - **Exportar a Excel** baja una planilla con todo.
 
-**Filtro por ambiente y proveedor:** arriba de la tabla hay dos listas, **Ambiente** (`dev`, `qa`, `pre`, `prod`) y **Proveedor** (p. ej. GCP). Al elegir una, los números y la tabla muestran solo esos pools. El filtro **se conserva** al pasar a Asignaciones y Reservas, que también quedan acotadas; **Limpiar filtro** lo quita.
+**Filtro por ambiente y proveedor:** arriba de la tabla hay dos listas, **Ambiente** (`dev`, `qa`, `pre`, `prod`) y **Proveedor** (p. ej. GCP). Al elegir una, los números y la tabla muestran solo esos pools. El filtro **se conserva** al pasar a Segmentos, que también queda acotada; **Limpiar filtro** lo quita.
 
 ### Ficha de detalle — «todo sobre un pool o un segmento»
-Al hacer clic en un **pool** (pestaña Pools) o en el **ID** de una asignación (`ASG-000123`, pestaña Asignaciones) se abre un panel a la derecha, como en NetBox. Se cierra con **Cerrar** o la tecla Esc.
+Al hacer clic en un **pool** (pestaña Pools) o en el **ID** de una asignación (`ASG-000123`, pestaña Segmentos) se abre un panel a la derecha, como en NetBox. Se cierra con **Cerrar** o la tecla Esc.
 - **Ficha de un pool:** *Detalle* (CIDR, primera y última dirección, direcciones y utilizables, libres, **bloque libre más grande**, uso asignado y reservado; el admin puede editarlo o eliminarlo), *Segmentos* (todo lo asignado y reservado dentro del pool, ordenado; un clic en un segmento abre su ficha), *Direcciones IP* (todas las IPs fijas del pool, incluidas las excepciones) e *Historial*.
 - **Ficha de un segmento:** ID, CIDR, primera y última dirección, máscara, direcciones y utilizables, pool (con enlace a su ficha), ambiente, proveedor, proyecto/VPC, **VLAN**, ticket, origen, quién lo pidió y cuándo; *Direcciones IP* (las IPs fijas del segmento, cuántas de las utilizables están registradas y el formulario para agregar otra); *Historial*; y **Liberar segmento** (solo admin; no se puede si tiene IPs registradas).
 - **Historial** (solo admin): quién asignó, reservó, aprobó o liberó ese pool o segmento, cuándo y con qué motivo. Sale de la bitácora de auditoría, que se sigue registrando aunque ya no tenga pestaña propia. Los segmentos importados o de la semilla muestran su origen y fecha en *Detalle*.
@@ -71,16 +71,22 @@ IPs fijas de **interfaces de routers, switches y firewalls**, gateways, VIP/HSRP
 - Una IP no se repite dentro de un pool. Un segmento con IPs registradas no se puede liberar, ni un pool con IPs eliminar.
 - También están en la ficha de cada segmento y pool, en la hoja «Direcciones IP» del Excel y en el respaldo JSON. Por ahora el dispositivo es texto libre; más adelante puede haber un catálogo de equipos.
 
-### Asignaciones — «lo ya entregado»
-La lista oficial de segmentos definitivos: **ID** (`ASG-000123`, único por asignación: el mismo rango, si se libera y se vuelve a asignar, tendrá otro ID), **segmento**, **pool**, **proyecto/VPC**, **VLAN** (número y nombre, si se indicó), cuántas **direcciones** son, quién lo **solicitó**, el **origen** (`panel`, `jira`, `agente`, `semilla`, `importado`), el **ticket** y la **fecha**.
-- **Nueva asignación** (solo admin; reemplaza a la antigua pestaña «Asignar directo»): ver abajo.
+### Segmentos — «lo entregado y lo apartado, en una lista»
+Una sola pestaña reúne las **asignaciones** (definitivas) y las **reservas** (apartadas, pendientes de aprobación). Cada fila dice su **estado con texto y color**: **Asignado** (azul), **Reservado** (ámbar, con cuenta regresiva y un código `RES-…`), y en *Historial*, **Liberada** y **Expirada**. Las reservas pendientes salen primero. Una reserva *confirmada* no se repite: ya es la asignación.
+- **Botones por estado:** `Todos · Asignados · Reservados · Historial`. El número de *Reservados* es lo pendiente de aprobar.
+- **Acciones por fila:** un *Reservado* muestra **Confirmar** (pasa a Asignado, con su ID `ASG-…`) y **Liberar**; un *Asignado* muestra **Liberar** (solo admin, con doble confirmación). El historial no se opera.
+- **Formularios plegados arriba:** **Reservar un segmento (pide aprobación)** y **Asignar ahora (solo admin, sin aprobación)**, descritos abajo.
+- Ordenar por columna, buscar y filtrar por ambiente y proveedor funcionan sobre toda la lista; se pagina de 25 en 25.
+
+**Lo asignado:** La lista oficial de segmentos definitivos: **ID** (`ASG-000123`, único por asignación: el mismo rango, si se libera y se vuelve a asignar, tendrá otro ID), **segmento**, **pool**, **proyecto/VPC**, **VLAN** (número y nombre, si se indicó), cuántas **direcciones** son, quién lo **solicitó**, el **origen** (`panel`, `jira`, `agente`, `semilla`, `importado`), el **ticket** y la **fecha**.
+- **Asignar ahora** (solo admin): ver abajo.
 - **Buscar** por ID, segmento, proyecto, VLAN, ticket o quién lo pidió (cuadro «Buscar», junto al filtro).
 - Un clic en el **ID** abre la **ficha** del segmento.
 - **Exportar a Excel** para auditorías o reportes (incluye el ID y la VLAN).
 - **Respaldo JSON** (solo admin): copia lógica completa para llevar el IPAM a otra infraestructura ([MIGRACION](ops/MIGRACION.md)).
 - **Liberar** (solo admin): devuelve el segmento al pool. Pide el **motivo**, que queda en el historial junto con quién lo hizo, y luego una **segunda confirmación** en la que hay que escribir el CIDR exacto del segmento. Hazlo solo cuando la red realmente se eliminó. Es solo una protección de la interfaz: la API (agentes y pipelines) no la pide.
 
-**Nueva asignación — «entrégalo ya, definitivo» (solo admin).** Entrega un segmento **de inmediato y de forma definitiva**, **sin reserva y sin aprobación de otra persona**; queda en el historial a nombre del admin que lo hizo.
+**Asignar ahora — «entrégalo ya, definitivo» (solo admin).** Entrega un segmento **de inmediato y de forma definitiva**, **sin reserva y sin aprobación de otra persona**; queda en el historial a nombre del admin que lo hizo.
 1. Elige el **pool**. **Ningún pool viene elegido** de antemano, y la **máscara** se habilita recién al elegirlo.
 2. Escribe el **proyecto / VPC** (obligatorio).
 3. Elige la **máscara**: la lista ofrece **solo los tamaños que caben en ese pool** (desde la máscara del pool hasta `/32`) y dice cuántos bloques libres quedan de cada uno («/24 · 15 libres»); los agotados aparecen como «sin espacio» y no se pueden elegir. O escribe un **CIDR manual** si necesitas un rango específico (debe caer dentro del pool).
@@ -100,16 +106,15 @@ Se abre con **Importar segmentos** en la pestaña Pools. Para partir con el inve
    - **Choca dentro del mismo pool** e **Inválida** (CIDR mal escrito o desalineado, ambiente o VLAN inválidos…): no se pueden importar. Si el CIDR está desalineado, el detalle sugiere la red correcta.
 4. Pulsa **Importar N segmentos**. Es **todo o nada**: si la base rechaza algo, no se importa ninguno. Los segmentos quedan con origen `importado` y la importación queda registrada.
 
-### Reservas — «apartado, esperando aprobación»
-Aquí viven las reservas tentativas que crean los agentes, Jira y las personas. Una reserva **aparta** un rango sin entregarlo todavía:
-- **Nueva reserva** (botón arriba, para solicitante y admin): eliges pool (ninguno viene elegido), proyecto/VPC, máscara (solo las que caben) o CIDR, VLAN opcional, ticket opcional y vigencia (hasta 72 h). Al confirmarla, la VLAN pasa a la asignación. **Un admin debe aprobarla** (Confirmar) para que sea asignación.
-- **Estados:** `reservada` (vigente, con **cuenta regresiva**), `confirmada` (ya es asignación), `liberada` (se devolvió) y `expirada` (nadie la aprobó a tiempo).
+**Reservar un segmento — «apartado, esperando aprobación».** Aquí entran las reservas tentativas que crean los agentes, Jira y las personas. Una reserva **aparta** un rango sin entregarlo todavía:
+- **Reservar un segmento** (formulario plegado arriba, para solicitante y admin): eliges pool (ninguno viene elegido), proyecto/VPC, máscara (solo las que caben) o CIDR, VLAN opcional, ticket opcional y vigencia (hasta 72 h). Al confirmarla, la VLAN pasa a la asignación. **Un admin debe aprobarla** (Confirmar) para que sea asignación.
+- **Estados:** *Reservado* (vigente, con **cuenta regresiva**), *Asignado* (confirmada: ya es asignación), *Liberada* (se devolvió) y *Expirada* (nadie la aprobó a tiempo; las dos últimas están en *Historial*).
 - Por defecto expira a las **24 horas** (máximo 72); si nadie hace nada, el rango vuelve solo al pool.
 - Puedes **confirmar** o **liberar** las tuyas (el admin, las de todos). Las reservas que llegan desde **Jira** (solicitante `jira-webhook`) solo las puede aprobar un **admin**: confirmar equivale a dar la **aprobación manual** para asignar el CIDR. Un agente debe indicar **quién aprobó** y **dónde consta** (un MR, un ticket): así queda registro de la aprobación humana.
-- Los filtros muestran por estado, pool o solicitante.
+- Para ver solo lo pendiente, usa el botón **Reservados**; para encontrar las de un agente, escribe su nombre en **Buscar** (por ejemplo `svc:agente-redes`).
 
 ### Jira — «integración con tickets»
-Explica y permite probar la conexión con Jira en los dos sentidos: el IPAM puede **crear un ticket** cuando asigna, y un ticket de Jira puede **pedir un segmento** por webhook. **Un ticket nunca asigna directo:** el IPAM crea una **reserva** (24 h) y un **admin debe aprobarla** en la pestaña Reservas (botón Confirmar); recién ahí nace la asignación y se actualiza el ticket. Si nadie aprueba, la reserva expira sola y el rango vuelve al pool. Con la integración desactivada (lo normal en el POC) el número de ticket lo genera el IPAM (`NET-xxx`). **Simular ticket entrante** sirve para demostrar el flujo sin Jira real. El **registro de eventos** muestra lo que pasó.
+Explica y permite probar la conexión con Jira en los dos sentidos: el IPAM puede **crear un ticket** cuando asigna, y un ticket de Jira puede **pedir un segmento** por webhook. **Un ticket nunca asigna directo:** el IPAM crea una **reserva** (24 h) y un **admin debe aprobarla** en la pestaña Segmentos (botón Confirmar); recién ahí nace la asignación y se actualiza el ticket. Si nadie aprueba, la reserva expira sola y el rango vuelve al pool. Con la integración desactivada (lo normal en el POC) el número de ticket lo genera el IPAM (`NET-xxx`). **Simular ticket entrante** sirve para demostrar el flujo sin Jira real. El **registro de eventos** muestra lo que pasó.
 
 ### Tokens — «credenciales para agentes» (solo admin)
 Aquí se crean las llaves que usan los pipelines y agentes:
@@ -134,7 +139,7 @@ Nadie puede desactivarse ni eliminarse a sí mismo. Todo queda registrado en la 
 
 **¿Y la pestaña Auditoría?** Se quitó de la barra: el historial de cada pool y segmento se ve en su **ficha**. La bitácora completa se sigue registrando (es de solo inserción) y un admin la puede consultar por la API (`GET /api/v1/auditoria`, con filtros `pool` y `cidr`) para investigar un incidente; el `request_id` enlaza con los logs.
 
-> **Novedades de la interfaz:** las confirmaciones ahora son un cuadro propio (Esc cancela, Enter acepta) y los avisos aparecen arriba a la derecha; en «Nueva asignación» el segmento se valida mientras escribes; en la ficha de un pool, la pestaña Detalle muestra el mapa de bloques (asignado / reservado / libre); y las barras de uso pasan a ámbar desde 70 % y a rojo por encima de 90 %.
+> **Novedades de la interfaz:** las confirmaciones ahora son un cuadro propio (Esc cancela, Enter acepta) y los avisos aparecen arriba a la derecha; en «Asignar ahora» el segmento se valida mientras escribes; en la ficha de un pool, la pestaña Detalle muestra el mapa de bloques (asignado / reservado / libre); y las barras de uso pasan a ámbar desde 70 % y a rojo por encima de 90 %.
 
 ## 4 · Tareas comunes
 **Dar un rango a un proyecto nuevo (flujo automático, el recomendado)**
@@ -144,15 +149,15 @@ Nadie puede desactivarse ni eliminarse a sí mismo. Todo queda registrado en la 
 4. Si algo falla o se rechaza, el pipeline **libera**; si nadie hace nada, **expira sola**.
 Detalle técnico en [API-Y-AGENTES](API-Y-AGENTES.md) y [ARQUITECTURA](ARQUITECTURA.md).
 
-- **Pedir un rango:** Reservas → Nueva reserva; un admin la aprueba.
-- **Entregar un rango ya (admin):** Asignaciones → Nueva asignación.
+- **Pedir un rango:** Segmentos → Reservar un segmento; un admin la aprueba.
+- **Entregar un rango ya (admin):** Segmentos → Asignar ahora.
 - **Saber cuánto queda en un pool:** pestaña Pools, barra de uso; o clic en el pool → ficha (bloque libre más grande).
 - **Ver quién tocó un segmento (admin):** clic en su ID → ficha → Historial.
 - **Cargar el inventario existente (admin):** Pools → Importar segmentos.
 - **Crear un bloque base nuevo (admin):** Pools → Nuevo pool.
 - **Registrar la IP de una interfaz:** ficha del segmento → Direcciones IP, o la pestaña Direcciones IP.
 - **Probar la API:** enlace «API» arriba a la derecha (`/api.html`).
-- **Devolver un rango:** Asignaciones → Liberar (admin).
+- **Devolver un rango:** Segmentos → Liberar (admin).
 - **Entregar un informe:** Exportar a Excel.
 - **Crear una llave para un pipeline:** pestaña Tokens.
 

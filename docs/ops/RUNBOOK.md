@@ -15,7 +15,7 @@ curl -s $IPAM_URL/healthz ; curl -s $IPAM_URL/readyz
 | Muchos 401 | Token vencido/revocado, o credenciales erróneas | Crea otro token; revisa que el pipeline envía `Authorization: Bearer` |
 | 429 | Límite de peticiones o cuota de reservas | Espera `Retry-After`; baja la frecuencia del agente; libera reservas viejas; sube los límites solo si es legítimo |
 | 409 al reservar | Rango ocupado, o clave ya usada y liberada/expirada | Pide otro rango o una `Idempotency-Key` nueva |
-| Reservas «colgadas» | El pipeline murió sin liberar | Esperan su expiración (≤ 72 h) o libéralas en la pestaña Reservas |
+| Reservas «colgadas» | El pipeline murió sin liberar | Esperan su expiración (≤ 72 h) o libéralas en la pestaña Segmentos (botón «Reservados») |
 | El barredor no corre (alerta) | Réplica `worker` caída o base sin conexión | Revisa que haya una réplica con `ROL=todos` o `worker`; el estado está en `barredor_estado` |
 | Un pool lleno (≥ 90 %) | Crecimiento | Agrega otro pool/rango ([MIGRACION](MIGRACION.md) para cargar pools) o libera lo que ya no se use |
 | POC lento la primera vez | Plan gratuito dormido | Espera ~90 s; opcional: keepalive ([POC](POC-RENDER-SUPABASE.md)) |

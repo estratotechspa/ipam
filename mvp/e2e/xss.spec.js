@@ -17,17 +17,23 @@ test('un valor malicioso se muestra como texto en Asignaciones, Jira y la ficha 
   });
   await page.goto('/');
   const nav = page.locator('#nav');
-  for (const pestana of ['Asignaciones', 'Jira', 'Pools', 'Reservas']) {
+  for (const pestana of ['Segmentos', 'Jira', 'Pools']) {
     await nav.getByRole('button', { name: pestana, exact: true }).click();
     await page.waitForTimeout(400);
     expect(await page.evaluate(() => window.__xss), `se ejecutó código en la pestaña ${pestana}`).toBeUndefined();
     // Ningún elemento inyectado: la única imagen permitida es el logo de la marca (oculto cuando no hay logo).
     expect(await page.locator('.wrap:not(.hide) img, .wrap:not(.hide) script').count(), `elementos inyectados en ${pestana}`).toBe(0);
   }
-  await nav.getByRole('button', { name: 'Asignaciones', exact: true }).click();
+  await nav.getByRole('button', { name: 'Segmentos', exact: true }).click();
   await expect(page.getByText(carga, { exact: true }).first()).toBeVisible(); // se ve el texto literal, no un elemento
   // La ficha y su historial también lo muestran como texto.
-  await page.locator('#asig tr', { hasText: carga }).first().locator('button.enlace').click();
+  // La reserva de Jira lleva el mismo texto y va primero (sin ficha): se abre la ficha de la asignación.
+  await page
+    .locator('#segmentos tr', { hasText: carga })
+    .filter({ has: page.locator('button.enlace') })
+    .first()
+    .locator('button.enlace')
+    .click();
   const ficha = page.getByRole('dialog');
   await expect(ficha).toContainText('<img src=x');
   await ficha.getByRole('tab', { name: 'Historial' }).click();

@@ -17,17 +17,17 @@ async function entrar(page, email) {
   await expect(page.getByRole('heading', { name: 'Estado de pools' })).toBeVisible();
 }
 
-test('un lector NO ve la pestaña Tokens (ni Auditoría), ve Reservas y no puede operar; la API también lo impide', async ({ page }) => {
+test('un lector NO ve la pestaña Tokens (ni Auditoría), ve Segmentos y no puede operar; la API también lo impide', async ({ page }) => {
   await entrar(page, 'lector@empresa.cl');
   const nav = page.locator('#nav');
-  await expect(nav.getByRole('button', { name: 'Reservas' })).toBeVisible();
+  await expect(nav.getByRole('button', { name: 'Segmentos' })).toBeVisible();
   await expect(nav.getByRole('button', { name: 'Tokens' })).toHaveCount(0);
   await expect(nav.getByRole('button', { name: 'Auditoría' })).toHaveCount(0);
-  await nav.getByRole('button', { name: 'Asignaciones' }).click();
-  await expect(page.getByText('Nueva asignación')).toHaveCount(0); // asignar directo es solo de admin
+  await nav.getByRole('button', { name: 'Segmentos' }).click();
+  await expect(page.getByText('Asignar ahora')).toHaveCount(0); // asignar directo es solo de admin
+  await expect(page.getByText('Reservar un segmento')).toHaveCount(0); // un lector no reserva
   await expect(page.getByRole('button', { name: /Importar segmentos/ })).toHaveCount(0);
-  await nav.getByRole('button', { name: 'Reservas' }).click();
-  await expect(page.getByRole('heading', { name: 'Reservas', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Segmentos', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: /^(Confirmar|Liberar)/ })).toHaveCount(0);
   const r = await page.request.post('/api/v1/tokens', { headers: { 'X-Requested-With': 'ipam' }, data: { nombre: 'intruso', rol: 'agente' } });
   expect(r.status()).toBe(403);

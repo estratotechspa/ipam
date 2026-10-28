@@ -101,7 +101,7 @@ td:first-child,td code{white-space:nowrap}
 /* Etiquetas */
 .tag{display:inline-block;padding:2px var(--sp-2);border-radius:var(--r-pill);font-size:var(--fs-xs);font-weight:600;line-height:1.4;color:#fff}
 .dev{background:var(--dev-bg);color:var(--dev-fg)}.qa{background:var(--qa-bg);color:var(--qa-fg)}.pre{background:var(--pre-bg);color:var(--pre-fg)}.prod{background:var(--prod-bg);color:var(--prod-fg)}
-.tag.reservada{background:#0b5cad}.tag.confirmada{background:#1d7a46}.tag.liberada{background:#5b6577}.tag.expirada{background:#a33a3a}
+.tag.reservada{background:#0b5cad}.tag.asignado{background:#1d4ed8}.tag.reservado{background:#8a4b00}.tag.confirmada{background:#1d7a46}.tag.liberada{background:#5b6577}.tag.expirada{background:#a33a3a}
 .tag.activo{background:#1d7a46}.tag.vencido{background:#a33a3a}.tag.revocado{background:#5b6577}.tag.pronto{background:#8a4b00}
 .tag.imp-ok{background:#1d7a46}.tag.imp-omitida{background:#5b6577}.tag.imp-aviso{background:#8a4b00}.tag.imp-error{background:#a33a3a}
 
@@ -244,3 +244,14 @@ ol.historial{list-style:none;padding:0;margin:0}ol.historial li{padding:9px 0;bo
   .nav button{min-height:44px;padding:var(--sp-2) 0}
 }
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important}}
+
+/* Segmentos: filtros por estado y bloque «nuevo» */
+.chips{display:flex;flex-wrap:wrap;gap:var(--sp-2);margin:0 0 var(--sp-4)}
+.chip{font:inherit;font-size:var(--fs-sm);font-weight:600;padding:var(--sp-2) var(--sp-4);border-radius:var(--r-pill);border:1px solid var(--borde-campo);background:var(--card);color:var(--fg);cursor:pointer}
+.chip:hover{border-color:var(--foco)}
+.chip[aria-pressed="true"]{background:var(--foco);border-color:var(--foco);color:#fff}
+.chip .n{display:inline-block;min-width:1.6em;margin-left:var(--sp-1);padding:0 var(--sp-1);border-radius:var(--r-pill);background:rgba(0,0,0,.12);text-align:center;font-variant-numeric:tabular-nums}
+.chip.pendiente:not([aria-pressed="true"]) .n{background:#8a4b00;color:#fff}
+.nuevo{display:flex;flex-direction:column;gap:var(--sp-2);margin:0 0 var(--sp-4)}
+.nuevo details{margin:0 !important}
+tr.seg-reservado td:first-child{box-shadow:inset 3px 0 0 #8a4b00}

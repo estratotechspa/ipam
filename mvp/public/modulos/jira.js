@@ -65,7 +65,7 @@ export async function renderJira() {
   <details class="plegable" id="j-como"><summary>${I('ayuda')} Cómo funciona</summary>
     <h3>Sentido 1 · IPAM ${I('flecha')} Jira</h3>${flujoJira([['Panel / API<br>asigna un segmento'], ['IPAM<br>valida y asigna'], ['Jira crea el ticket<br>(en segundo plano)', 'jira'], ['Guarda la clave<br>del ticket']])}
     <p class="muted">Con la integración desactivada, el número de ticket lo genera el IPAM (secuencia NET-xxx). Al activarla (JIRA_ENABLED=true) se crea el ticket real en Jira, con reintentos.</p>
-    <h3>Sentido 2 · Jira ${I('flecha')} IPAM</h3>${flujoJira([['Ticket «Solicitud de Segmento IPAM»<br>ambiente, tipo, máscara, VPC', 'jira'], ['Webhook<br>(firmado con HMAC y hora)'], ['IPAM calcula<br>y reserva'], ['Aprobación manual<br>de un admin (Reservas)', 'aprob'], ['Se asigna y se<br>actualiza el ticket', 'jira']])}
+    <h3>Sentido 2 · Jira ${I('flecha')} IPAM</h3>${flujoJira([['Ticket «Solicitud de Segmento IPAM»<br>ambiente, tipo, máscara, VPC', 'jira'], ['Webhook<br>(firmado con HMAC y hora)'], ['IPAM calcula<br>y reserva'], ['Aprobación manual<br>de un admin (Segmentos)', 'aprob'], ['Se asigna y se<br>actualiza el ticket', 'jira']])}
     ${simulador}</details>`;
   $('j-actualizar').onclick = renderJira;
   if (je.simulador === false) return;
@@ -82,7 +82,7 @@ export async function renderJira() {
     ESTADO.ultimoJira = r.ok
       ? {
           ok: true,
-          texto: `Ticket ${r.data.ticket}: se reservó ${r.data.cidr} en ${r.data.pool}. Falta la aprobación manual de un admin en la pestaña Reservas; si no se aprueba, expira sola.`,
+          texto: `Ticket ${r.data.ticket}: se reservó ${r.data.cidr} en ${r.data.pool}. Falta la aprobación manual de un admin en la pestaña Segmentos; si no se aprueba, expira sola.`,
         }
       : { ok: false, texto: (r.data && (r.data.mensaje || r.data.error)) || 'Error ' + r.status };
     renderJira();

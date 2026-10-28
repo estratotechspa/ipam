@@ -75,21 +75,27 @@ Un panel a la derecha, que se cierra con **Cerrar** o la tecla **Esc**. Tiene cu
 
 En *Detalle* está el **mapa del espacio**: cada cuadro es un bloque `/24` (256 direcciones). Los cuadros **azules** están asignados, los **ámbar** reservados y los **blancos** libres. Pasa el cursor por un cuadro para ver quién lo usa. Es la forma más rápida de ver si el espacio está **fragmentado** o concentrado.
 
-### Asignaciones: «lo ya entregado»
-![Lista de asignaciones](img/03-asignaciones.png)
+### Segmentos: «todo lo entregado y lo apartado, en una lista»
+![Lista de segmentos con asignados y reservados](img/03-segmentos.png)
 
-La lista oficial de segmentos definitivos. Cada uno tiene un **ID único** (`ASG-000013`): si el mismo rango se libera y se vuelve a asignar, tendrá otro ID.
-- **Buscar** por ID, segmento, proyecto, VLAN, ticket o quién lo pidió.
-- **Ordenar:** haz clic en el título de una columna (una flecha indica el sentido).
-- **Paginación:** de 25 en 25, con *Anterior* y *Siguiente*.
-- **Exportar a Excel** baja todo, con el ID y la VLAN.
-- Un clic en el **ID** abre la ficha del segmento.
+Una sola lista reúne lo que antes estaba en dos pestañas. Cada fila dice su **estado con texto y color** (no solo color):
 
-### Reservas: «apartado, esperando aprobación»
-![Lista de reservas](img/05-reservas.png)
+| Estado | Color | Qué significa |
+|---|---|---|
+| **Asignado** | azul | Definitivo. Tiene un **ID único** (`ASG-000013`): si el mismo rango se libera y se vuelve a asignar, tendrá otro. |
+| **Reservado** | ámbar, con una marca a la izquierda | Apartado por un tiempo, **esperando que un administrador lo apruebe**. Muestra una **cuenta regresiva** (en «Fecha / vence en») y un código `RES-…`. Si nadie lo aprueba, vence solo y el rango vuelve al pool. |
+| **Liberada** / **Expirada** | gris / rojo | Reservas que se devolvieron o vencieron sin aprobarse. Solo se ven en *Historial* y no se operan. |
 
-Cada reserva muestra su **estado**, un **contador regresivo** y los botones **Confirmar** (aprobarla) y **Liberar** (devolverla).
-- `reservada`: vigente. `confirmada`: ya es asignación. `liberada`: se devolvió. `expirada`: nadie la aprobó a tiempo y el rango volvió solo al pool.
+Las reservas **pendientes salen primero**, porque son lo que un administrador tiene que atender; después, lo asignado.
+
+![Filtro de reservados](img/05-segmentos-reservados.png)
+
+- **Botones de arriba de la tabla:** `Todos · Asignados · Reservados · Historial`. El número de *Reservados* es lo **pendiente de aprobar** (se pinta ámbar cuando hay algo).
+- **Qué hace cada fila:** un segmento *reservado* muestra **Confirmar** (aprobarlo: pasa a *Asignado*) y **Liberar** (devolverlo). Uno *asignado* muestra **Liberar** (solo administradores, con doble confirmación).
+- **Buscar** por ID, segmento, proyecto, VLAN, ticket, quién lo pidió o su origen; y filtrar por **ambiente** y **proveedor**.
+- **Ordenar:** clic en el título de una columna (una flecha indica el sentido). **Paginación:** de 25 en 25.
+- Un clic en el **ID** `ASG-…` abre la ficha del segmento. **Exportar a Excel** baja todo.
+- Arriba hay dos formularios plegados: **Reservar un segmento** (pide aprobación) y **Asignar ahora** (solo administrador, sin aprobación).
 
 ### Direcciones IP: «qué IP tiene cada interfaz»
 ![Direcciones IP fijas](img/06-direcciones-ip.png)
@@ -104,27 +110,27 @@ Las IPs fijas de routers, switches, firewalls, gateways y servidores. Escribe el
 ## 5. Tareas paso a paso
 
 ### Pedir un rango para un proyecto nuevo (solicitante)
-1. Ve a **Reservas** → **Nueva reserva**.
+1. Ve a **Segmentos** y abre **Reservar un segmento (pide aprobación)**.
 2. Elige el **pool**. (Ninguno viene elegido de antemano, y la máscara se habilita al elegirlo.)
 3. Escribe el **proyecto / VPC**. Usa minúsculas, números y guiones: `vpc-tienda-web`.
 4. Elige la **máscara**. La lista ofrece **solo tamaños que caben** y dice cuántos bloques libres quedan de cada uno (`/24 · 15 libres`). Si no sabes cuál, mira la tabla de disponibilidad que aparece al elegir el pool.
 5. Opcional: **VLAN**, **ticket** y cuánto debe durar la reserva (hasta 72 horas).
-6. Pulsa **Reservar**. La reserva queda `reservada` y **un administrador debe aprobarla**.
+6. Pulsa **Reservar**. El segmento queda **Reservado** y **un administrador debe aprobarlo**.
 
 > Si escribes un CIDR a mano, el IPAM lo revisa **mientras escribes** y te avisa si está mal escrito, desalineado o fuera del pool, antes de enviar.
 
 ### Aprobar una reserva (administrador)
-1. Ve a **Reservas** y busca las que dicen `reservada`.
+1. Ve a **Segmentos**: las reservas pendientes salen primero y el botón **Reservados** muestra cuántas hay. Púlsalo para ver solo esas.
 2. Revisa el segmento, el proyecto y quién la pidió. Las que vienen de **Jira** solo las puede aprobar un administrador: confirmar es dar la **aprobación manual**.
-3. Pulsa **Confirmar**. Ahora es una asignación con su ID.
+3. Pulsa **Confirmar**. La fila pasa a **Asignado** y recibe su ID `ASG-…`.
 4. Si no corresponde, pulsa **Liberar**. Si nadie hace nada, expira sola.
 
 ### Entregar un rango ahora mismo (administrador)
 Úsalo solo cuando no necesitas el flujo de aprobación; queda en el historial a tu nombre.
 
-![Formulario de nueva asignación con la disponibilidad por máscara](img/04-nueva-asignacion.png)
+![Formulario «Asignar ahora» con la disponibilidad por máscara](img/04-asignar-ahora.png)
 
-1. **Asignaciones** → **Nueva asignación**.
+1. **Segmentos** → **Asignar ahora (solo admin, sin aprobación)**.
 2. Elige el **pool**: aparece la tabla de **disponibilidad por máscara**, con los bloques libres de cada tamaño. Un clic en una fila elige esa máscara.
 3. Escribe el **proyecto / VPC**, la **máscara** (o un **CIDR manual**) y, si quieres, la **VLAN** y su nombre.
 4. Pulsa **Asignar**.
@@ -144,14 +150,13 @@ Las IPs fijas de routers, switches, firewalls, gateways y servidores. Escribe el
 ### Devolver un rango que ya no se usa (administrador)
 ![Cuadro de confirmación al liberar un segmento](img/10-liberar.png)
 
-1. **Asignaciones** → **Liberar** en la fila del segmento. Hazlo solo cuando la red realmente se eliminó.
+1. **Segmentos** → **Liberar** en la fila de un segmento *Asignado*. Hazlo solo cuando la red realmente se eliminó.
 2. Escribe el **motivo** (es obligatorio y queda en el historial) y confirma con **Liberar segmento**. **Esc** cancela.
 3. Aparece una **segunda confirmación**, «Última confirmación»: hay que **escribir el CIDR exacto** del segmento (por ejemplo `10.64.8.0/21`) y pulsar **Sí, liberar ahora**. Si el texto no coincide, no avanza. Existe para que no se libere por error un bloque que sigue en uso; **Cancelar** o **Esc** en cualquier paso lo deja todo como estaba.
 4. No se puede liberar un segmento que aún tiene IPs registradas: elimínalas primero.
 
 ![Segunda confirmación: escribir el CIDR del segmento](img/12-liberar-confirmacion-final.png)
 
-> La misma segunda confirmación aparece al **liberar una reserva ya confirmada** desde la pestaña Reservas, porque también borra la asignación definitiva.
 
 ### Cargar el inventario que ya existe (administrador)
 ![Pantalla de importación](img/11-importar.png)
@@ -181,7 +186,7 @@ Las IPs fijas de routers, switches, firewalls, gateways y servidores. Escribe el
 - Nadie puede desactivarse ni eliminarse a sí mismo.
 
 ### Sacar un informe
-**Exportar a Excel** (en Pools o en Asignaciones) baja una planilla con los segmentos, sus IDs, VLAN e IPs fijas. Un administrador también puede bajar el **Respaldo JSON** completo.
+**Exportar a Excel** (en Pools o en Segmentos) baja una planilla con los segmentos, sus IDs, VLAN e IPs fijas. Un administrador también puede bajar el **Respaldo JSON** completo.
 
 ## 6. Si algo no sale como esperabas
 
