@@ -18,6 +18,9 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y 
 ### Rendimiento de la base de datos
 - Cinco índices de apoyo (idempotentes, opcionales, sin cambiar la versión del esquema): historial de auditoría por pool y por segmento (de hasta ≈ 330 ms a < 1 ms con 1.000.000 de filas y creciendo sin tope), clave foránea `reservas.asignacion_id`, lista de asignaciones por pool e IPs por pool. Mediciones con 100.000 segmentos en [BASE-DE-DATOS](docs/BASE-DE-DATOS.md). Nueva prueba `indices.test.js` que exige que las consultas reales usen sus índices. Se aplican con `npm run migrar`; incluyen `eventos_ts_idx` de la purga por retención.
 
+### Correcciones
+- Reservas: si se cambiaba un filtro y enseguida se escribía en otro (o dos cargas se cruzaban), una respuesta vieja podía redibujar la pantalla y hacer perder lo escrito. Ahora solo la carga más reciente redibuja. Detectado por una prueba intermitente (≈ 1 de cada 60 ejecuciones).
+
 ### Documentación
 - Nuevo [Manual de usuario](docs/MANUAL-DE-USUARIO.md) (guía paso a paso, con capturas en `docs/img/`); el [Manual de uso](docs/MANUAL-DE-USO.md) queda como referencia pantalla por pantalla y se corrigió: los cinco indicadores de Pools y los umbrales de las barras.
 - `main` pasa a ser la línea hexagonal (reservas, tokens, pools, cuentas locales); el monolito anterior queda en la etiqueta `main-monolito-antes-de-unificar`.
