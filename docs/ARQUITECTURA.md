@@ -48,7 +48,8 @@ flowchart TB
 
 ### La interfaz web (`mvp/public/`)
 Sin framework ni paso de compilación: se sirve tal cual. Principios que conviene no romper:
-- `app.js` es un **módulo ES** que importa `iconos.js` (conjunto de iconos SVG) y `calculos.js` (cálculos de CIDR, uso y validación que también ejecutan las pruebas unitarias). Partirlo en más módulos está en el backlog.
+- `app.js` es solo el **punto de entrada** (navegación y arranque). El resto vive en `public/modulos/`, un módulo ES por pestaña o responsabilidad: `base.js` (DOM, `h()`, cliente de la API, sesión), `ui.js` (diálogos accesibles, avisos, validación de CIDR en vivo), `pools.js`, `asignaciones.js`, `reservas.js`, `ips.js`, `jira.js`, `tokens.js`, `usuarios.js`, `importar.js`, `fichas.js` (panel lateral y mapa de bloques), `filtro.js`, `uso.js`, `disponibilidad.js` y `navegacion.js`. Importan `iconos.js` (iconos SVG) y `calculos.js` (cálculos de CIDR, uso y validación, que también ejecutan las pruebas unitarias).
+- El estado que cambia (pestaña actual, búsqueda, avisos) vive en el objeto `ESTADO` de `base.js`: un módulo ES no puede reasignar una variable que importó. Los módulos se importan entre sí (hay ciclos entre vistas y fichas) y es seguro porque ningún módulo ejecuta código de otro al cargarse: solo lo llama cuando el usuario actúa. `ui.test.js` impide pasar de 400 líneas por módulo.
 - **Sin scripts en línea:** la política de seguridad de contenido (CSP) los prohíbe; todo script va en su archivo. El texto de usuarios se inserta siempre como texto, nunca como HTML.
 - `app.css` define los **tokens de diseño** (colores, tipografía, espaciado, modo oscuro) en `:root`; los contrastes cumplen AA y una prueba (`ui.test.js`) lo mide.
 - La entrada (`login.html`, `login.js`) y las páginas de error (`adaptadores/http/paginas.js`) son públicas; el resto exige sesión.
