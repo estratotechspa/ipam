@@ -297,6 +297,19 @@ insert into esquema_version (version, descripcion) values (10, 'direcciones ip f
 -- Rendimiento de la purga por retención (`npm run purgar`, filtra por fecha). Idempotente y opcional: no cambia la versión del esquema.
 create index if not exists eventos_ts_idx on eventos (ts);
 
+-- Índices de apoyo, medidos con 100.000 asignaciones, 100.000 IPs, 30.000 reservas y 1.000.000 de filas de auditoría
+-- (ver docs/BASE-DE-DATOS.md). Todos idempotentes y opcionales: no cambian la versión del esquema ni el comportamiento.
+-- Historial de la ficha (pool o segmento): la auditoría crece sin tope y sus filtros salen de un jsonb; sin índice, un pool sin
+-- movimientos recorría las 1.000.000 de filas (≈ 600 ms). Las expresiones deben ser EXACTAMENTE las de listarAuditoria.
+create index if not exists auditoria_pool_idx on auditoria ((coalesce(detalle->>'pool', detalle->>'pool_id')), id desc);
+create index if not exists auditoria_cidr_idx on auditoria ((detalle->>'cidr'), id desc);
+-- Clave foránea sin índice: cada baja de una asignación recorría todas las reservas.
+create index if not exists reservas_asignacion_idx on reservas (asignacion_id) where asignacion_id is not null;
+-- Lista de Asignaciones filtrada por pool y ordenada por fecha (id): evita recorrer todo el índice primario filtrando.
+create index if not exists asignaciones_pool_id_idx on asignaciones (pool_id, id desc);
+-- IPs de un pool (ficha del pool, filtro de la pestaña) y clave foránea pool_id, que no tenía índice propio.
+create index if not exists direcciones_ip_pool_ip on direcciones_ip (pool_id, ip);
+
 -- ============================================================================
 -- Permisos del rol de la aplicación (solo si existe `ipam_app`; ver db/roles.sql)
 -- ============================================================================
