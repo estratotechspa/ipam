@@ -88,11 +88,17 @@ const decidirIdempotencia = (estadoEfectivoExistente) =>
 
 /**
  * ¿La petición repetida es «la misma»? Compara lo que el agente indicó (lo que no indicó no cuenta).
- * @param {{pool_id: string, cidr: string, vpc: string}} existente
- * @param {{pool?: string|null, cidr?: string|null, vpc: string}} peticion
+ * @param {{pool_id: string, cidr: string, vpc: string, vlan?: number|null, vlan_nombre?: string|null, ticket?: string|null}} existente
+ * @param {{pool?: string|null, cidr?: string|null, mascara?: number|null, vpc: string, vlan?: number|null, vlan_nombre?: string|null, ticket?: string|null}} peticion
  */
 const mismaPeticion = (existente, peticion) =>
-  existente.vpc === peticion.vpc && (!peticion.pool || existente.pool_id === peticion.pool) && (!peticion.cidr || existente.cidr === peticion.cidr);
+  existente.vpc === peticion.vpc &&
+  (!peticion.pool || existente.pool_id === peticion.pool) &&
+  (!peticion.cidr || existente.cidr === peticion.cidr) &&
+  (!peticion.mascara || Number(existente.cidr.split('/')[1]) === peticion.mascara) &&
+  (!peticion.vlan || existente.vlan === peticion.vlan) &&
+  (!peticion.vlan_nombre || existente.vlan_nombre === peticion.vlan_nombre) &&
+  (!peticion.ticket || existente.ticket === peticion.ticket);
 
 /** Qué hacer al confirmar. @param {string} efectivo @returns {{accion: 'confirmar'|'repetida'|'rechazar', estado?: string}} */
 function decidirConfirmacion(efectivo) {
