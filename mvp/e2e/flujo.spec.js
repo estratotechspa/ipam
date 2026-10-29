@@ -2,25 +2,27 @@ const { test, expect } = require('@playwright/test');
 const { aceptar, cancelar, confirmarLiberacion, dialogo } = require('./ayudas');
 const AxeBuilder = require('@axe-core/playwright').default;
 
-// Abre «Asignar ahora» (dentro de Segmentos).
+// Abre «Nuevo segmento» (dentro de Segmentos) en modo asignación directa: desmarca «Es una reserva».
 async function abrirNuevaAsignacion(page) {
   await page.goto('/');
   await page.locator('#nav').getByRole('button', { name: 'Segmentos', exact: true }).click();
-  await page.locator('#segmentos summary', { hasText: 'Asignar ahora' }).click();
+  await page.locator('#segmentos summary', { hasText: 'Nuevo segmento' }).click();
+  await page.locator('#ns-reserva').uncheck();
 }
 
 test('nueva asignación con VLAN → ver en la tabla → ficha con historial → exportar a Excel → liberar', async ({ page }) => {
   const vpc = `e2e-${Date.now()}`;
   await abrirNuevaAsignacion(page);
   // Ningún pool viene elegido y la máscara espera al pool.
-  await expect(page.locator('#na-pool')).toHaveValue('');
-  await expect(page.locator('#na-mascara')).toBeDisabled();
-  await page.selectOption('#na-pool', 'gke-nodos-qa');
-  await page.fill('#na-vpc', vpc);
-  await page.selectOption('#na-mascara', '24');
-  await page.fill('#na-vlan', '210');
-  await page.fill('#na-vlan-nombre', 'e2e-vlan');
-  await page.click('#na-go');
+  await expect(page.locator('#ns-pool')).toHaveValue('');
+  await expect(page.locator('#ns-mascara')).toBeDisabled();
+  await page.selectOption('#ns-pool', 'gke-nodos-qa');
+  await page.fill('#ns-vpc', vpc);
+  await page.selectOption('#ns-mascara', '24');
+  await page.fill('#ns-vlan', '210');
+  await page.fill('#ns-vlan-nombre', 'e2e-vlan');
+  await page.click('#ns-go');
+  await aceptar(page, 'Asignar ahora');
   await expect(page.locator('#seg-msg .ok')).toContainText('Asignado');
 
   const fila = page.locator('#segmentos tr', { hasText: vpc });
@@ -63,12 +65,13 @@ test('nueva asignación con VLAN → ver en la tabla → ficha con historial →
 
 test('un CIDR solapado muestra la alerta y sugiere segmentos libres', async ({ page }) => {
   await abrirNuevaAsignacion(page);
-  await page.selectOption('#na-pool', 'gke-pods-prod');
-  await page.fill('#na-vpc', 'vpc-e2e-solapado');
-  await page.fill('#na-cidr', '10.64.8.0/22');
-  await page.click('#na-go');
-  await expect(page.locator('#na-res .alert')).toContainText('Solapamiento detectado');
-  await expect(page.locator('#na-res .sug').first()).toBeVisible();
+  await page.selectOption('#ns-pool', 'gke-pods-prod');
+  await page.fill('#ns-vpc', 'vpc-e2e-solapado');
+  await page.fill('#ns-cidr', '10.64.8.0/22');
+  await page.click('#ns-go');
+  await aceptar(page, 'Asignar ahora');
+  await expect(page.locator('#ns-res .alert')).toContainText('Solapamiento detectado');
+  await expect(page.locator('#ns-res .sug').first()).toBeVisible();
 });
 
 test('el filtro por ambiente y proveedor acota Pools y Segmentos', async ({ page }) => {
@@ -109,26 +112,23 @@ test('cada asignación muestra su ID (ASG-000123) y se puede buscar por él', as
 
 test('al elegir un pool se ve cuántas direcciones y bloques libres quedan, y solo las máscaras que caben en él', async ({ page }) => {
   await abrirNuevaAsignacion(page);
-  await page.selectOption('#na-pool', 'gke-nodos-qa'); // 10.20.0.0/16 con un /20 asignado en la semilla
+  await page.selectOption('#ns-pool', 'gke-nodos-qa'); // 10.20.0.0/16 con un /20 asignado en la semilla
   const tabla = page.getByRole('table', { name: 'Disponibilidad por máscara' });
   await expect(tabla).toBeVisible();
   const fila24 = tabla.locator('tr', { has: page.locator('code', { hasText: /^\/24$/ }) });
   await expect(fila24).toContainText('256'); // direcciones por bloque
   await expect(fila24).toContainText('254'); // utilizables
-  await expect(page.locator('#na-mascara option[value="24"]')).toContainText('libres');
+  await expect(page.locator('#ns-mascara option[value="24"]')).toContainText('libres');
   // Nada más grande que el propio pool (/16): ya no aparece «no cabe aquí».
-  await expect(page.locator('#na-mascara option[value="15"]')).toHaveCount(0);
-  await expect(page.locator('#na-mascara option[value="8"]')).toHaveCount(0);
-  await expect(page.locator('#na-mascara')).toHaveValue('');
+  await expect(page.locator('#ns-mascara option[value="15"]')).toHaveCount(0);
+  await expect(page.locator('#ns-mascara option[value="8"]')).toHaveCount(0);
+  await expect(page.locator('#ns-mascara')).toHaveValue('');
   // Un clic en una fila elige esa máscara.
   await tabla.locator('tr', { has: page.locator('code', { hasText: /^\/26$/ }) }).click();
-  await expect(page.locator('#na-mascara')).toHaveValue('26');
-  // La misma información está en «Reservar un segmento».
-  await page.getByRole('button', { name: 'Segmentos', exact: true }).click();
-  await page.locator('#segmentos summary', { hasText: 'Reservar un segmento' }).click();
-  await expect(page.locator('#nr-pool')).toHaveValue('');
-  await page.selectOption('#nr-pool', 'gke-nodos-qa');
-  await expect(page.locator('#nr-disp').getByRole('table', { name: 'Disponibilidad por máscara' })).toBeVisible();
+  await expect(page.locator('#ns-mascara')).toHaveValue('26');
+  // Es el mismo formulario para reservar: la información no cambia al volver a marcar «Es una reserva».
+  await page.locator('#ns-reserva').check();
+  await expect(page.locator('#ns-disp').getByRole('table', { name: 'Disponibilidad por máscara' })).toBeVisible();
 });
 
 test('ficha de un pool: uso asignado + reservado, segmentos e historial, accesible', async ({ page }) => {

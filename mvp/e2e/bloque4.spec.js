@@ -45,12 +45,12 @@ test('asignaciones: orden, búsqueda y estado vacío', async ({ page }) => {
   await expect(page.locator('#segmentos')).toContainText(/sin resultados|no hay|ninguna/i);
 });
 
-test('nueva asignación: validación de CIDR en vivo', async ({ page }) => {
+test('nuevo segmento: validación de CIDR en vivo', async ({ page }) => {
   await irA(page, 'Segmentos');
-  await page.locator('#segmentos summary', { hasText: 'Asignar ahora' }).click();
-  await page.fill('#na-cidr', 'esto-no-es-cidr');
-  await expect(page.locator('#na-cidr ~ .campo-msg, .campo-msg').first()).toBeVisible();
-  await expect(page.locator('#na-cidr')).toHaveAttribute('aria-invalid', 'true');
+  await page.locator('#segmentos summary', { hasText: 'Nuevo segmento' }).click();
+  await page.fill('#ns-cidr', 'esto-no-es-cidr');
+  await expect(page.locator('#ns-cidr ~ .campo-msg, .campo-msg').first()).toBeVisible();
+  await expect(page.locator('#ns-cidr')).toHaveAttribute('aria-invalid', 'true');
 });
 
 test('diálogo de confirmación accesible: foco, Esc cancela, sin diálogos nativos', async ({ page }) => {

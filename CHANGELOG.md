@@ -3,6 +3,8 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y versionado semántico.
 
 ## [Sin publicar]
+### Interfaz
+- **Un solo formulario «Nuevo segmento»** en lugar de «Reservar un segmento» y «Asignar ahora» (compartían 6 de 8 campos). La casilla **«Es una reserva»** viene marcada: pide aprobación y muestra la vigencia. Un admin puede desmarcarla para asignar de inmediato: el botón pasa a «Asignar ahora», la vigencia se oculta, aparece un aviso de que es definitivo y se pide una segunda confirmación. Quien no es admin no ve la casilla y siempre reserva. El ticket se puede indicar en ambos modos, y el panel de solapamiento con segmentos libres sugeridos sirve ahora también al reservar. La API no cambia.
 ### Seguridad
 - **Sesiones OIDC revalidadas:** el rol y la existencia de la persona se consultan en la base cada `SESSION_REVALIDAR_SEG` (300 s); una baja o un cambio de rol rige en ese tiempo. `SESSION_HORAS` baja de 8 a 4. La cookie pasa a un formato nuevo (se entra de nuevo una vez).
 - **Webhook de Jira con timestamp:** exige `x-ipam-timestamp` y la firma `HMAC(secreto, "<timestamp>.<cuerpo>")` con ventana de ±5 min. **Cambio incompatible** para quien firmaba solo el cuerpo.

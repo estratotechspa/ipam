@@ -95,7 +95,7 @@ Las reservas **pendientes salen primero**, porque son lo que un administrador ti
 - **Buscar** por ID, segmento, proyecto, VLAN, ticket, quién lo pidió o su origen; y filtrar por **ambiente** y **proveedor**.
 - **Ordenar:** clic en el título de una columna (una flecha indica el sentido). **Paginación:** de 25 en 25.
 - Un clic en el **ID** `ASG-…` abre la ficha del segmento. **Exportar a Excel** baja todo.
-- Arriba hay dos formularios plegados: **Reservar un segmento** (pide aprobación) y **Asignar ahora** (solo administrador, sin aprobación).
+- Arriba hay un formulario plegado, **Nuevo segmento**. Con **Es una reserva** marcada (lo normal) pide aprobación; el administrador puede desmarcarla para **asignar de inmediato**, sin aprobación.
 
 ### Direcciones IP: «qué IP tiene cada interfaz»
 ![Direcciones IP fijas](img/06-direcciones-ip.png)
@@ -110,7 +110,7 @@ Las IPs fijas de routers, switches, firewalls, gateways y servidores. Escribe el
 ## 5. Tareas paso a paso
 
 ### Pedir un rango para un proyecto nuevo (solicitante)
-1. Ve a **Segmentos** y abre **Reservar un segmento (pide aprobación)**.
+1. Ve a **Segmentos** y abre **Nuevo segmento**. Deja marcada **Es una reserva** (el solicitante no ve la casilla: siempre reserva).
 2. Elige el **pool**. (Ninguno viene elegido de antemano, y la máscara se habilita al elegirlo.)
 3. Escribe el **proyecto / VPC**. Usa minúsculas, números y guiones: `vpc-tienda-web`.
 4. Elige la **máscara**. La lista ofrece **solo tamaños que caben** y dice cuántos bloques libres quedan de cada uno (`/24 · 15 libres`). Si no sabes cuál, mira la tabla de disponibilidad que aparece al elegir el pool.
@@ -128,12 +128,12 @@ Las IPs fijas de routers, switches, firewalls, gateways y servidores. Escribe el
 ### Entregar un rango ahora mismo (administrador)
 Úsalo solo cuando no necesitas el flujo de aprobación; queda en el historial a tu nombre.
 
-![Formulario «Asignar ahora» con la disponibilidad por máscara](img/04-asignar-ahora.png)
+![Formulario «Nuevo segmento» en modo asignación directa, con la disponibilidad por máscara](img/04-asignar-ahora.png)
 
-1. **Segmentos** → **Asignar ahora (solo admin, sin aprobación)**.
+1. **Segmentos** → **Nuevo segmento** y **desmarca «Es una reserva»**. El botón pasa a **Asignar ahora**, desaparece la vigencia y aparece un aviso de que la entrega es definitiva.
 2. Elige el **pool**: aparece la tabla de **disponibilidad por máscara**, con los bloques libres de cada tamaño. Un clic en una fila elige esa máscara.
 3. Escribe el **proyecto / VPC**, la **máscara** (o un **CIDR manual**) y, si quieres, la **VLAN** y su nombre.
-4. Pulsa **Asignar**.
+4. Pulsa **Asignar ahora** y confirma en el cuadro que pide una segunda confirmación (no se pide aprobación a otra persona, así que esta es la última barrera).
 5. Si el rango choca con otro, el IPAM **no asigna nada**: te muestra con quién choca y ofrece **segmentos libres** con un botón *Usar*.
 
 ### Saber cuánto espacio queda
