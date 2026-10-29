@@ -124,6 +124,18 @@ test('sin solapes: dos reservas, o una reserva y una asignación, nunca pisan el
   assert.equal(panel.error, 'solapamiento');
 });
 
+test('idempotencia: la misma clave con otro tamaño, VLAN o ticket → idempotencia_conflicto, y no se crea otra reserva', async () => {
+  const e = entorno();
+  const a = await pedir(e, AGENTE, { vlan: 10 }, 'mr-tam:crear');
+  assert.equal(a.ok, true);
+  assert.equal((await pedir(e, AGENTE, { vlan: 10 }, 'mr-tam:crear')).repetida, true, 'la misma petición sigue siendo repetida');
+  for (const otro of [{ mascara: 25 }, { vlan: 11 }, { ticket: 'NET-999' }]) {
+    const r = await pedir(e, AGENTE, { vlan: 10, ...otro }, 'mr-tam:crear');
+    assert.equal(r.error, 'idempotencia_conflicto', JSON.stringify(otro));
+  }
+  assert.equal(e.publicados.filter((p) => p.tipo === 'reserva_creada').length, 1);
+});
+
 test('idempotencia: misma clave y reserva viva → repetida; liberada o expirada → 409 (nunca 200)', async () => {
   const e = entorno();
   const a = await pedir(e, AGENTE, {}, 'mr-1:crear');
