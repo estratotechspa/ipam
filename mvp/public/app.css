@@ -255,3 +255,5 @@ ol.historial{list-style:none;padding:0;margin:0}ol.historial li{padding:9px 0;bo
 .nuevo{display:flex;flex-direction:column;gap:var(--sp-2);margin:0 0 var(--sp-4)}
 .nuevo details{margin:0 !important}
 tr.seg-reservado td:first-child{box-shadow:inset 3px 0 0 #8a4b00}
+
+.filtros [hidden]{display:none}.filtros .casilla{display:flex;align-items:baseline;gap:var(--sp-2);min-width:0}.filtros .casilla input{width:auto;min-height:0;margin:0}
