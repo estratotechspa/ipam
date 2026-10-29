@@ -3,6 +3,12 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y versionado semántico.
 
 ## [Sin publicar]
+### Interfaz
+- **Pools: menú de tres puntos en cada fila** (solo admin) con «Ver ficha» y «Eliminar pool»; antes había que abrir la ficha. La regla no cambia: solo se elimina un pool sin asignaciones, reservas vigentes ni IPs, y si no, se muestra el motivo.
+
+### Datos
+- Nuevo `mvp/db/limpiar-semilla.sql`: quita de una base ya cargada los datos de ejemplo (asignaciones con origen `semilla` y los pools de `seed.sql`/`seed-poc.sql` que queden vacíos). No toca pools con trabajo real. Termina en `rollback` hasta que se descomente `commit`.
+
 ### Seguridad
 - **Sesiones OIDC revalidadas:** el rol y la existencia de la persona se consultan en la base cada `SESSION_REVALIDAR_SEG` (300 s); una baja o un cambio de rol rige en ese tiempo. `SESSION_HORAS` baja de 8 a 4. La cookie pasa a un formato nuevo (se entra de nuevo una vez).
 - **Webhook de Jira con timestamp:** exige `x-ipam-timestamp` y la firma `HMAC(secreto, "<timestamp>.<cuerpo>")` con ventana de ±5 min. **Cambio incompatible** para quien firmaba solo el cuerpo.
