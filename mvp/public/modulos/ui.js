@@ -134,23 +134,125 @@ export const confirmarLiberacionDefinitiva = (cidr) =>
 
 export function tabla(titulo, cabeceras, filas, vacio) {
   if (!filas.length) return h('div', { class: 'card vacio' }, vacio);
-  return h(
-    'div',
-    { class: 'card tablewrap' },
+  const t = h(
+    'table',
+    null,
+    h('caption', { class: 'sr-only' }, titulo),
     h(
-      'table',
+      'thead',
       null,
-      h('caption', { class: 'sr-only' }, titulo),
       h(
-        'thead',
+        'tr',
         null,
-        h(
-          'tr',
-          null,
-          cabeceras.map((c) => h('th', { scope: 'col' }, c)),
-        ),
+        cabeceras.map((c) => h('th', { scope: 'col' }, c)),
       ),
-      h('tbody', null, filas),
     ),
+    h('tbody', null, filas),
   );
+  columnasAjustables(t, titulo.toLowerCase().replace(/[^a-z0-9]+/g, '-'));
+  return h('div', { class: 'card tablewrap' }, t);
+}
+
+/* ===== Columnas ajustables: se arrastra el borde del encabezado (o se usan las flechas con el borde enfocado) para ensanchar o achicar una
+   columna y leer mejor un texto largo. Doble clic restablece. Los anchos se recuerdan por tabla en este navegador. ===== */
+const ANCHO_MIN = 56;
+const PASO_TECLADO = 16;
+const leerAnchos = (clave) => {
+  try {
+    return JSON.parse(localStorage.getItem('ipam.cols.' + clave) || '{}') || {};
+  } catch {
+    return {};
+  }
+};
+const guardarAnchos = (clave, anchos) => {
+  try {
+    if (Object.keys(anchos).length) localStorage.setItem('ipam.cols.' + clave, JSON.stringify(anchos));
+    else localStorage.removeItem('ipam.cols.' + clave);
+  } catch {
+    /* sin almacenamiento: el ajuste vale solo mientras la tabla esté en pantalla */
+  }
+};
+
+/** @param {HTMLTableElement} tabla @param {string} clave identifica la tabla para recordar sus anchos */
+export function columnasAjustables(tabla, clave) {
+  const ths = [...tabla.querySelectorAll('thead th')];
+  if (!ths.length) return;
+  const id = (th, i) => (th.querySelector('[data-orden]') ? th.querySelector('[data-orden]').dataset.orden : th.textContent.trim() || 'c' + i);
+  const anchos = leerAnchos(clave);
+  let congelada = false;
+  const ajustarTabla = () => {
+    tabla.style.width = ths.reduce((t, th) => t + (parseFloat(th.style.width) || th.offsetWidth), 0) + 'px';
+  };
+  // Congela los anchos actuales (para que arrastrar una columna no reparta el cambio entre las demás).
+  const congelar = () => {
+    if (congelada) return;
+    congelada = true;
+    const actuales = ths.map((th) => th.offsetWidth + 3); // holgura: offsetWidth redondea hacia abajo y el texto ajustado justo se partiría
+    tabla.classList.add('ajustable');
+    ths.forEach((th, i) => (th.style.width = (anchos[id(th, i)] || actuales[i]) + 'px'));
+    ajustarTabla();
+  };
+  const fijar = (th, i, px) => {
+    congelar();
+    const ancho = Math.max(ANCHO_MIN, Math.round(px));
+    th.style.width = ancho + 'px';
+    anchos[id(th, i)] = ancho;
+    th.querySelector('.col-ajuste')?.setAttribute('aria-valuenow', String(ancho));
+    ajustarTabla();
+    guardarAnchos(clave, anchos);
+  };
+  const restablecer = () => {
+    for (const k of Object.keys(anchos)) delete anchos[k];
+    congelada = false;
+    tabla.classList.remove('ajustable');
+    tabla.style.width = '';
+    ths.forEach((th) => (th.style.width = ''));
+    guardarAnchos(clave, anchos);
+  };
+
+  ths.forEach((th, i) => {
+    if (i === ths.length - 1 && !th.textContent.trim().replace(/Acciones/i, '')) return; // la columna de acciones no se ajusta
+    const nombre = th.textContent.trim() || 'la columna';
+    const asa = h('span', {
+      class: 'col-ajuste',
+      role: 'separator',
+      'aria-orientation': 'vertical',
+      tabindex: '0',
+      'aria-label': `Ajustar el ancho de ${nombre}`,
+      'aria-valuemin': String(ANCHO_MIN),
+      'aria-valuemax': '1200',
+      'aria-valuenow': String(anchos[id(th, i)] || Math.round(th.offsetWidth)),
+      title: 'Arrastra para cambiar el ancho; doble clic para restablecer',
+    });
+    asa.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      congelar();
+      const x0 = e.clientX;
+      const w0 = th.offsetWidth;
+      asa.setPointerCapture(e.pointerId);
+      asa.classList.add('activa');
+      const mover = (ev) => fijar(th, i, w0 + ev.clientX - x0);
+      const soltar = () => {
+        asa.classList.remove('activa');
+        asa.removeEventListener('pointermove', mover);
+        asa.removeEventListener('pointerup', soltar);
+        asa.removeEventListener('pointercancel', soltar);
+      };
+      asa.addEventListener('pointermove', mover);
+      asa.addEventListener('pointerup', soltar);
+      asa.addEventListener('pointercancel', soltar);
+    });
+    asa.addEventListener('focus', () => asa.setAttribute('aria-valuenow', String(Math.round(th.offsetWidth))));
+    asa.addEventListener('click', (e) => e.stopPropagation()); // no ordena la columna al soltar el borde
+    asa.addEventListener('dblclick', restablecer);
+    asa.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Escape') return;
+      e.preventDefault();
+      if (e.key === 'Escape') return restablecer();
+      fijar(th, i, th.offsetWidth + (e.key === 'ArrowRight' ? PASO_TECLADO : -PASO_TECLADO));
+    });
+    th.append(asa);
+  });
+  // Anchos recordados: se aplican en cuanto la tabla está en pantalla (hay que medir las demás columnas).
+  if (Object.keys(anchos).length) requestAnimationFrame(congelar);
 }

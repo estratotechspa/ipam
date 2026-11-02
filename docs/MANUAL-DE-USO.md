@@ -80,7 +80,8 @@ Una sola pestaña reúne las **asignaciones** (definitivas) y las **reservas** (
 
 **Lo asignado:** La lista oficial de segmentos definitivos: **ID** (`ASG-000123`, único por asignación: el mismo rango, si se libera y se vuelve a asignar, tendrá otro ID), **segmento**, **pool**, **proyecto/VPC**, **VLAN** (número y nombre, si se indicó), cuántas **direcciones** son, quién lo **solicitó**, el **origen** (`panel`, `jira`, `agente`, `semilla`, `importado`), el **ticket** y la **fecha**.
 - **Asignar ahora** (solo admin, «Nuevo segmento» con la casilla desmarcada): ver abajo.
-- **Buscar** por ID, segmento, proyecto, VLAN, ticket o quién lo pidió (cuadro «Buscar», junto al filtro).
+- **Buscar** por ID, segmento, proyecto, VPC, subred, VLAN, ticket o quién lo pidió (cuadro «Buscar», junto al filtro).
+- **Ajustar columnas:** arrastra el borde derecho de un encabezado para ensanchar o achicar esa columna y leer mejor un texto largo (también con el teclado: enfoca el borde y usa ← →). Doble clic en el borde restablece los anchos. Se recuerdan en tu navegador. «Subred / VLAN» muestra el nombre de la subred, la VLAN o ambos.
 - Un clic en el **ID** abre la **ficha** del segmento.
 - **Exportar a Excel** para auditorías o reportes (incluye el ID y la VLAN).
 - **Respaldo JSON** (solo admin): copia lógica completa para llevar el IPAM a otra infraestructura ([MIGRACION](ops/MIGRACION.md)).
