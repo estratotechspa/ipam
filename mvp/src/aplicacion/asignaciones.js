@@ -3,6 +3,7 @@
 const { parse, libres, disponibilidad } = require('../dominio/cidr');
 const { ok, fallo } = require('./resultado');
 const { validarVlan } = require('../dominio/vlan');
+const { validarNombres } = require('../dominio/nombres');
 const { crearTareas } = require('./tareas');
 
 const dormir = (/** @type {number} */ ms) => new Promise((listo) => setTimeout(listo, ms));
@@ -15,7 +16,7 @@ const dormir = (/** @type {number} */ ms) => new Promise((listo) => setTimeout(l
 function crearAsignaciones({ repo, eventos, tickets, tareas = crearTareas(), config = { jira: { reintentos: 1, esperaMs: 0 } } }) {
   /** Validaciones que no dependen del estado de la base. */
   function validar({ vpc, cidr, mascara }, base, pool) {
-    if (!vpc || !String(vpc).trim()) return fallo('validacion', 'Indica el proyecto / VPC.');
+    if (!vpc || !String(vpc).trim()) return fallo('validacion', 'Indica la VPC.');
     if (cidr) {
       const objetivo = String(cidr).trim();
       const c = parse(objetivo);
@@ -33,7 +34,7 @@ function crearAsignaciones({ repo, eventos, tickets, tareas = crearTareas(), con
    * Asigna un segmento. Las asignaciones de un mismo pool se serializan con un bloqueo de transacción; la restricción de
    * exclusión de la base queda como respaldo (también cubre inserciones hechas fuera de la API).
    */
-  async function asignar({ pool, vpc, cidr, mascara, solicitante, origen, ticket, vlan, vlan_nombre }) {
+  async function asignar({ pool, vpc, cidr, mascara, solicitante, origen, ticket, vlan, vlan_nombre, proyecto, subred }) {
     const p = await repo.obtenerPool(pool);
     if (!p) return fallo('no_encontrado', `Pool «${pool}» no existe.`);
     const base = /** @type {NonNullable<ReturnType<typeof parse>>} */ (parse(p.cidr));
@@ -41,6 +42,8 @@ function crearAsignaciones({ repo, eventos, tickets, tareas = crearTareas(), con
     if (invalido) return invalido;
     const v = validarVlan({ vlan, vlan_nombre });
     if (!v.ok) return fallo('validacion', v.mensaje);
+    const nom = validarNombres({ proyecto, subred });
+    if (!nom.ok) return fallo('validacion', nom.mensaje);
 
     const r = await repo.transaccion(async (tx) => {
       await tx.bloquear(`pool:${pool}`);
@@ -63,6 +66,8 @@ function crearAsignaciones({ repo, eventos, tickets, tareas = crearTareas(), con
         origen,
         vlan: v.vlan,
         vlan_nombre: v.vlan_nombre,
+        proyecto: nom.proyecto,
+        subred: nom.subred,
       });
       return ok({ asignacion });
     });

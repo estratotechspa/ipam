@@ -213,7 +213,7 @@ export async function fichaPool(id) {
           if (!filas.length) return h('p', { class: 'muted' }, 'Este pool todavía no tiene segmentos asignados ni reservados.');
           return tabla(
             'Segmentos del pool',
-            ['Segmento', 'Estado', 'Proyecto / VPC', 'VLAN', 'Direcciones'],
+            ['Segmento', 'Estado', 'Proyecto', 'VPC', 'Subred', 'VLAN', 'Direcciones'],
             filas.map((x) =>
               h(
                 'tr',
@@ -237,7 +237,9 @@ export async function fichaPool(id) {
                     : h('code', null, x.cidr),
                 ),
                 h('td', null, h('span', { class: 'tag ' + (x.estado === 'asignada' ? 'confirmada' : 'reservada') }, x.estado)),
+                h('td', null, x.proyecto || '—'),
                 h('td', null, x.vpc),
+                h('td', null, x.subred || '—'),
                 h('td', null, textoVlan(x)),
                 h('td', null, fmt(size(x.cidr))),
               ),
@@ -301,9 +303,11 @@ export async function fichaAsignacion(id) {
               ],
               p && ['Ambiente', h('span', { class: 'tag ' + p.ambiente }, p.ambiente)],
               p && ['Proveedor', p.proveedor],
-              ['Proyecto / VPC', a.vpc],
+              ['Proyecto', a.proyecto],
+              ['VPC', a.vpc],
+              ['Subred', a.subred],
               ['VLAN', a.vlan],
-              ['Nombre VLAN / subred', a.vlan_nombre],
+              ['Nombre VLAN', a.vlan_nombre],
               ['Ticket', a.ticket],
               ['Origen', a.origen],
               ['Solicitó', a.solicitante],

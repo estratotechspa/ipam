@@ -193,7 +193,7 @@ export function resultadoSimulacion(estado) {
         h(
           'tr',
           null,
-          ['Aprobar', 'Fila', 'Segmento', 'Proyecto', 'Proveedor', 'Ambiente', 'Pool', 'Estado', 'Detalle'].map((t) => h('th', null, t)),
+          ['Aprobar', 'Fila', 'Segmento', 'VPC', 'Proveedor', 'Ambiente', 'Pool', 'Estado', 'Detalle'].map((t) => h('th', null, t)),
         ),
         filas.map((f) =>
           h(

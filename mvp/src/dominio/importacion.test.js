@@ -106,3 +106,12 @@ test('seleccionar: las ok siempre; las que solapan con otro pool solo si un admi
     'aprobar una fila que no es «solapa_otro_pool» no la habilita',
   );
 });
+
+test('proyecto y subred pasan por separado de la VPC; un archivo antiguo sin «vpc» usa «proyecto» como VPC', () => {
+  const r = analizar({
+    ...vacio,
+    filas: [fila(2, '10.210.0.0/24', { proyecto: 'tienda', subred: 'subnet-a' }), fila(3, '10.210.1.0/24', { vpc: '', proyecto: 'solo-proyecto' })],
+  });
+  assert.deepEqual([r.filas[0].vpc, r.filas[0].proyecto, r.filas[0].subred], ['red-2', 'tienda', 'subnet-a']);
+  assert.equal(r.filas[1].vpc, 'solo-proyecto');
+});

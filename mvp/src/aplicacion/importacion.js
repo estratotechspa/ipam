@@ -42,6 +42,8 @@ function crearImportacion({ repo, eventos }) {
               vpc: f.vpc,
               vlan: f.vlan,
               vlan_nombre: f.vlan_nombre,
+              proyecto: f.proyecto,
+              subred: f.subred,
               solicitante: actor && actor.nombre ? actor.nombre : 'importado',
               ticket: f.ticket,
               origen: 'importado',

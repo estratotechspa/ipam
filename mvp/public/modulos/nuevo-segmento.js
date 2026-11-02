@@ -8,7 +8,9 @@ export function formularioNuevoSegmento(pools, estado, recargar) {
   const campo = (etiqueta, control) => h('label', null, etiqueta, control);
   const esAdmin = puede('admin');
   const { pool, mascara, disp } = selectorPoolMascara('ns', pools);
+  const proyecto = h('input', { id: 'ns-proyecto', maxlength: 120, placeholder: 'opcional: p. ej. tienda-web' });
   const vpc = h('input', { id: 'ns-vpc', required: true, maxlength: 120, placeholder: 'vpc-mi-proyecto' });
+  const subred = h('input', { id: 'ns-subred', maxlength: 80, placeholder: 'opcional: p. ej. subnet-nodos-qa' });
   const cidr = h('input', { id: 'ns-cidr', placeholder: 'opcional: vacío = el primer rango libre' });
   const vl = camposVlan('ns');
   const ticket = h('input', { id: 'ns-ticket', maxlength: 60, placeholder: 'opcional (si no, se genera NET-xxx)' });
@@ -79,6 +81,8 @@ export function formularioNuevoSegmento(pools, estado, recargar) {
     if (!cidr.value.trim() && !mascara.value) return msg(res, 'Elige una máscara o escribe un CIDR.', 'error');
     const comoReserva = esReserva();
     const cuerpo = { pool: pool.value, vpc: vpc.value.trim(), ...cuerpoVlan(vl) };
+    if (proyecto.value.trim()) cuerpo.proyecto = proyecto.value.trim();
+    if (subred.value.trim()) cuerpo.subred = subred.value.trim();
     if (cidr.value.trim()) cuerpo.cidr = cidr.value.trim();
     else cuerpo.mascara = +mascara.value;
     if (ticket.value.trim()) cuerpo.ticket = ticket.value.trim();
@@ -129,11 +133,13 @@ export function formularioNuevoSegmento(pools, estado, recargar) {
           )
         : null,
       campo('Pool', pool),
-      campo('Proyecto / VPC', vpc),
+      campo('Proyecto', proyecto),
+      campo('VPC', vpc),
+      campo('Nombre de la subred', subred),
       campo('Máscara', mascara),
       campo('CIDR manual', cidr),
       campo('VLAN (opcional)', vl.vlan),
-      campo('Nombre VLAN / subred (opcional)', vl.vlanNombre),
+      campo('Nombre de la VLAN (opcional)', vl.vlanNombre),
       campo('Ticket', ticket),
       campoTtl,
       definitivo,

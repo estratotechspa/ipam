@@ -112,7 +112,7 @@ Las IPs fijas de routers, switches, firewalls, gateways y servidores. Escribe el
 ### Pedir un rango para un proyecto nuevo (solicitante)
 1. Ve a **Segmentos** y abre **Nuevo segmento**. Deja marcada **Es una reserva** (el solicitante no ve la casilla: siempre reserva).
 2. Elige el **pool**. (Ninguno viene elegido de antemano, y la máscara se habilita al elegirlo.)
-3. Escribe el **proyecto / VPC**. Usa minúsculas, números y guiones: `vpc-tienda-web`.
+3. Escribe la **VPC** (obligatoria). Usa minúsculas, números y guiones: `vpc-tienda-web`. Si quieres, indica también el **proyecto** y el **nombre de la subred**: se guardan por separado.
 4. Elige la **máscara**. La lista ofrece **solo tamaños que caben** y dice cuántos bloques libres quedan de cada uno (`/24 · 15 libres`). Si no sabes cuál, mira la tabla de disponibilidad que aparece al elegir el pool.
 5. Opcional: **VLAN**, **ticket** y cuánto debe durar la reserva (hasta 72 horas).
 6. Pulsa **Reservar**. El segmento queda **Reservado** y **un administrador debe aprobarlo**.
@@ -132,7 +132,7 @@ Las IPs fijas de routers, switches, firewalls, gateways y servidores. Escribe el
 
 1. **Segmentos** → **Nuevo segmento** y **desmarca «Es una reserva»**. El botón pasa a **Asignar ahora**, desaparece la vigencia y aparece un aviso de que la entrega es definitiva.
 2. Elige el **pool**: aparece la tabla de **disponibilidad por máscara**, con los bloques libres de cada tamaño. Un clic en una fila elige esa máscara.
-3. Escribe el **proyecto / VPC**, la **máscara** (o un **CIDR manual**) y, si quieres, la **VLAN** y su nombre.
+3. Escribe la **VPC** (y, si quieres, el **proyecto** y el **nombre de la subred**), la **máscara** (o un **CIDR manual**) y, si quieres, la **VLAN** y su nombre.
 4. Pulsa **Asignar ahora** y confirma en el cuadro que pide una segunda confirmación (no se pide aprobación a otra persona, así que esta es la última barrera).
 5. Si el rango choca con otro, el IPAM **no asigna nada**: te muestra con quién choca y ofrece **segmentos libres** con un botón *Usar*.
 

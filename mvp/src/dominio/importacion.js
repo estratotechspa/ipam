@@ -9,6 +9,7 @@
 //   invalida           dato inválido (CIDR mal escrito, desalineado, proveedor o ambiente inválido…)
 const { parse, overlap, contenido, n2ip } = require('./cidr');
 const { validarVlan } = require('./vlan');
+const { validarNombres } = require('./nombres');
 
 const AMBIENTES = ['dev', 'qa', 'pre', 'prod'];
 const ESTADOS = ['ok', 'ya_existe', 'solapa_otro_pool', 'choca_mismo_pool', 'invalida'];
@@ -33,7 +34,7 @@ const slug = (/** @type {string} */ t) =>
     .slice(0, 24);
 
 /**
- * @typedef {{n: number, cidr: string, vpc?: string, proveedor?: string, ambiente?: string, tipo?: string, ticket?: string, descripcion?: string, vlan?: string, vlan_nombre?: string}} FilaEntrada
+ * @typedef {{n: number, cidr: string, vpc?: string, proveedor?: string, ambiente?: string, tipo?: string, ticket?: string, descripcion?: string, vlan?: string, vlan_nombre?: string, proyecto?: string, subred?: string}} FilaEntrada
  * @typedef {{id: string, tipo: string, ambiente: string, proveedor: string, cidr: string}} Pool
  * @typedef {{pool_id: string, cidr: string, vpc?: string}} Ocupado
  * @typedef {NonNullable<ReturnType<typeof parse>>} Cidr
@@ -61,13 +62,32 @@ function validarFila(/** @type {FilaEntrada} */ f, /** @type {{proveedor?: strin
     .slice(0, 40);
   const vpc =
     String(f.vpc || '').trim() ||
+    String(f.proyecto || '')
+      .trim()
+      .slice(0, 120) || // archivos antiguos usaban «proyecto» como nombre de la VPC
     String(f.descripcion || '')
       .trim()
       .slice(0, 120) ||
     'sin-nombre';
   const v = validarVlan(f);
   if (!v.ok) return { error: v.mensaje };
-  return { datos: { c, cidr, proveedor, ambiente, tipo, vpc, vlan: v.vlan, vlan_nombre: v.vlan_nombre, ticket: String(f.ticket || '').trim() || 'IMPORTADO' } };
+  const nom = validarNombres(f);
+  if (!nom.ok) return { error: nom.mensaje };
+  return {
+    datos: {
+      c,
+      cidr,
+      proveedor,
+      ambiente,
+      tipo,
+      vpc,
+      proyecto: nom.proyecto,
+      subred: nom.subred,
+      vlan: v.vlan,
+      vlan_nombre: v.vlan_nombre,
+      ticket: String(f.ticket || '').trim() || 'IMPORTADO',
+    },
+  };
 }
 
 /** Pool destino: el existente más pequeño del mismo proveedor y ambiente que contiene al segmento; si no, uno automático por familia. */
@@ -135,7 +155,7 @@ function analizar({ filas, pools, ocupados, defectos = {} }) {
   const salida = [];
 
   for (const f of filas) {
-    const base = { n: f.n, cidr: String(f.cidr || '').trim(), vpc: String(f.vpc || '').trim(), ticket: String(f.ticket || '').trim() };
+    const base = { n: f.n, cidr: String(f.cidr || '').trim(), vpc: String(f.vpc || f.proyecto || '').trim(), ticket: String(f.ticket || '').trim() };
     const v = validarFila(f, defectos);
     if (!v.datos) {
       salida.push({
@@ -161,6 +181,8 @@ function analizar({ filas, pools, ocupados, defectos = {} }) {
       vpc: d.vpc,
       vlan: d.vlan,
       vlan_nombre: d.vlan_nombre,
+      proyecto: d.proyecto,
+      subred: d.subred,
       ticket: d.ticket,
       proveedor: d.proveedor,
       ambiente: d.ambiente,

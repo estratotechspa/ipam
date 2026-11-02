@@ -8,7 +8,7 @@
 | Prefijos (bloques de red) con utilización | Pools con barra de uso y **disponibilidad por máscara** |
 | Búsqueda rápida y filtros | Filtro por ambiente y proveedor; buscador por ID, segmento, proyecto o ticket |
 | Exportar | Excel y respaldo JSON |
-| Inquilino (a quién pertenece) | Proyecto / VPC y solicitante |
+| Inquilino (a quién pertenece) | Proyecto, VPC y solicitante |
 | Roles y permisos | `lector`, `agente`, `solicitante`, `admin`; tokens de API |
 | Registro de cambios | Auditoría de solo inserción, con `request_id` |
 | Webhooks / integraciones | Eventos, webhook firmado, Jira en dos sentidos |
