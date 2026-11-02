@@ -17,7 +17,9 @@ export const COLUMNAS = [
   ['codigo', 'ID'],
   ['cidr', 'Segmento'],
   ['pool', 'Pool'],
-  ['vpc', 'Proyecto / VPC'],
+  ['proyecto', 'Proyecto'],
+  ['vpc', 'VPC'],
+  ['subred', 'Subred'],
   ['vlan', 'VLAN'],
   ['dir', 'Direcciones'],
   ['sol', 'Solicitó'],
@@ -47,7 +49,9 @@ export function unificar(asignaciones, reservas) {
     ref: x,
     cidr: x.cidr,
     pool_id: x.pool_id,
+    proyecto: x.proyecto,
     vpc: x.vpc,
+    subred: x.subred,
     vlan: x.vlan,
     vlan_nombre: x.vlan_nombre,
     solicitante: x.solicitante,
@@ -65,7 +69,9 @@ export function unificar(asignaciones, reservas) {
       ref: r,
       cidr: r.cidr,
       pool_id: r.pool_id,
+      proyecto: r.proyecto,
       vpc: r.vpc,
+      subred: r.subred,
       vlan: r.vlan,
       vlan_nombre: r.vlan_nombre,
       solicitante: r.solicitante,
@@ -85,7 +91,9 @@ const clave = {
     return c ? c.ip * 64 + c.len : 0;
   },
   pool: (x) => x.pool_id,
-  vpc: (x) => x.vpc,
+  proyecto: (x) => x.proyecto || '',
+  vpc: (x) => x.vpc || '',
+  subred: (x) => x.subred || '',
   vlan: (x) => (x.vlan ? Number(x.vlan) : Infinity),
   dir: (x) => tamanoCidr(x.cidr),
   sol: (x) => x.solicitante,
@@ -144,7 +152,7 @@ const celdaAcciones = (x, puedeOperar) => {
 const fila = (x, puedeOperar) =>
   `<tr class="seg-${x.tipo}"><td><span class="tag ${esc(x.marca)}">${ETIQUETA[x.marca]}</span></td>
   <td>${x.tipo === 'asignado' ? `<button type="button" class="enlace" data-ficha-asig="${esc(x.ref.id)}"><code>${esc(x.id)}</code></button>` : `<code>${esc(x.id)}</code>`}</td>
-  <td><code>${esc(x.cidr)}</code></td><td>${esc(x.pool_id)}</td><td>${esc(x.vpc)}</td><td>${esc(textoVlan(x))}</td><td>${fmt(size(x.cidr))}</td><td>${esc(x.solicitante)}</td><td>${esc(x.origen)}</td><td>${esc(x.ticket)}</td><td>${celdaFecha(x)}</td>
+  <td><code>${esc(x.cidr)}</code></td><td>${esc(x.pool_id)}</td><td>${esc(x.proyecto || '—')}</td><td>${esc(x.vpc || '—')}</td><td>${esc(x.subred || '—')}</td><td>${esc(textoVlan(x))}</td><td>${fmt(size(x.cidr))}</td><td>${esc(x.solicitante)}</td><td>${esc(x.origen)}</td><td>${esc(x.ticket)}</td><td>${celdaFecha(x)}</td>
   <td>${celdaAcciones(x, puedeOperar)}</td></tr>`;
 
 const textoVacio = (vista, filtrando) =>
@@ -186,7 +194,11 @@ export async function renderSegmentos() {
     cuentas.todos = cuentas.asignados + cuentas.reservados;
     const lista = todas
       .filter((x) => pasaVista(x, vista))
-      .filter((x) => !q || [x.id, x.cidr, x.vpc, x.ticket, x.solicitante, x.pool_id, x.origen, x.vlan, x.vlan_nombre].join(' ').toLowerCase().includes(q));
+      .filter(
+        (x) =>
+          !q ||
+          [x.id, x.cidr, x.proyecto, x.vpc, x.subred, x.ticket, x.solicitante, x.pool_id, x.origen, x.vlan, x.vlan_nombre].join(' ').toLowerCase().includes(q),
+      );
     const total = lista.length;
     lista.sort(comparar(ORDEN.col, ORDEN.dir));
     ORDEN.pagina = Math.min(ORDEN.pagina, Math.max(0, Math.ceil(total / POR_PAGINA) - 1));

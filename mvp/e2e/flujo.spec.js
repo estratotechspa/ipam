@@ -17,24 +17,25 @@ test('nueva asignación con VLAN → ver en la tabla → ficha con historial →
   await expect(page.locator('#ns-pool')).toHaveValue('');
   await expect(page.locator('#ns-mascara')).toBeDisabled();
   await page.selectOption('#ns-pool', 'gke-nodos-qa');
+  await page.fill('#ns-proyecto', `${vpc}-proy`);
   await page.fill('#ns-vpc', vpc);
   await page.selectOption('#ns-mascara', '24');
-  await page.fill('#ns-vlan', '210');
-  await page.fill('#ns-vlan-nombre', 'e2e-vlan');
+  await page.fill('#ns-red', '210'); // un número en la casilla «VLAN o subred» es una VLAN
   await page.click('#ns-go');
   await aceptar(page, 'Asignar ahora');
   await expect(page.locator('#seg-msg .ok')).toContainText('Asignado');
 
   const fila = page.locator('#segmentos tr', { hasText: vpc });
   await expect(fila).toBeVisible();
-  await expect(fila).toContainText('210 · e2e-vlan');
+  await expect(fila).toContainText('210');
+  await expect(fila).toContainText(`${vpc}-proy`);
 
   // Ficha del segmento: detalle e historial.
   await fila.locator('button.enlace').click();
   const ficha = page.getByRole('dialog');
   await expect(ficha.getByRole('heading', { level: 2 })).toHaveText(/\/24$/);
   await expect(ficha).toContainText('Primera dirección');
-  await expect(ficha).toContainText('e2e-vlan');
+  await expect(ficha).toContainText('210');
   await ficha.getByRole('tab', { name: 'Historial' }).click();
   await expect(ficha.getByRole('list', { name: 'Historial' })).toContainText('asignó');
   await ficha.getByRole('button', { name: 'Cerrar' }).click();

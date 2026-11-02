@@ -88,9 +88,9 @@ Una sola pestaña reúne las **asignaciones** (definitivas) y las **reservas** (
 
 **Asignar ahora — «entrégalo ya, definitivo» (solo admin; «Nuevo segmento» con «Es una reserva» desmarcada).** El botón pasa a «Asignar ahora», la vigencia se oculta y se pide una segunda confirmación. Entrega un segmento **de inmediato y de forma definitiva**, **sin reserva y sin aprobación de otra persona**; queda en el historial a nombre del admin que lo hizo.
 1. Elige el **pool**. **Ningún pool viene elegido** de antemano, y la **máscara** se habilita recién al elegirlo.
-2. Escribe el **proyecto / VPC** (obligatorio).
+2. Opcionales: el **proyecto** y la **VPC** (son datos distintos; ninguno es obligatorio).
 3. Elige la **máscara**: la lista ofrece **solo los tamaños que caben en ese pool** (desde la máscara del pool hasta `/32`) y dice cuántos bloques libres quedan de cada uno («/24 · 15 libres»); los agotados aparecen como «sin espacio» y no se pueden elegir. O escribe un **CIDR manual** si necesitas un rango específico (debe caer dentro del pool).
-4. Opcional: **VLAN** (número de 1 a 4094) y **nombre de la VLAN o subred**.
+4. Opcional: **VLAN o subred**, en una sola casilla: si escribes un número (1 a 4094) se guarda como VLAN; cualquier otro texto, como nombre de la subred.
 5. Pulsa **Asignar**.
 
 Al elegir el pool aparece la **disponibilidad por máscara**: direcciones por bloque (totales y utilizables), **bloques libres** y direcciones libres; un clic en una fila elige esa máscara. En IPv4 un bloque `/30` o mayor pierde dos direcciones (red y difusión). Si el rango choca con otro, el IPAM **no asigna nada**: te muestra con quién choca y ofrece **segmentos libres** con un botón «Usar».

@@ -47,7 +47,7 @@ function crearRepositorioMemoria({ reloj = { ahora: () => new Date() }, pools = 
       datos.ticket += 1;
       return `NET-${datos.ticket}`;
     },
-    async insertarAsignacion({ pool, cidr, vpc, solicitante, ticket, origen, vlan = null, vlan_nombre = null }) {
+    async insertarAsignacion({ pool, cidr, vpc, solicitante, ticket, origen, vlan = null, vlan_nombre = null, proyecto = null, subred = null }) {
       if (datos.asignaciones.some((x) => x.pool_id === pool && cruza(x.cidr, cidr))) throw new ConflictoDeDatos('solapamiento', '23P01');
       const id = ++datos.idAsignacion;
       const a = {
@@ -58,6 +58,8 @@ function crearRepositorioMemoria({ reloj = { ahora: () => new Date() }, pools = 
         vpc,
         vlan,
         vlan_nombre,
+        proyecto,
+        subred,
         solicitante,
         ticket,
         origen,
@@ -85,7 +87,7 @@ function crearRepositorioMemoria({ reloj = { ahora: () => new Date() }, pools = 
     async contarVigentesDe(solicitante) {
       return datos.reservas.filter((r) => r.solicitante === solicitante && vigente(r)).length;
     },
-    async insertarReserva({ pool, cidr, vpc, solicitante, ticket, ttlHoras, clave, vlan = null, vlan_nombre = null }) {
+    async insertarReserva({ pool, cidr, vpc, solicitante, ticket, ttlHoras, clave, vlan = null, vlan_nombre = null, proyecto = null, subred = null }) {
       if (clave && datos.reservas.some((r) => r.solicitante === solicitante && r.clave_idem === clave)) throw new ConflictoDeDatos('clave repetida', '23505');
       if (
         datos.reservas.some((r) => r.pool_id === pool && vigente(r) && cruza(r.cidr, cidr)) ||
@@ -99,6 +101,8 @@ function crearRepositorioMemoria({ reloj = { ahora: () => new Date() }, pools = 
         vpc,
         vlan,
         vlan_nombre,
+        proyecto,
+        subred,
         solicitante,
         ticket,
         estado: 'reservada',
@@ -154,6 +158,8 @@ function crearRepositorioMemoria({ reloj = { ahora: () => new Date() }, pools = 
         origen: r.solicitante === SOLICITANTE_JIRA ? 'jira' : 'agente',
         vlan: r.vlan ?? null,
         vlan_nombre: r.vlan_nombre ?? null,
+        proyecto: r.proyecto ?? null,
+        subred: r.subred ?? null,
       });
     },
     async purgarLimite() {

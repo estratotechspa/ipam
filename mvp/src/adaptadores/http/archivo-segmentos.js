@@ -7,13 +7,15 @@ const { MAX_FILAS } = require('../../dominio/importacion');
 // Nombres de columna aceptados (sin tildes ni mayúsculas): cada campo del IPAM → posibles encabezados del archivo.
 const ALIAS = {
   cidr: ['cidr', 'prefijo', 'prefix', 'segmento', 'red', 'subred', 'rango', 'direccion ip', 'network'],
-  vpc: ['vpc', 'proyecto', 'project', 'nombre', 'name', 'inquilino', 'tenant', 'proyecto / vpc', 'proyecto vpc'],
+  vpc: ['vpc', 'nombre', 'name', 'inquilino', 'tenant', 'proyecto / vpc', 'proyecto vpc', 'nombre vpc', 'vpc name'],
+  proyecto: ['proyecto', 'project', 'nombre proyecto', 'nombre del proyecto', 'project name', 'project id'],
   proveedor: ['proveedor', 'provider', 'nube', 'cloud', 'sitio', 'site', 'origen'],
   ambiente: ['ambiente', 'environment', 'entorno', 'env'],
   tipo: ['tipo', 'type', 'rol', 'role', 'funcion'],
   ticket: ['ticket', 'referencia', 'id', 'ref'],
   vlan: ['vlan', 'vlan id', 'vlan_id', 'id vlan', 'vid'],
-  vlan_nombre: ['nombre vlan / subred', 'nombre vlan', 'nombre de vlan', 'vlan nombre', 'vlan name', 'nombre subred', 'nombre de subred', 'subnet name'],
+  vlan_nombre: ['nombre vlan / subred', 'nombre vlan', 'nombre de vlan', 'vlan nombre', 'vlan name'],
+  subred: ['nombre subred', 'nombre de subred', 'nombre de la subred', 'subnet name', 'subnet', 'nombre subnet'],
   descripcion: ['descripcion', 'description', 'comentario', 'comentarios', 'observacion', 'notas'],
 };
 const sinTildes = (t) =>

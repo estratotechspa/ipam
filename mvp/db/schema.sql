@@ -294,6 +294,15 @@ create trigger direccion_ip_coherente before insert or update on direcciones_ip 
 insert into esquema_version (version, descripcion) values (10, 'direcciones ip fijas por interfaz')
   on conflict (version) do nothing;
 
+-- Proyecto y nombre de subred por segmento, aparte de la VPC (`vpc`) y de la VLAN. Opcionales; los segmentos anteriores quedan en blanco.
+alter table asignaciones add column if not exists proyecto text check (char_length(proyecto) <= 120);
+alter table asignaciones add column if not exists subred text check (char_length(subred) <= 80);
+alter table reservas add column if not exists proyecto text check (char_length(proyecto) <= 120);
+alter table reservas add column if not exists subred text check (char_length(subred) <= 80);
+
+insert into esquema_version (version, descripcion) values (11, 'proyecto y subred por segmento')
+  on conflict (version) do nothing;
+
 -- Rendimiento de la purga por retención (`npm run purgar`, filtra por fecha). Idempotente y opcional: no cambia la versión del esquema.
 create index if not exists eventos_ts_idx on eventos (ts);
 

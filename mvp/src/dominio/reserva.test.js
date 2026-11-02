@@ -55,6 +55,8 @@ test('misma petición: el tamaño pedido por máscara, la VLAN y el ticket tambi
   assert.equal(R.mismaPeticion(ex, { vpc: 'v', vlan: 11 }), false);
   assert.equal(R.mismaPeticion(ex, { vpc: 'v', vlan_nombre: 'Otra' }), false);
   assert.equal(R.mismaPeticion(ex, { vpc: 'v', ticket: 'NET-2' }), false);
+  assert.equal(R.mismaPeticion({ ...ex, proyecto: 'p', subred: 's' }, { vpc: 'v', proyecto: 'otro' }), false);
+  assert.equal(R.mismaPeticion({ ...ex, proyecto: 'p', subred: 's' }, { vpc: 'v', proyecto: 'p', subred: 's' }), true);
   assert.equal(R.mismaPeticion(ex, { vpc: 'v', vlan: null, vlan_nombre: null, ticket: null }), true); // lo que no indicó no cuenta
 });
 

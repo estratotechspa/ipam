@@ -49,7 +49,7 @@ test('invalida: CIDR mal escrito, desalineado (con sugerencia), máscara demasia
 test('los valores por defecto completan proveedor, ambiente y tipo', () => {
   const r = analizar({ ...vacio, defectos: { proveedor: 'On-prem', ambiente: 'qa', tipo: 'LAN' }, filas: [{ n: 2, cidr: '172.16.5.0/24' }] });
   assert.equal(r.filas[0].estado, 'ok');
-  assert.deepEqual([r.filas[0].proveedor, r.filas[0].ambiente, r.filas[0].tipo, r.filas[0].vpc], ['On-prem', 'qa', 'LAN', 'sin-nombre']);
+  assert.deepEqual([r.filas[0].proveedor, r.filas[0].ambiente, r.filas[0].tipo, r.filas[0].vpc], ['On-prem', 'qa', 'LAN', '']);
 });
 
 test('solapa con un pool distinto → requiere aprobación; con el mismo pool → no importable; repetido → se omite', () => {
@@ -105,4 +105,13 @@ test('seleccionar: las ok siempre; las que solapan con otro pool solo si un admi
     [2, 3],
     'aprobar una fila que no es «solapa_otro_pool» no la habilita',
   );
+});
+
+test('proyecto y subred pasan por separado de la VPC; un archivo antiguo sin «vpc» usa «proyecto» como VPC', () => {
+  const r = analizar({
+    ...vacio,
+    filas: [fila(2, '10.210.0.0/24', { proyecto: 'tienda', subred: 'subnet-a' }), fila(3, '10.210.1.0/24', { vpc: '', proyecto: 'solo-proyecto' })],
+  });
+  assert.deepEqual([r.filas[0].vpc, r.filas[0].proyecto, r.filas[0].subred], ['red-2', 'tienda', 'subnet-a']);
+  assert.equal(r.filas[1].vpc, 'solo-proyecto');
 });

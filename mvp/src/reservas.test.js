@@ -161,7 +161,7 @@ test('pool ambiguo → 422 con las opciones; mascara y cidr inconsistentes y TTL
     'la forma la valida el contrato',
   );
   assert.equal(
-    (await json(await llamar('POST', '/api/reservas', { vpc: '   ', ambiente: 'qa', tipo: 'Nodos', mascara: 24 }))).cuerpo.error,
+    (await json(await llamar('POST', '/api/reservas', { vpc: 'a\u0007b', ambiente: 'qa', tipo: 'Nodos', mascara: 24 }))).cuerpo.error,
     'vpc_invalido',
     'las reglas de negocio las valida el dominio',
   );

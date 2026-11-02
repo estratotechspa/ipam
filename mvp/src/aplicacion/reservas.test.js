@@ -84,7 +84,7 @@ test('validaciones de la petición', async () => {
     assert.equal(r.ok, false);
     assert.equal(r.error, codigo, JSON.stringify(extra));
   };
-  await falla({ vpc: '' }, 'vpc_invalido');
+  await falla({ vpc: 'a\u0007b' }, 'vpc_invalido');
   await falla({ vpc: 123 }, 'vpc_invalido');
   await falla({ ambiente: 'staging' }, 'falta_destino');
   await falla({ mascara: undefined }, 'falta_tamano');

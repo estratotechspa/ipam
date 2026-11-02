@@ -200,6 +200,35 @@ test('VLAN opcional: se guarda al asignar, pasa de la reserva a la asignación y
   assert.deepEqual({ vlan: c.asignacion.vlan, nombre: c.asignacion.vlan_nombre }, { vlan: 300, nombre: 'Branch_Data' });
 });
 
+test('proyecto, VPC y subred se guardan por separado y pasan de la reserva a la asignación', opts, async () => {
+  const r = await post('/api/v1/solicitudes', { pool: 'gke-nodos-qa', vpc: 'vpc-nombres', proyecto: 'tienda-web', subred: 'subnet-nodos-qa', mascara: 28 });
+  assert.equal(r.status, 201);
+  const a = await r.json();
+  assert.deepEqual({ p: a.proyecto, v: a.vpc, s: a.subred }, { p: 'tienda-web', v: 'vpc-nombres', s: 'subnet-nodos-qa' });
+
+  const sin = await (await post('/api/v1/solicitudes', { pool: 'gke-nodos-qa', vpc: 'vpc-sin-nombres', mascara: 28 })).json();
+  assert.deepEqual({ p: sin.proyecto, s: sin.subred }, { p: null, s: null });
+
+  assert.equal((await post('/api/v1/solicitudes', { pool: 'gke-nodos-qa', vpc: 'v', mascara: 28, proyecto: 'x'.repeat(121) })).status, 400);
+
+  const sinVpc = await post('/api/v1/solicitudes', { pool: 'gke-nodos-qa', proyecto: 'solo-proyecto', mascara: 28 });
+  assert.equal(sinVpc.status, 201, 'la VPC es opcional');
+  assert.equal((await sinVpc.json()).vpc, '');
+  const resSinVpc = await post('/api/v1/reservas', { pool: 'gke-nodos-qa', subred: 'solo-subred', mascara: 28 }, { 'Idempotency-Key': crypto.randomUUID() });
+  assert.equal(resSinVpc.status, 201);
+  assert.equal((await resSinVpc.json()).vpc, '');
+
+  const clave = crypto.randomUUID();
+  const cuerpo = { pool: 'gke-nodos-qa', vpc: 'vpc-nombres-res', proyecto: 'tienda-web', subred: 'subnet-res', mascara: 28 };
+  const res = await post('/api/v1/reservas', cuerpo, { 'Idempotency-Key': clave });
+  assert.equal(res.status, 201);
+  const reserva = await res.json();
+  assert.deepEqual({ p: reserva.proyecto, s: reserva.subred }, { p: 'tienda-web', s: 'subnet-res' });
+  assert.equal((await post('/api/v1/reservas', { ...cuerpo, subred: 'otra' }, { 'Idempotency-Key': clave })).status, 409);
+  const c = await (await post(`/api/v1/reservas/${reserva.id}/confirmar`, {})).json();
+  assert.deepEqual({ p: c.asignacion.proyecto, s: c.asignacion.subred }, { p: 'tienda-web', s: 'subnet-res' });
+});
+
 test('historial: la auditoría se puede filtrar por pool y por segmento', opts, async () => {
   const a = await (await post('/api/v1/solicitudes', { pool: 'gke-nodos-qa', vpc: 'vpc-historial', mascara: 28 })).json();
   const delSegmento = await (await fetch(`${base}/api/v1/auditoria?pool=gke-nodos-qa&cidr=${encodeURIComponent(a.cidr)}`)).json();
@@ -509,7 +538,7 @@ test('Excel por streaming: hojas, estilos y más filas que un lote (segmentos e 
     assert.equal(seg.getCell('A1').value, 'ID');
     assert.equal(seg.getCell('A1').font.bold, true);
     assert.equal(seg.views[0].state, 'frozen');
-    const bulk = seg.getRows(2, seg.rowCount - 1).filter((f) => f.getCell('J').value === 'bulk-xlsx');
+    const bulk = seg.getRows(2, seg.rowCount - 1).filter((f) => f.getCell('K').value === 'bulk-xlsx');
     assert.equal(bulk.length, y, 'todas las filas, también las posteriores al primer lote');
     assert.equal(bulk[0].getCell('D').numFmt, '#,##0');
     assert.equal(bulk[0].getCell('D').value, 4);

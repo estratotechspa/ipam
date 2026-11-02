@@ -23,7 +23,7 @@ export function tictac() {
 export async function accionReserva(r, que, recargar) {
   const confirmando = que === 'confirmar';
   const texto = confirmando
-    ? `¿Confirmar la reserva ${r.cidr} (${r.vpc})? Pasará a asignación definitiva.`
+    ? `¿Confirmar la reserva ${r.cidr}${r.vpc ? ` (${r.vpc})` : ''}? Pasará a asignación definitiva.`
     : `¿Liberar la reserva ${r.cidr}? El rango vuelve al pool.`;
   if (
     !(await confirmar({

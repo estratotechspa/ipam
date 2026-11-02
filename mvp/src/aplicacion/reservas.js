@@ -3,6 +3,7 @@
 const { parse, libres } = require('../dominio/cidr');
 const R = require('../dominio/reserva');
 const { validarVlan } = require('../dominio/vlan');
+const { validarNombres } = require('../dominio/nombres');
 const { ok, fallo, ConflictoDeDatos } = require('./resultado');
 
 const AMBIENTES = ['dev', 'qa', 'pre', 'prod'];
@@ -17,6 +18,8 @@ const presentar = (r) => ({
   vpc: r.vpc,
   vlan: r.vlan ?? null,
   vlan_nombre: r.vlan_nombre ?? null,
+  proyecto: r.proyecto ?? null,
+  subred: r.subred ?? null,
   solicitante: r.solicitante,
   ticket: r.ticket,
   estado: r.estado,
@@ -59,7 +62,8 @@ function validarTamano(e) {
 
 /** Valida y normaliza la petición sin tocar la base. */
 function normalizarReserva(e, claveHeader, config) {
-  if (typeof e.vpc !== 'string' || !SIN_CONTROL.test(e.vpc.trim())) return malo('vpc_invalido', 'Indica el proyecto / VPC (hasta 120 caracteres).');
+  if (e.vpc !== undefined && e.vpc !== null && (typeof e.vpc !== 'string' || (e.vpc.trim() && !SIN_CONTROL.test(e.vpc.trim()))))
+    return malo('vpc_invalido', 'La VPC admite hasta 120 caracteres.');
   const destino = validarDestino(e);
   if (!destino.ok) return destino;
   const tamano = validarTamano(e);
@@ -72,6 +76,8 @@ function normalizarReserva(e, claveHeader, config) {
   if (!k.ok) return malo(k.error, k.mensaje);
   const v = validarVlan(e);
   if (!v.ok) return malo(v.error, v.mensaje);
+  const nom = validarNombres(e);
+  if (!nom.ok) return malo(nom.error, nom.mensaje);
   const { pool, ambiente, tipo } = destino;
   const { cidr, mascara } = tamano;
   return ok({
@@ -81,12 +87,14 @@ function normalizarReserva(e, claveHeader, config) {
       tipo,
       cidr,
       mascara,
-      vpc: e.vpc.trim(),
+      vpc: (e.vpc || '').trim(),
       ticket: t.ticket,
       ttlHoras: ttl.horas,
       clave: k.clave,
       vlan: v.vlan,
       vlan_nombre: v.vlan_nombre,
+      proyecto: nom.proyecto,
+      subred: nom.subred,
     },
   });
 }
@@ -189,6 +197,8 @@ async function reservarEnTransaccion(tx, { actor, d, p, config }) {
     clave: d.clave,
     vlan: d.vlan,
     vlan_nombre: d.vlan_nombre,
+    proyecto: d.proyecto,
+    subred: d.subred,
   });
   return ok({ reserva, repetida: false, expiradas });
 }
