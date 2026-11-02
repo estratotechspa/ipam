@@ -39,6 +39,9 @@ services:
         value: "3"
       - key: LOG_LEVEL
         value: info
+      # Módulos de la API apagados (404). Jira entra en otro sprint: se enciende quitándolo de la lista.
+      - key: MODULOS_DESACTIVADOS
+        value: jira
       - key: DB_POOL_MAX
         value: "5"
       - key: BRAND_NAME

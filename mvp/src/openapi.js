@@ -522,8 +522,16 @@ const schemas = {
         type: 'integer',
         description: 'Máximo de reservas vigentes simultáneas de este token (por defecto, el general CUOTA_RESERVAS_POR_TOKEN).',
       },
+      alcance: {
+        type: 'array',
+        minItems: 1,
+        uniqueItems: true,
+        items: { enum: ['reservas', 'consulta', 'direcciones'] },
+        description:
+          'Grupos de la API que puede usar: `reservas` (reservar, consultar, confirmar, liberar), `consulta` (pools, disponibilidad, asignaciones) y `direcciones` (IP fijas). Fuera de ellos responde 403 `fuera_de_alcance`. Si se omite, el token usa todo lo que permita su rol.',
+      },
     },
-    example: { nombre: 'agente-redes', rol: 'agente', expira_dias: 90, cuota_reservas: 20 },
+    example: { nombre: 'agente-redes', rol: 'agente', expira_dias: 90, cuota_reservas: 20, alcance: ['reservas', 'consulta'] },
   },
   Token: {
     type: 'object',
@@ -535,6 +543,11 @@ const schemas = {
       prefijo: { type: 'string', description: 'Primeros caracteres: reconoce el token en una lista.' },
       rol: { enum: ['lector', 'agente'] },
       cuota_reservas: { type: ['integer', 'null'] },
+      alcance: {
+        type: ['array', 'null'],
+        items: { enum: ['reservas', 'consulta', 'direcciones'] },
+        description: 'Grupos de la API que puede usar (nulo = todo lo de su rol).',
+      },
       creado_por: { type: 'string' },
       creado_en: { type: 'string', format: 'date-time' },
       expira_en: { type: 'string', format: 'date-time' },

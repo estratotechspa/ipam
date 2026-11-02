@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { hayBase, crearBaseAislada, lanzarServicio } = require('./pruebas/ayudas');
+const { grupoDe } = require('./dominio/alcance');
 
 const opts = { skip: hayBase ? false : 'sin DATABASE_URL' };
 const ADM = { 'X-Requested-With': 'ipam', 'Content-Type': 'application/json' };
@@ -107,4 +108,16 @@ test('un token con rol menor al exigido recibe 403 en cada ruta (y nunca 403 por
     }
   }
   assert.deepEqual(fallos, []);
+});
+
+test('toda ruta de lector o agente está en un grupo de alcance (o es siempre permitida); las de solicitante y admin, en ninguno', () => {
+  const sinGrupo = [];
+  for (const [clave, minimo] of Object.entries(MATRIZ)) {
+    const [metodo, plantilla] = clave.split(' ');
+    const g = grupoDe(metodo, plantilla.replace(/\{[^}]+\}/g, 'x'));
+    if (NIVEL[minimo] <= NIVEL.agente && !['GET /api/v1/jira/estado', 'GET /api/v1/exportar.xlsx', 'POST /api/v1/yo/clave'].includes(clave) && g === undefined)
+      sinGrupo.push(clave);
+    if (NIVEL[minimo] > NIVEL.agente && g !== undefined) sinGrupo.push(`${clave} (admin/solicitante no debe estar en un grupo)`);
+  }
+  assert.deepEqual(sinGrupo, [], 'rutas de lector/agente sin grupo de alcance (decide a cuál pertenecen en dominio/alcance.js)');
 });
