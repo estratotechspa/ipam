@@ -33,6 +33,26 @@ test('pools: un admin crea un bloque base, lo edita desde su ficha y lo elimina'
   await expect(page.locator('#pools').getByRole('button', { name: id, exact: true })).toHaveCount(0);
 });
 
+test('pools: el menú de tres puntos elimina un pool vacío y explica por qué no deja borrar uno con segmentos', async ({ page }) => {
+  const id = `e2e-menu-${Date.now().toString(36)}`;
+  const nuevo = { id, tipo: 'LAN', ambiente: 'pre', proveedor: 'On-prem', cidr: '10.252.16.0/20' };
+  expect((await page.request.post('/api/v1/pools', { headers: H, data: nuevo })).status()).toBe(201);
+  await page.goto('/');
+  await page.getByRole('button', { name: `Acciones de ${id}` }).click();
+  await expect(page.getByRole('menuitem')).toHaveText(['Ver ficha', 'Eliminar pool']);
+  await page.getByRole('menuitem', { name: 'Eliminar pool' }).click();
+  await aceptar(page, 'Eliminar pool');
+  await expect(page.locator('#pools-msg')).toContainText(`Pool ${id} eliminado`);
+  await expect(page.getByRole('button', { name: `Acciones de ${id}` })).toHaveCount(0);
+
+  // Con segmentos no se borra: el motivo queda en pantalla y el pool sigue ahí.
+  await page.getByRole('button', { name: 'Acciones de gke-nodos-qa' }).click();
+  await page.getByRole('menuitem', { name: 'Eliminar pool' }).click();
+  await aceptar(page, 'Eliminar pool');
+  await expect(page.locator('#pools-msg')).toContainText('gke-nodos-qa');
+  await expect(page.getByRole('button', { name: 'Acciones de gke-nodos-qa' })).toHaveCount(1);
+});
+
 test('IPs fijas: se registran desde la ficha del segmento, se buscan por equipo y se editan', async ({ page }) => {
   const equipo = `rtr-e2e-${Date.now().toString(36)}`;
   const a = await (await page.request.post('/api/v1/solicitudes', { headers: H, data: { pool: 'gke-nodos-qa', vpc: `vpc-${equipo}`, mascara: 28 } })).json();
