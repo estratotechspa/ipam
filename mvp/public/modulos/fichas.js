@@ -156,6 +156,45 @@ export function mapaDelPool(p, ocupantes) {
   );
 }
 
+/**
+ * Segmentos (asignados y reservados) de un pool, en una tabla. Los usan la ficha del pool y la fila desplegable de la pestaña Pools.
+ * `alElegir(id)` se llama al elegir un segmento asignado (la ficha lo abre en el panel lateral).
+ */
+export async function segmentosDePool(id, alElegir) {
+  const [asig, reservas] = await Promise.all([
+    get('/api/v1/asignaciones?' + new URLSearchParams({ pool: id, limit: '1000' })),
+    get('/api/v1/reservas?' + new URLSearchParams({ pool: id, estado: 'reservada' })),
+  ]);
+  const filas = [
+    ...asig.filter((a) => a.pool_id === id).map((a) => ({ ...a, estado: 'asignada' })),
+    ...reservas.map((x) => ({ ...x, estado: 'reservada' })),
+  ].sort((a, b) => ip2n(a.cidr.split('/')[0]) - ip2n(b.cidr.split('/')[0]));
+  if (!filas.length) return h('p', { class: 'muted' }, 'Este pool todavía no tiene segmentos asignados ni reservados.');
+  return tabla(
+    'Segmentos del pool',
+    ['Segmento', 'Estado', 'Proyecto', 'VPC', 'Subred / VLAN', 'Direcciones'],
+    filas.map((x) =>
+      h(
+        'tr',
+        null,
+        h(
+          'td',
+          null,
+          x.estado === 'asignada'
+            ? h('button', { type: 'button', class: 'enlace', onclick: () => alElegir(x.id) }, h('code', null, x.cidr))
+            : h('code', null, x.cidr),
+        ),
+        h('td', null, h('span', { class: 'tag ' + (x.estado === 'asignada' ? 'confirmada' : 'reservada') }, x.estado)),
+        h('td', null, x.proyecto || '—'),
+        h('td', null, x.vpc || '—'),
+        h('td', null, textoRed(x)),
+        h('td', null, fmt(size(x.cidr))),
+      ),
+    ),
+    '',
+  );
+}
+
 export async function fichaPool(id) {
   const pools = await get('/api/v1/pools');
   const p = pools.find((x) => x.id === id);
@@ -201,51 +240,11 @@ export async function fichaPool(id) {
       },
       {
         nombre: 'Segmentos',
-        construir: async (cerrar) => {
-          const [asig, reservas] = await Promise.all([
-            todasLasAsignaciones(),
-            get('/api/v1/reservas?' + new URLSearchParams({ pool: id, estado: 'reservada' })),
-          ]);
-          const filas = [
-            ...asig.filter((a) => a.pool_id === id).map((a) => ({ ...a, estado: 'asignada' })),
-            ...reservas.map((x) => ({ ...x, estado: 'reservada' })),
-          ].sort((a, b) => ip2n(a.cidr.split('/')[0]) - ip2n(b.cidr.split('/')[0]));
-          if (!filas.length) return h('p', { class: 'muted' }, 'Este pool todavía no tiene segmentos asignados ni reservados.');
-          return tabla(
-            'Segmentos del pool',
-            ['Segmento', 'Estado', 'Proyecto', 'VPC', 'Subred / VLAN', 'Direcciones'],
-            filas.map((x) =>
-              h(
-                'tr',
-                null,
-                h(
-                  'td',
-                  null,
-                  x.estado === 'asignada'
-                    ? h(
-                        'button',
-                        {
-                          type: 'button',
-                          class: 'enlace',
-                          onclick: () => {
-                            cerrar();
-                            fichaAsignacion(x.id);
-                          },
-                        },
-                        h('code', null, x.cidr),
-                      )
-                    : h('code', null, x.cidr),
-                ),
-                h('td', null, h('span', { class: 'tag ' + (x.estado === 'asignada' ? 'confirmada' : 'reservada') }, x.estado)),
-                h('td', null, x.proyecto || '—'),
-                h('td', null, x.vpc || '—'),
-                h('td', null, textoRed(x)),
-                h('td', null, fmt(size(x.cidr))),
-              ),
-            ),
-            '',
-          );
-        },
+        construir: (cerrar) =>
+          segmentosDePool(id, (asignacionId) => {
+            cerrar();
+            fichaAsignacion(asignacionId);
+          }),
       },
       {
         nombre: 'Direcciones IP',

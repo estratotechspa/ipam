@@ -50,6 +50,7 @@ Debajo, una fila por pool: su **tipo** (Nodos, Pods, Servicios), **ambiente**, *
 
 - **＋ Nuevo pool (bloque base)** (solo admin): nombre (minúsculas, números y guiones), tipo, ambiente, proveedor y CIDR (alineado, de `/8` a `/30`). No puede solaparse con otro pool del **mismo proveedor y ambiente**; en otro ambiente o proveedor el mismo rango sí se permite (p. ej. el mismo `10.40.0.0/16` en dev on-prem y en qa on-prem). Para **editar** el tipo o el proveedor, o **eliminar** un pool vacío (sin segmentos, reservas vigentes ni IPs), abre su ficha → «Editar o eliminar este pool». El CIDR y el ambiente no se editan: dejarían segmentos fuera de su pool.
 - **Haz clic en el nombre de un pool** para abrir su **ficha** (ver más abajo).
+- **Ver los segmentos de un pool sin salir de la pestaña:** la flecha ▸ junto al nombre del pool despliega debajo de la fila sus segmentos (asignados y reservados); vuelve a pulsarla para contraer. **Expandir todos** y **Contraer todos** actúan sobre toda la tabla. El nombre del pool abre su ficha en el panel lateral: puedes usar la que prefieras.
 - **Importar segmentos** (solo admin) abre la importación masiva (ver más abajo); **← Volver a Pools** regresa.
 - **Exportar a Excel** baja una planilla con todo.
 

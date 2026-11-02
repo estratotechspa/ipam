@@ -3,7 +3,7 @@ import { fmt as _fmt } from '../calculos.js';
 import { $, ESTADO, I, api, errorApi, esc, fail, get, h, ico, msg, puede, size, tag } from './base.js';
 import { barraFiltro, pasaFiltro } from './filtro.js';
 import { barraUsoHtml, pct } from './uso.js';
-import { fichaPool } from './fichas.js';
+import { fichaAsignacion, fichaPool, segmentosDePool } from './fichas.js';
 import { show } from './navegacion.js';
 import { confirmar, vincularCidr } from './ui.js';
 
@@ -24,20 +24,23 @@ export async function renderPools() {
   <div class="card"><div class="kpi">${_fmt(Math.max(0, Math.round(total - ocupadas)))}</div><div class="sub">Espacio libre (direcciones)</div></div></div>
   <p class="nota">${I('info')} Los solapamientos no son un indicador: la base de datos los impide con una restricción de exclusión.</p>
   <div id="pool-nuevo"></div><div id="pools-msg" aria-live="polite"></div>
-  <p class="muted leyenda"><span><span class="muestra asig"></span> asignado</span> <span><span class="muestra res"></span> reservado</span> <span>Haz clic en un pool para ver su ficha.</span></p>
+  <p class="muted leyenda"><span><span class="muestra asig"></span> asignado</span> <span><span class="muestra res"></span> reservado</span> <span>La flecha ${I('derecha')} despliega los segmentos de un pool aquí mismo; su nombre abre la ficha en el panel lateral.</span></p>
+  <div class="barra-pools"><button type="button" class="btn sec pequeno" id="pools-expandir">Expandir todos</button><button type="button" class="btn sec pequeno" id="pools-contraer">Contraer todos</button></div>
   <div class="card tablewrap" tabindex="0" role="region" aria-label="Pools"><table><thead><tr><th scope="col">Pool</th><th scope="col">Tipo</th><th scope="col">Ambiente</th><th scope="col">Proveedor</th><th scope="col">CIDR base</th><th scope="col">Asig.</th><th scope="col">Reservas</th><th scope="col">Uso</th>${puede('admin') ? '<th scope="col"><span class="sr-only">Acciones</span></th>' : ''}</tr></thead><tbody>
   ${pools
     .map(
       (
         p,
-      ) => `<tr><td><button type="button" class="enlace" data-ficha-pool="${esc(p.id)}">${esc(p.id)}</button></td><td>${esc(p.tipo)}</td><td>${tag(p.ambiente)}</td><td>${esc(p.proveedor)}</td><td><code>${esc(p.cidr)}</code></td><td>${p.asignaciones}</td><td>${p.reservas_vigentes || 0}</td>
-  <td>${barraUsoHtml(p.uso, p.uso_reservado || 0)}</td>${puede('admin') ? `<td class="col-menu"><button type="button" class="btn-menu" data-menu-pool="${esc(p.id)}" aria-haspopup="menu" aria-expanded="false" aria-label="Acciones de ${esc(p.id)}">⋮</button></td>` : ''}</tr>`,
+      ) => `<tr><td class="celda-pool"><button type="button" class="btn-expandir" data-expandir-pool="${esc(p.id)}" aria-expanded="false" aria-controls="seg-pool-${esc(p.id)}" aria-label="Mostrar los segmentos de ${esc(p.id)}">${I('derecha', 16)}</button><button type="button" class="enlace" data-ficha-pool="${esc(p.id)}">${esc(p.id)}</button></td><td>${esc(p.tipo)}</td><td>${tag(p.ambiente)}</td><td>${esc(p.proveedor)}</td><td><code>${esc(p.cidr)}</code></td><td>${p.asignaciones}</td><td>${p.reservas_vigentes || 0}</td>
+  <td>${barraUsoHtml(p.uso, p.uso_reservado || 0)}</td>${puede('admin') ? `<td class="col-menu"><button type="button" class="btn-menu" data-menu-pool="${esc(p.id)}" aria-haspopup="menu" aria-expanded="false" aria-label="Acciones de ${esc(p.id)}">⋮</button></td>` : ''}</tr>
+  <tr class="detalle-pool" id="seg-pool-${esc(p.id)}" hidden><td colspan="9"></td></tr>`,
     )
     .join('')}</tbody></table></div>`;
     $('pools').prepend(barraFiltro(todos, renderPools));
     $('pools')
       .querySelectorAll('[data-ficha-pool]')
       .forEach((b) => (b.onclick = () => fichaPool(b.dataset.fichaPool)));
+    enlazarDespliegue($('pools'));
     $('pools')
       .querySelectorAll('[data-menu-pool]')
       .forEach(
@@ -58,6 +61,43 @@ export async function renderPools() {
   } catch (e) {
     fail('pools', e);
   }
+}
+
+/**
+ * Despliegue de los segmentos de cada pool dentro de la misma tabla (además de la ficha en el panel lateral).
+ * Los pools abiertos se recuerdan en ESTADO.poolsAbiertos: al filtrar o recargar la pestaña siguen abiertos.
+ */
+function enlazarDespliegue(raiz) {
+  const abiertos = (ESTADO.poolsAbiertos ||= new Set());
+  const columnas = raiz.querySelectorAll('thead th').length;
+  const botones = [...raiz.querySelectorAll('[data-expandir-pool]')];
+  const cargados = new Set();
+  const fijar = async (boton, abrir) => {
+    const id = boton.dataset.expandirPool;
+    const fila = document.getElementById('seg-pool-' + id);
+    if (!fila) return;
+    boton.setAttribute('aria-expanded', String(abrir));
+    boton.setAttribute('aria-label', `${abrir ? 'Ocultar' : 'Mostrar'} los segmentos de ${id}`);
+    fila.hidden = !abrir;
+    if (abrir) abiertos.add(id);
+    else abiertos.delete(id);
+    if (!abrir || cargados.has(id)) return;
+    cargados.add(id);
+    const celda = fila.firstElementChild;
+    celda.colSpan = columnas;
+    celda.replaceChildren(h('p', { class: 'muted', role: 'status' }, 'Cargando segmentos…'));
+    try {
+      celda.replaceChildren(await segmentosDePool(id, fichaAsignacion));
+    } catch (e) {
+      cargados.delete(id);
+      celda.replaceChildren(h('p', { class: 'alert', role: 'alert' }, ico('error'), ' No se pudieron cargar los segmentos: ' + e.message));
+    }
+  };
+  botones.forEach((b) => (b.onclick = () => fijar(b, b.getAttribute('aria-expanded') !== 'true')));
+  const todos = (abrir) => Promise.all(botones.map((b) => fijar(b, abrir)));
+  raiz.querySelector('#pools-expandir').onclick = () => todos(true);
+  raiz.querySelector('#pools-contraer').onclick = () => todos(false);
+  botones.filter((b) => abiertos.has(b.dataset.expandirPool)).forEach((b) => fijar(b, true));
 }
 
 /** Menú de tres puntos de una fila: ver ficha o eliminar. Va con position:fixed para que la tabla con scroll no lo recorte. */
