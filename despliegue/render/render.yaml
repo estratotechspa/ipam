@@ -34,6 +34,9 @@ services:
         sync: false
       - key: SESSION_SECRET
         generateValue: true
+      # Saltos de proxy delante de la app (Cloudflare + balanceador de Render): 3 da la IP real del cliente. Verificado en el POC con X-Forwarded-For falsos.
+      - key: TRUST_PROXY
+        value: "3"
       - key: LOG_LEVEL
         value: info
       - key: DB_POOL_MAX

@@ -3,8 +3,7 @@
 //  - Es la FUENTE de verdad de los cuerpos de entrada: los esquemas de `components.schemas` se compilan con Ajv y validan cada petición.
 //  - Una prueba comprueba que cada ruta registrada en Express exista aquí y al revés, que los ejemplos cumplan sus esquemas y que
 //    las respuestas reales cumplan el contrato.
-//  - Las rutas versionadas (/api/v1/…) son las principales. Cada una declara su alias histórico con `x-alias-legado` (/api/…), que sigue
-//    funcionando igual para no romper a quien ya integró.
+//  - Toda la API vive bajo /api/v1/…; los alias históricos sin versión (/api/…) se retiraron.
 // Todos los rangos y nombres de los ejemplos son FICTICIOS.
 const { version } = require('../package.json');
 
@@ -922,11 +921,9 @@ function rutasDeSistema(p) {
     },
   };
   p['/api/v1/openapi.json'] = {
-    'x-alias-legado': '/api/openapi.json',
     get: op({ tag: 'Operación', summary: 'Este contrato (OpenAPI 3.1)', ok: { 200: respuesta('El documento OpenAPI.', { type: 'object' }) } }),
   };
   p['/api/v1/me'] = {
-    'x-alias-legado': '/api/me',
     get: op({
       tag: 'Sesión',
       summary: 'Quién soy',
@@ -1040,7 +1037,6 @@ function rutasDePaginas(p) {
 
 function rutasDeListaDeAsignaciones(p) {
   p['/api/v1/asignaciones'] = {
-    'x-alias-legado': '/api/asignaciones',
     get: op({
       tag: 'Asignaciones',
       summary: 'Lista las asignaciones definitivas (paginada)',
@@ -1075,7 +1071,6 @@ function rutasDeListaDeAsignaciones(p) {
 
 function rutasDePoolsYAsignaciones(p) {
   p['/api/v1/pools'] = {
-    'x-alias-legado': '/api/pools',
     get: op({
       tag: 'Pools',
       summary: 'Lista los pools con su uso y reservas vigentes',
@@ -1087,7 +1082,6 @@ function rutasDePoolsYAsignaciones(p) {
     }),
   };
   p['/api/v1/pools/{id}/disponibilidad'] = {
-    'x-alias-legado': '/api/pools/{id}/disponibilidad',
     get: op({
       tag: 'Pools',
       summary: 'Cuánto queda disponible en un pool, por máscara',
@@ -1136,7 +1130,6 @@ function rutasDePoolsYAsignaciones(p) {
     }),
   };
   p['/api/v1/pools/{id}/libres'] = {
-    'x-alias-legado': '/api/pools/{id}/libres',
     get: op({
       tag: 'Pools',
       summary: 'Rangos libres de un pool',
@@ -1153,11 +1146,9 @@ function rutasDePoolsYAsignaciones(p) {
     }),
   };
   p['/api/v1/resumen'] = {
-    'x-alias-legado': '/api/resumen',
     get: op({ tag: 'Pools', summary: 'Resumen general', ok: { 200: respuesta('Totales.', 'Resumen') } }),
   };
   p['/api/v1/asignaciones/{id}'] = {
-    'x-alias-legado': '/api/asignaciones/{id}',
     delete: op({
       tag: 'Asignaciones',
       summary: 'Libera una asignación (solo admin)',
@@ -1167,7 +1158,6 @@ function rutasDePoolsYAsignaciones(p) {
     }),
   };
   p['/api/v1/solicitudes'] = {
-    'x-alias-legado': '/api/solicitudes',
     post: op({
       tag: 'Asignaciones',
       summary: 'Asigna un rango directo (solo admin)',
@@ -1183,7 +1173,6 @@ function rutasDePoolsYAsignaciones(p) {
     }),
   };
   p['/api/v1/exportar.xlsx'] = {
-    'x-alias-legado': '/api/exportar.xlsx',
     get: op({
       tag: 'Asignaciones',
       summary: 'Exporta a Excel',
@@ -1196,11 +1185,9 @@ function rutasDePoolsYAsignaciones(p) {
     }),
   };
   p['/api/v1/exportar.json'] = {
-    'x-alias-legado': '/api/exportar.json',
     get: op({ tag: 'Respaldo', summary: 'Respaldo lógico completo (solo admin)', ok: { 200: respuesta('Respaldo.', 'Respaldo') }, extra: e403 }),
   };
   p['/api/v1/importar'] = {
-    'x-alias-legado': '/api/importar',
     post: op({
       tag: 'Respaldo',
       summary: 'Restaura un respaldo (solo admin)',
@@ -1219,7 +1206,6 @@ function rutasDePoolsYAsignaciones(p) {
 
 function rutasDeReservas(p) {
   p['/api/v1/reservas'] = {
-    'x-alias-legado': '/api/reservas',
     post: op({
       tag: 'Reservas',
       id: 'reservar',
@@ -1258,7 +1244,6 @@ function rutasDeReservas(p) {
     }),
   };
   p['/api/v1/reservas/{id}'] = {
-    'x-alias-legado': '/api/reservas/{id}',
     get: op({ tag: 'Reservas', summary: 'Consulta una reserva', params: [ID_RESERVA], ok: { 200: respuesta('La reserva.', 'Reserva') }, extra: e404 }),
     delete: op({
       tag: 'Reservas',
@@ -1271,7 +1256,6 @@ function rutasDeReservas(p) {
     }),
   };
   p['/api/v1/reservas/{id}/confirmar'] = {
-    'x-alias-legado': '/api/reservas/{id}/confirmar',
     post: op({
       tag: 'Reservas',
       id: 'confirmarReserva',
@@ -1288,7 +1272,6 @@ function rutasDeReservas(p) {
 
 function rutasDeTokens(p) {
   p['/api/v1/tokens'] = {
-    'x-alias-legado': '/api/tokens',
     post: op({
       tag: 'Tokens',
       summary: 'Crea un token de servicio (solo admin)',
@@ -1306,7 +1289,6 @@ function rutasDeTokens(p) {
     }),
   };
   p['/api/v1/tokens/{id}'] = {
-    'x-alias-legado': '/api/tokens/{id}',
     delete: op({
       tag: 'Tokens',
       summary: 'Revoca un token (solo admin)',
@@ -1322,7 +1304,6 @@ function rutasDeTokens(p) {
 function rutasDeDirecciones(p) {
   const ID = param('id', 'path', 'Id de la dirección.');
   p['/api/v1/direcciones'] = {
-    'x-alias-legado': '/api/direcciones',
     get: op({
       tag: 'Direcciones IP',
       summary: 'Lista las direcciones IP fijas',
@@ -1345,7 +1326,6 @@ function rutasDeDirecciones(p) {
     }),
   };
   p['/api/v1/direcciones/{id}'] = {
-    'x-alias-legado': '/api/direcciones/{id}',
     patch: op({
       tag: 'Direcciones IP',
       summary: 'Edita los datos de una IP fija (rol agente o más)',
@@ -1375,7 +1355,6 @@ function rutasDeEdicionDePools(p) {
     extra: { ...e400, ...e403, 409: respuesta('Ya existe o se solapa con otro pool.', 'Error') },
   });
   p['/api/v1/pools/{id}'] = {
-    'x-alias-legado': '/api/pools/{id}',
     patch: op({
       tag: 'Pools',
       summary: 'Edita el tipo y el proveedor de un pool (solo admin)',
@@ -1397,7 +1376,6 @@ function rutasDeEdicionDePools(p) {
 
 function rutasDeAdministracion(p) {
   p['/api/v1/usuarios'] = {
-    'x-alias-legado': '/api/usuarios',
     get: op({
       tag: 'Administración',
       summary: 'Lista usuarios (solo admin)',
@@ -1424,18 +1402,15 @@ function rutasDeAdministracion(p) {
       extra: { ...e400, ...e403, ...e404, 409: respuesta('No puedes hacerlo sobre tu propia cuenta.', 'Error') },
     });
   p['/api/v1/usuarios/{email}/desactivar'] = {
-    'x-alias-legado': '/api/usuarios/{email}/desactivar',
     post: accion(
       'Da de baja a un usuario (solo admin)',
       'No puede entrar mientras esté desactivado; se conserva su historial de auditoría. No puedes desactivarte a ti mismo.',
     ),
   };
   p['/api/v1/usuarios/{email}/activar'] = {
-    'x-alias-legado': '/api/usuarios/{email}/activar',
     post: accion('Reactiva a un usuario (solo admin)', 'Revierte la baja.'),
   };
   p['/api/v1/usuarios/{email}/restablecer-clave'] = {
-    'x-alias-legado': '/api/usuarios/{email}/restablecer-clave',
     post: accion(
       'Restablece la clave de una cuenta local (solo admin)',
       'Devuelve una clave temporal **una sola vez** (`clave_temporal`) y obliga a cambiarla. Solo para cuentas locales.',
@@ -1451,7 +1426,6 @@ function rutasDeAdministracion(p) {
       extra: { ...e400, ...e403, 409: respuesta('La base de datos rechazó la importación (no se importó nada).', 'Error') },
     });
   p['/api/v1/importaciones/simular'] = {
-    'x-alias-legado': '/api/importaciones/simular',
     post: importacion(
       'Simula la importación de segmentos desde Excel o CSV (solo admin)',
       'Lee el archivo y dice qué pasaría con cada fila **sin escribir nada**. Estados: `ok`, `ya_existe` (se omite), `solapa_otro_pool` (un admin debe aprobarlo o rechazarlo), `choca_mismo_pool` (no importable) e `invalida`. Si no hay pools que contengan los segmentos, propone crear uno por proveedor, ambiente y familia de red (`pools_a_crear`).',
@@ -1459,7 +1433,6 @@ function rutasDeAdministracion(p) {
     ),
   };
   p['/api/v1/importaciones/aplicar'] = {
-    'x-alias-legado': '/api/importaciones/aplicar',
     post: importacion(
       'Importa los segmentos válidos (solo admin)',
       'Importa las filas `ok` y las `solapa_otro_pool` cuyo número venga en `aprobar`. **Todo o nada**; crea los pools automáticos que hagan falta; origen `importado`; queda en la auditoría. Importar dos veces el mismo archivo no duplica (`ya_existe`).',
@@ -1467,7 +1440,6 @@ function rutasDeAdministracion(p) {
     ),
   };
   p['/api/v1/yo/clave'] = {
-    'x-alias-legado': '/api/yo/clave',
     post: op({
       tag: 'Sesión',
       summary: 'Cambia la contraseña de la cuenta local propia',
@@ -1483,7 +1455,6 @@ function rutasDeAdministracion(p) {
     }),
   };
   p['/api/v1/usuarios/{email}'] = {
-    'x-alias-legado': '/api/usuarios/{email}',
     delete: accion('Elimina un usuario (solo admin)', 'Borra la cuenta. Para conservar el historial, prefiere desactivar. No puedes eliminarte a ti mismo.'),
     put: op({
       tag: 'Administración',
@@ -1501,7 +1472,6 @@ function rutasDeAdministracion(p) {
     }),
   };
   p['/api/v1/auditoria'] = {
-    'x-alias-legado': '/api/auditoria',
     get: op({
       tag: 'Administración',
       summary: 'Bitácora de auditoría, solo lectura (solo admin)',
@@ -1516,7 +1486,6 @@ function rutasDeAdministracion(p) {
     }),
   };
   p['/api/v1/eventos'] = {
-    'x-alias-legado': '/api/eventos',
     get: op({
       tag: 'Administración',
       summary: 'Últimos eventos (solo admin)',
@@ -1529,11 +1498,9 @@ function rutasDeAdministracion(p) {
 
 function rutasDeJira(p) {
   p['/api/v1/jira/estado'] = {
-    'x-alias-legado': '/api/jira/estado',
     get: op({ tag: 'Jira', summary: 'Estado de la integración saliente con Jira', ok: { 200: respuesta('Estado.', 'JiraEstado') } }),
   };
   p['/api/v1/jira/simular'] = {
-    'x-alias-legado': '/api/jira/simular',
     post: op({
       tag: 'Jira',
       summary: 'Simula un ticket entrante (demo)',

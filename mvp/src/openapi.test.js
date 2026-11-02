@@ -13,13 +13,12 @@ const doc = construirOpenApi();
 const METODOS = ['get', 'post', 'put', 'delete', 'patch'];
 const aOpenApi = (camino) => camino.replace(/:([A-Za-z_]+)/g, '{$1}');
 
-/** Todas las rutas del contrato, incluidos los alias históricos. */
+/** Todas las rutas del contrato. */
 function rutasDelContrato() {
   const s = new Set();
   for (const [camino, item] of Object.entries(doc.paths)) {
     for (const m of METODOS.filter((x) => item[x])) {
       s.add(`${m.toUpperCase()} ${camino}`);
-      if (item['x-alias-legado']) s.add(`${m.toUpperCase()} ${item['x-alias-legado']}`);
     }
   }
   return s;
@@ -64,7 +63,7 @@ test('todas las referencias ($ref) del contrato se resuelven', () => {
 test('cada operación documenta resumen, etiqueta y respuestas; las protegidas documentan el 401; los operationId son únicos', () => {
   const ids = new Set();
   for (const [camino, item] of Object.entries(doc.paths)) {
-    if (item['x-alias-legado']) assert.match(item['x-alias-legado'], /^\/api\/(?!v1)/, `${camino}: alias inválido`);
+    assert.equal(item['x-alias-legado'], undefined, `${camino}: los alias sin versión se retiraron`);
     for (const m of METODOS.filter((x) => item[x])) {
       const o = item[m];
       const nombre = `${m.toUpperCase()} ${camino}`;

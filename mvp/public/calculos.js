@@ -38,7 +38,7 @@ export function nivelUso(uso) {
 }
 export const porcentaje = (uso, decimales = 1) => `${(uso * 100).toFixed(decimales).replace('.', ',')} %`;
 
-// Totales del tablero a partir de /api/pools (una sola consulta en el servidor).
+// Totales del tablero a partir de /api/v1/pools (una sola consulta en el servidor).
 export function resumirPools(pools) {
   const uso = pools.length ? pools.reduce((n, p) => n + p.uso, 0) / pools.length : 0;
   return {

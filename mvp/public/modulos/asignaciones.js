@@ -18,7 +18,7 @@ export async function liberarAsignacion(id, cidr, despues) {
   });
   if (!aceptado) return false;
   if (!(await confirmarLiberacionDefinitiva(cidr))) return false;
-  const r = await api('/api/asignaciones/' + id, { method: 'DELETE', body: { motivo } });
+  const r = await api('/api/v1/asignaciones/' + id, { method: 'DELETE', body: { motivo } });
   if (r.ok) toast(`Segmento ${cidr} liberado.`);
   else toast((r.data && (r.data.mensaje || r.data.error)) || 'No se pudo liberar', 'error');
   if (despues) await despues();

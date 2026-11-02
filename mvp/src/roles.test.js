@@ -151,9 +151,9 @@ test('el servicio funciona de punta a punta usando SOLO el rol ipam_app (y /read
     s = await lanzarServicio({ DATABASE_URL: con(b.url, 'ipam_app', CLAVE_APP), DATABASE_SCHEMA: 'ipam', BARREDOR_INTERVALO_SEGUNDOS: '5' });
     assert.equal((await fetch(`${s.url}/readyz`)).status, 200);
     const t = await (
-      await fetch(`${s.url}/api/tokens`, { method: 'POST', headers: ADM, body: JSON.stringify({ nombre: 'con-rol-app', rol: 'agente' }) })
+      await fetch(`${s.url}/api/v1/tokens`, { method: 'POST', headers: ADM, body: JSON.stringify({ nombre: 'con-rol-app', rol: 'agente' }) })
     ).json();
-    const res = await fetch(`${s.url}/api/reservas`, {
+    const res = await fetch(`${s.url}/api/v1/reservas`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${t.token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ ambiente: 'qa', tipo: 'Nodos', mascara: 28, vpc: 'rol-app' }),
@@ -162,7 +162,7 @@ test('el servicio funciona de punta a punta usando SOLO el rol ipam_app (y /read
     const rr = await res.json();
     assert.equal(
       (
-        await fetch(`${s.url}/api/reservas/${rr.id}/confirmar`, {
+        await fetch(`${s.url}/api/v1/reservas/${rr.id}/confirmar`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${t.token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ aprobado_por: 'ana', referencia: 'mr' }),
@@ -170,8 +170,8 @@ test('el servicio funciona de punta a punta usando SOLO el rol ipam_app (y /read
       ).status,
       200,
     );
-    assert.equal((await fetch(`${s.url}/api/auditoria`, { headers: ADM })).status, 200);
-    assert.equal((await fetch(`${s.url}/api/pools`, { headers: ADM })).status, 200);
+    assert.equal((await fetch(`${s.url}/api/v1/auditoria`, { headers: ADM })).status, 200);
+    assert.equal((await fetch(`${s.url}/api/v1/pools`, { headers: ADM })).status, 200);
     const log = s.logs();
     assert.ok(!log.some((l) => l.nivel === 'error'), `errores en el log: ${JSON.stringify(log.filter((l) => l.nivel === 'error')).slice(0, 400)}`);
   } finally {

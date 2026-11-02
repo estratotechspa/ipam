@@ -66,10 +66,10 @@ test('protección: sin METRICS_TOKEN ni redes queda deshabilitado (404); con tok
     assert.equal(ok.headers.get('cache-control'), 'no-store');
     // Un token de servicio del IPAM NO sirve para leer métricas (y viceversa).
     const svc = await (
-      await fetch(`${conToken.url}/api/tokens`, { method: 'POST', headers: ADM, body: JSON.stringify({ nombre: 'otro-uso', rol: 'agente' }) })
+      await fetch(`${conToken.url}/api/v1/tokens`, { method: 'POST', headers: ADM, body: JSON.stringify({ nombre: 'otro-uso', rol: 'agente' }) })
     ).json();
     assert.equal((await fetch(`${conToken.url}/metrics`, { headers: { Authorization: `Bearer ${svc.token}` } })).status, 401);
-    assert.equal((await fetch(`${conToken.url}/api/pools`, { headers: { Authorization: `Bearer ${TOKEN_METRICAS}` } })).status, 401);
+    assert.equal((await fetch(`${conToken.url}/api/v1/pools`, { headers: { Authorization: `Bearer ${TOKEN_METRICAS}` } })).status, 401);
     assert.ok(!conToken.crudo().includes(TOKEN_METRICAS), 'el token de métricas no sale en los logs');
 
     const porRed = await lanzarServicio({ DATABASE_URL: b.url, METRICS_ALLOW_CIDRS: '10.0.0.0/8', TRUST_PROXY: '1' });
@@ -99,18 +99,18 @@ test('expone las métricas acordadas, con valores reales y sin explosión de eti
   });
   try {
     const t = await (
-      await fetch(`${s.url}/api/tokens`, { method: 'POST', headers: ADM, body: JSON.stringify({ nombre: 'metricas-1', rol: 'agente', expira_dias: 3 }) })
+      await fetch(`${s.url}/api/v1/tokens`, { method: 'POST', headers: ADM, body: JSON.stringify({ nombre: 'metricas-1', rol: 'agente', expira_dias: 3 }) })
     ).json();
-    await fetch(`${s.url}/api/tokens`, { method: 'POST', headers: ADM, body: JSON.stringify({ nombre: 'metricas-2', rol: 'lector', expira_dias: 60 }) });
+    await fetch(`${s.url}/api/v1/tokens`, { method: 'POST', headers: ADM, body: JSON.stringify({ nombre: 'metricas-2', rol: 'lector', expira_dias: 60 }) });
     const r = await (
-      await fetch(`${s.url}/api/reservas`, {
+      await fetch(`${s.url}/api/v1/reservas`, {
         method: 'POST',
         headers: ADM,
         body: JSON.stringify({ ambiente: 'qa', tipo: 'Nodos', mascara: 22, vpc: 'metricas' }),
       })
     ).json();
-    await fetch(`${s.url}/api/reservas/${r.id}`, { headers: ADM });
-    await fetch(`${s.url}/api/pools`, { headers: { Authorization: `Bearer ipam_${'M'.repeat(43)}` } }); // token inválido → rechazo
+    await fetch(`${s.url}/api/v1/reservas/${r.id}`, { headers: ADM });
+    await fetch(`${s.url}/api/v1/pools`, { headers: { Authorization: `Bearer ipam_${'M'.repeat(43)}` } }); // token inválido → rechazo
 
     const txt = await metricas(s);
     for (const n of NOMBRES) assert.ok(txt.includes(`# TYPE ${n} `), `falta la métrica ${n}`);
@@ -126,16 +126,16 @@ test('expone las métricas acordadas, con valores reales y sin explosión de eti
     assert.ok(util > 0 && util < 1, `utilización fuera de rango: ${util}`);
     assert.ok(Math.abs(util - (4096 + 1024) / 65536) < 1e-9, 'asignación de la semilla (/20 = 4096) + reserva /22 (1024) sobre un /16 (65536)');
     assert.equal(valor(txt, 'ipam_auth_rechazos_total', { motivo: 'token_desconocido' }), 1);
-    assert.ok(valor(txt, 'ipam_http_requests_total', { ruta: '/api/reservas', metodo: 'POST', codigo: '201' }) >= 1);
-    assert.ok(valor(txt, 'ipam_http_request_duration_seconds_count', { ruta: '/api/reservas', metodo: 'POST' }) >= 1);
-    assert.ok(valor(txt, 'ipam_http_request_duration_seconds_bucket', { ruta: '/api/reservas', metodo: 'POST', le: '+Inf' }) >= 1);
+    assert.ok(valor(txt, 'ipam_http_requests_total', { ruta: '/api/v1/reservas', metodo: 'POST', codigo: '201' }) >= 1);
+    assert.ok(valor(txt, 'ipam_http_request_duration_seconds_count', { ruta: '/api/v1/reservas', metodo: 'POST' }) >= 1);
+    assert.ok(valor(txt, 'ipam_http_request_duration_seconds_bucket', { ruta: '/api/v1/reservas', metodo: 'POST', le: '+Inf' }) >= 1);
     // Las rutas salen como PLANTILLA (sin el id de la reserva): cardinalidad acotada y sin filtrar identificadores.
-    assert.ok(valor(txt, 'ipam_http_requests_total', { ruta: '/api/reservas/:id', metodo: 'GET', codigo: '200' }) >= 1);
+    assert.ok(valor(txt, 'ipam_http_requests_total', { ruta: '/api/v1/reservas/:id', metodo: 'GET', codigo: '200' }) >= 1);
     assert.ok(!txt.includes(r.id), 'ningún id de reserva en las etiquetas');
     assert.ok(!txt.includes(t.token) && !txt.includes(TOKEN_METRICAS) && !/\bipam_[A-Za-z0-9_-]{43}\b/.test(txt), 'ningún secreto en las métricas');
 
     // Límite excedido: 8 lecturas por minuto → el contador sube.
-    for (let i = 0; i < 12; i++) await fetch(`${s.url}/api/pools`, { headers: ADM });
+    for (let i = 0; i < 12; i++) await fetch(`${s.url}/api/v1/pools`, { headers: ADM });
     assert.ok(valor(await metricas(s), 'ipam_rate_limit_excedido_total') >= 1);
 
     // Barredor y expiración: tras vencer una reserva, el barredor la marca y los contadores lo reflejan.
@@ -168,11 +168,15 @@ test('los medidores salen de la base: dos réplicas ven lo mismo; y con la base 
   const [s1, s2] = await Promise.all([lanzarServicio(env), lanzarServicio(env)]);
   let caida;
   try {
-    await fetch(`${s1.url}/api/reservas`, { method: 'POST', headers: ADM, body: JSON.stringify({ ambiente: 'qa', tipo: 'Nodos', mascara: 28, vpc: 'm2' }) });
+    await fetch(`${s1.url}/api/v1/reservas`, { method: 'POST', headers: ADM, body: JSON.stringify({ ambiente: 'qa', tipo: 'Nodos', mascara: 28, vpc: 'm2' }) });
     const [a, c] = [await metricas(s1), await metricas(s2)];
     assert.equal(valor(a, 'ipam_reservas_activas'), 1);
     assert.equal(valor(c, 'ipam_reservas_activas'), 1, 'la otra réplica ve la misma reserva');
-    assert.equal(valor(c, 'ipam_http_requests_total', { ruta: '/api/reservas', metodo: 'POST', codigo: '201' }), undefined, 'los contadores son por réplica');
+    assert.equal(
+      valor(c, 'ipam_http_requests_total', { ruta: '/api/v1/reservas', metodo: 'POST', codigo: '201' }),
+      undefined,
+      'los contadores son por réplica',
+    );
     caida = await lanzarServicio({ DATABASE_URL: 'postgres://u:p@127.0.0.1:1/x', DB_CONNECT_TIMEOUT_MS: '300', METRICS_TOKEN: TOKEN_METRICAS });
     const r = await fetch(`${caida.url}/metrics`, { headers: { Authorization: `Bearer ${TOKEN_METRICAS}` } });
     assert.equal(r.status, 200);
@@ -189,7 +193,7 @@ test('ROL=worker también expone /metrics', opts, async () => {
   try {
     const txt = await metricas(w);
     assert.equal(valor(txt, 'ipam_db_up'), 1);
-    assert.equal((await fetch(`${w.url}/api/pools`)).status, 404);
+    assert.equal((await fetch(`${w.url}/api/v1/pools`)).status, 404);
   } finally {
     await w.parar();
     await b.borrar();

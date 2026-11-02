@@ -181,7 +181,7 @@ export async function renderSegmentos() {
     const vista = ESTADO.vistaSegmentos;
     const pedirReservas = (estado) => get('/api/v1/reservas?limite=500&estado=' + estado);
     const [pools, asignaciones, pendientes, historial] = await Promise.all([
-      get('/api/pools'),
+      get('/api/v1/pools'),
       todasLasAsignaciones(),
       pedirReservas('reservada'),
       vista === 'historial' ? Promise.all([pedirReservas('liberada'), pedirReservas('expirada')]).then((l) => l.flat()) : [],
@@ -207,9 +207,9 @@ export async function renderSegmentos() {
     const reservaPorId = new Map(pendientes.map((r) => [r.id, r]));
     const [titulo, ayuda] = textoVacio(vista, !!(q || FILTRO.ambiente || FILTRO.proveedor));
     const raiz = $('segmentos');
-    raiz.innerHTML = `<div class="cabecera"><h2 id="seg-titulo" tabindex="-1">Segmentos</h2><span class="acciones"><a class="btn" href="/api/exportar.xlsx" download>${I('descargar')}Exportar a Excel</a>${
+    raiz.innerHTML = `<div class="cabecera"><h2 id="seg-titulo" tabindex="-1">Segmentos</h2><span class="acciones"><a class="btn" href="/api/v1/exportar.xlsx" download>${I('descargar')}Exportar a Excel</a>${
       puede('admin')
-        ? `<a class="btn sec" href="/api/exportar.json" download title="Respaldo completo para llevar el IPAM a otra infraestructura">${I('archivo')}Respaldo JSON</a>`
+        ? `<a class="btn sec" href="/api/v1/exportar.json" download title="Respaldo completo para llevar el IPAM a otra infraestructura">${I('archivo')}Respaldo JSON</a>`
         : ''
     }</span></div>
     <p class="muted">Un segmento <b>asignado</b> es definitivo. Uno <b>reservado</b> está apartado por un tiempo: falta que un administrador lo apruebe y, si nadie lo hace, vence solo y el rango vuelve al pool.</p>${chips(cuentas)}${

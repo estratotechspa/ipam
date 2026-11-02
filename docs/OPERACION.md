@@ -65,7 +65,7 @@ Se probó en un clúster de prueba (repositorio `posix`) borrando datos y volvie
    (Con repositorio `posix` hay que montar también el volumen del repositorio en su ruta. Con Workload Identity, usar la ServiceAccount de la base.)
 3. Cuando el pod termine (`Succeeded`): `kubectl -n ipam delete pod restaurar-ipam`, subir de nuevo la base (`replicas=1`) y luego la app.
 4. Tras una recuperación a un instante, hacer un respaldo completo: `kubectl -n ipam exec ipam-ipam-db-0 -c respaldos -- pgbackrest --stanza=ipam --type=full backup`.
-5. **Restaurar en otro clúster** (por ejemplo, el del cliente): instalar el chart con otros valores, apuntando a un bucket vacío, y cargar los datos con el respaldo lógico JSON (`/api/exportar.json` → `/api/importar`, ver README). La restauración física de pgBackRest sirve para recuperar **la misma** base.
+5. **Restaurar en otro clúster** (por ejemplo, el del cliente): instalar el chart con otros valores, apuntando a un bucket vacío, y cargar los datos con el respaldo lógico JSON (`/api/v1/exportar.json` → `/api/v1/importar`, ver README). La restauración física de pgBackRest sirve para recuperar **la misma** base.
 
 ### Qué vigilar
 - `pg_stat_archiver.failed_count` > 0 o un `ERROR` reciente en el log de `respaldos`: si el archivado de WAL falla, los WAL se acumulan en el volumen de datos y pueden llenarlo. Conviene una alerta sobre el volumen y sobre esos logs.
@@ -98,7 +98,7 @@ networkPolicy:
 
 ## 3. De la POC (estratotech.cl) al tenant del cliente
 1. Instalar el chart en el clúster del cliente con **sus** valores: dominio, imagen de su registro (`BASE_IMAGE`/`BUILD_IMAGE` si exigen sus bases), proveedor OIDC, bucket, marca, StorageClass.
-2. En la POC: *Respaldo JSON* (admin). En el cliente: `POST /api/importar` con ese archivo.
+2. En la POC: *Respaldo JSON* (admin). En el cliente: `POST /api/v1/importar` con ese archivo.
 3. Registrar la nueva URL de retorno en su proveedor OIDC y la del webhook en su Jira.
 4. Apagar la POC. Nada de EstratoTech queda en el código ni en la imagen: solo en los valores de la POC.
 
@@ -106,7 +106,7 @@ networkPolicy:
 
 - **Jira en segundo plano:** al asignar un segmento (o aprobar una reserva que vino de Jira), la respuesta no espera a Jira: la sincronización corre aparte con `JIRA_REINTENTOS` (3) intentos separados por `JIRA_REINTENTO_MS` × n (2 s). El resultado queda en `eventos` (`jira_ticket_creado`, `jira_ticket_actualizado` o `jira_error`, con `intentos`) y se ve en la pestaña Jira. Mientras tanto la asignación lleva su ticket `NET-xxx` interno, que se reemplaza por la clave de Jira al crearse. Un reintento tras un fallo parcial puede duplicar el comentario en Jira. Al apagar el servicio (SIGTERM) se espera a que terminen las sincronizaciones pendientes dentro de `APAGADO_TIMEOUT_MS`.
 - **Lista de asignaciones paginada:** `GET /api/v1/asignaciones` devuelve como máximo 1000 filas por llamada (`limit`, `offset`) y el total en `X-Total-Count`; admite `pool`, `ambiente`, `q` y `orden`/`dir`. Quien consuma la API con más de 1000 asignaciones debe paginar (antes recibía todo sin límite). La interfaz junta todas las páginas por su cuenta.
-- **Excel por streaming:** `GET /api/exportar.xlsx` lee la base por lotes de 1000 dentro de una transacción de solo lectura con instantánea consistente y escribe cada fila al llegar: la memoria no crece con el tamaño de la base. Incluye todas las IPs fijas (antes se cortaba en 2000). Si falla a mitad, la conexión se corta y el archivo queda incompleto.
+- **Excel por streaming:** `GET /api/v1/exportar.xlsx` lee la base por lotes de 1000 dentro de una transacción de solo lectura con instantánea consistente y escribe cada fila al llegar: la memoria no crece con el tamaño de la base. Incluye todas las IPs fijas (antes se cortaba en 2000). Si falla a mitad, la conexión se corta y el archivo queda incompleto.
 - **Retención de eventos:** `npm run purgar` borra de `eventos` lo anterior a `RETENCION_DIAS` (365; `0` = conservar todo), por lotes de 5000; `-- --simular` cuenta sin borrar. **Se ejecuta con el usuario migrador** (`DATABASE_URL_MIGRACION`): la aplicación no puede borrar eventos (el rol `ipam_app` no tiene DELETE). Para programarlo en Kubernetes, un CronJob con la misma imagen:
   ```yaml
   apiVersion: batch/v1

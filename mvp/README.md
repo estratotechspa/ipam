@@ -87,9 +87,9 @@ Nada de «EstratoTech» está escrito en el código ni en la imagen: nombre, col
 - Dominio: `config.publicUrl` (o `ingress.host`); es la base del login y de los enlaces. POC: `ipam.estratotech.cl`; luego, el del cliente (p. ej. `ipam.cliente.interno.cl`) cambiando solo ese valor y el registro de retorno en el proveedor OIDC.
 
 ## Llevarse el IPAM a otra infraestructura
-- **Respaldo lógico:** `GET /api/exportar.json` (admin; botón «Respaldo JSON») entrega pools, asignaciones y roles asignados.
-- **Restauración:** `POST /api/importar` con ese JSON (admin). Es todo o nada: si algún segmento se solapa con otro, se rechaza completo (409) y no se importa nada. Los pools que ya existen no se tocan y las asignaciones repetidas se omiten, así que se puede repetir sin duplicar.
-  `curl -u … -H 'X-Requested-With: ipam' -H 'Content-Type: application/json' --data @ipam-respaldo.json https://<host>/api/importar`
+- **Respaldo lógico:** `GET /api/v1/exportar.json` (admin; botón «Respaldo JSON») entrega pools, asignaciones y roles asignados.
+- **Restauración:** `POST /api/v1/importar` con ese JSON (admin). Es todo o nada: si algún segmento se solapa con otro, se rechaza completo (409) y no se importa nada. Los pools que ya existen no se tocan y las asignaciones repetidas se omiten, así que se puede repetir sin duplicar.
+  `curl -u … -H 'X-Requested-With: ipam' -H 'Content-Type: application/json' --data @ipam-respaldo.json https://<host>/api/v1/importar`
 - La contraseña de la base, los secretos de OIDC/Jira y la marca viven en Secret/ConfigMap/values: se reinstala el chart en el nuevo clúster con otros valores y se importa el JSON.
 
 ## Seguridad del contenedor y del chart
@@ -109,17 +109,17 @@ Nada de «EstratoTech» está escrito en el código ni en la imagen: nombre, col
 | Método | Ruta | |
 |---|---|---|
 | GET | `/api/health` | salud (abierta) |
-| GET | `/api/pools`, `/api/resumen`, `/api/asignaciones`, `/api/eventos` | lecturas |
-| GET | `/api/me` · `/api/usuarios` · `/api/auditoria` | sesión actual · usuarios y roles (admin) · bitácora (admin) |
-| GET · POST | `/api/exportar.json` · `/api/importar` | respaldo lógico completo · restauración (admin) |
+| GET | `/api/v1/pools`, `/api/v1/resumen`, `/api/v1/asignaciones`, `/api/v1/eventos` | lecturas |
+| GET | `/api/v1/me` · `/api/v1/usuarios` · `/api/v1/auditoria` | sesión actual · usuarios y roles (admin) · bitácora (admin) |
+| GET · POST | `/api/v1/exportar.json` · `/api/v1/importar` | respaldo lógico completo · restauración (admin) |
 | GET | `/api/config` · `/brand.css` · `/brand/logo` | marca (abiertos) |
-| GET | `/api/exportar.xlsx` | Excel con todos los segmentos (hoja «Segmentos») y los pools (hoja «Pools») |
-| GET | `/api/jira/estado` | si la integración saliente con Jira está activa |
-| GET | `/api/pools/:id/libres?mascara=22` | 3 segmentos libres |
-| POST | `/api/solicitudes` `{pool, vpc, cidr?, mascara?}` | 201 · 400 inválido · 409 solapamiento (con conflicto y sugeridos) |
-| DELETE | `/api/asignaciones/:id` | liberar |
+| GET | `/api/v1/exportar.xlsx` | Excel con todos los segmentos (hoja «Segmentos») y los pools (hoja «Pools») |
+| GET | `/api/v1/jira/estado` | si la integración saliente con Jira está activa |
+| GET | `/api/v1/pools/:id/libres?mascara=22` | 3 segmentos libres |
+| POST | `/api/v1/solicitudes` `{pool, vpc, cidr?, mascara?}` | 201 · 400 inválido · 409 solapamiento (con conflicto y sugeridos) |
+| DELETE | `/api/v1/asignaciones/:id` | liberar |
 | POST | `/webhook/jira` | entrada desde Jira (firmada) |
-| POST | `/api/jira/simular` | simula un ticket para la demo. Solo fuera de producción o con `ENABLE_SIMULADOR=true`; si no, 404 |
+| POST | `/api/v1/jira/simular` | simula un ticket para la demo. Solo fuera de producción o con `ENABLE_SIMULADOR=true`; si no, 404 |
 
 ## Integración saliente con Jira (desactivada por defecto)
 Código en `src/jira.js`. Se activa con `JIRA_ENABLED=true` más `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_PROJECT` (opcionales: `JIRA_ISSUE_TYPE`=Task, `JIRA_DONE_TRANSITION`=Done).

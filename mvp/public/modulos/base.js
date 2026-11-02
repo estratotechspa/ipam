@@ -64,7 +64,7 @@ export const puede = (min) => NIVEL[YO.rol] >= NIVEL[min];
 export async function todasLasAsignaciones() {
   const todas = [];
   for (let desde = 0; ; desde += 1000) {
-    const r = await api('/api/asignaciones?limit=1000&offset=' + desde);
+    const r = await api('/api/v1/asignaciones?limit=1000&offset=' + desde);
     if (!r.ok) throw new Error('Error ' + r.status);
     todas.push(...r.data);
     if (r.data.length < 1000 || todas.length >= (r.total || 0)) return todas;

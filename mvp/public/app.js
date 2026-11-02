@@ -38,7 +38,7 @@ function olvidarCredencialesBasic() {
 
 async function iniciar() {
   marca();
-  const r = await fetch('/api/me', { headers: CAB });
+  const r = await fetch('/api/v1/me', { headers: CAB });
   if (r.status === 401) {
     location.href = '/auth/login?next=' + encodeURIComponent(location.pathname);
     return;

@@ -29,12 +29,12 @@ test.after(async () => {
   await b.borrar();
 });
 const reiniciar = () => b.sql('delete from limite_contador');
-const get = (s, ruta = '/api/pools', h = {}) => fetch(s.url + ruta, { headers: { ...ADM, ...h } });
+const get = (s, ruta = '/api/v1/pools', h = {}) => fetch(s.url + ruta, { headers: { ...ADM, ...h } });
 
 test('429 con Retry-After, cuerpo claro en español y cabeceras RateLimit; cumple el contrato', opts, async () => {
   await reiniciar();
   const rs = [];
-  for (let i = 0; i < 12; i++) rs.push(await get(s1, '/api/pools', { 'X-Forwarded-For': '198.51.100.1' }));
+  for (let i = 0; i < 12; i++) rs.push(await get(s1, '/api/v1/pools', { 'X-Forwarded-For': '198.51.100.1' }));
   const estados = rs.map((r) => r.status);
   assert.deepEqual(estados, [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 429, 429], 'lectura: 10 por minuto por actor');
   assert.equal(rs[0].headers.get('ratelimit-limit'), '10');
@@ -67,7 +67,7 @@ test('escrituras: límite propio (4 por minuto); los excesos repetidos se audita
   await reiniciar();
   const antes = (await b.sql("select count(*)::int as n from auditoria where accion = 'rate_limit_excedido'")).rows[0].n;
   const post = (i) =>
-    fetch(s1.url + '/api/solicitudes', { method: 'POST', headers: ADM, body: JSON.stringify({ pool: 'gke-nodos-qa', vpc: `lim-${i}`, mascara: 28 }) });
+    fetch(s1.url + '/api/v1/solicitudes', { method: 'POST', headers: ADM, body: JSON.stringify({ pool: 'gke-nodos-qa', vpc: `lim-${i}`, mascara: 28 }) });
   const rs = [];
   for (let i = 0; i < 12; i++) rs.push((await post(i)).status);
   assert.deepEqual(rs, [201, 201, 201, 201, 429, 429, 429, 429, 429, 429, 429, 429]);
@@ -83,23 +83,23 @@ test('escrituras: límite propio (4 por minuto); los excesos repetidos se audita
 test('cada token tiene su propio cupo; el límite por IP suma a todos', opts, async () => {
   await reiniciar();
   const crear = async (nombre) =>
-    (await (await fetch(s1.url + '/api/tokens', { method: 'POST', headers: ADM, body: JSON.stringify({ nombre, rol: 'lector' }) })).json()).token;
+    (await (await fetch(s1.url + '/api/v1/tokens', { method: 'POST', headers: ADM, body: JSON.stringify({ nombre, rol: 'lector' }) })).json()).token;
   const [a, c] = [await crear('limite-a'), await crear('limite-c')];
   await reiniciar();
-  for (let i = 0; i < 10; i++) assert.equal((await fetch(s1.url + '/api/pools', { headers: bearer(a) })).status, 200);
-  assert.equal((await fetch(s1.url + '/api/pools', { headers: bearer(a) })).status, 429, 'el token A agotó el suyo');
-  assert.equal((await fetch(s2.url + '/api/pools', { headers: bearer(c) })).status, 200, 'el token C sigue con su cupo completo (aunque sea otra réplica)');
+  for (let i = 0; i < 10; i++) assert.equal((await fetch(s1.url + '/api/v1/pools', { headers: bearer(a) })).status, 200);
+  assert.equal((await fetch(s1.url + '/api/v1/pools', { headers: bearer(a) })).status, 429, 'el token A agotó el suyo');
+  assert.equal((await fetch(s2.url + '/api/v1/pools', { headers: bearer(c) })).status, 200, 'el token C sigue con su cupo completo (aunque sea otra réplica)');
   await b.sql('delete from limite_contador');
   const sIp = await lanzarServicio({ DATABASE_URL: b.url, RATE_LIMIT_POR_MINUTO: '1000', RATE_LIMIT_IP_POR_MINUTO: '6', TRUST_PROXY: '1' });
   try {
     const rs = [];
     for (let i = 0; i < 8; i++)
-      rs.push((await fetch(sIp.url + '/api/pools', { headers: { ...bearer(i % 2 ? a : c), 'X-Forwarded-For': '203.0.113.50' } })).status);
+      rs.push((await fetch(sIp.url + '/api/v1/pools', { headers: { ...bearer(i % 2 ? a : c), 'X-Forwarded-For': '203.0.113.50' } })).status);
     assert.deepEqual(rs, [200, 200, 200, 200, 200, 200, 429, 429], 'dos tokens detrás de la misma IP comparten el límite por IP');
-    const otraIp = await fetch(sIp.url + '/api/pools', { headers: { ...bearer(a), 'X-Forwarded-For': '203.0.113.51' } });
+    const otraIp = await fetch(sIp.url + '/api/v1/pools', { headers: { ...bearer(a), 'X-Forwarded-For': '203.0.113.51' } });
     assert.equal(otraIp.status, 200, 'otra IP no se ve afectada');
     assert.match(
-      (await (await fetch(sIp.url + '/api/pools', { headers: { ...bearer(a), 'X-Forwarded-For': '203.0.113.50' } })).json()).mensaje,
+      (await (await fetch(sIp.url + '/api/v1/pools', { headers: { ...bearer(a), 'X-Forwarded-For': '203.0.113.50' } })).json()).mensaje,
       /desde esta dirección/,
     );
   } finally {
@@ -110,22 +110,22 @@ test('cada token tiene su propio cupo; el límite por IP suma a todos', opts, as
 test('fuerza bruta: tras 4 intentos fallidos la IP queda bloqueada (incluso con un token bueno) y se registra', opts, async () => {
   await reiniciar();
   const bueno = (
-    await (await fetch(s1.url + '/api/tokens', { method: 'POST', headers: ADM, body: JSON.stringify({ nombre: 'fb-bueno', rol: 'lector' }) })).json()
+    await (await fetch(s1.url + '/api/v1/tokens', { method: 'POST', headers: ADM, body: JSON.stringify({ nombre: 'fb-bueno', rol: 'lector' }) })).json()
   ).token;
   await reiniciar();
   const ip = { 'X-Forwarded-For': '192.0.2.99' };
   const malo = `ipam_${'D'.repeat(43)}`;
-  for (let i = 0; i < 4; i++) assert.equal((await fetch(s1.url + '/api/pools', { headers: { ...bearer(malo), ...ip } })).status, 401, `intento ${i + 1}`);
-  const bloqueado = await fetch(s2.url + '/api/pools', { headers: { ...bearer(bueno), ...ip } }); // otra réplica: el contador es compartido
+  for (let i = 0; i < 4; i++) assert.equal((await fetch(s1.url + '/api/v1/pools', { headers: { ...bearer(malo), ...ip } })).status, 401, `intento ${i + 1}`);
+  const bloqueado = await fetch(s2.url + '/api/v1/pools', { headers: { ...bearer(bueno), ...ip } }); // otra réplica: el contador es compartido
   assert.equal(bloqueado.status, 429);
   const c = await bloqueado.json();
   assert.equal(c.error, 'rate_limit');
   assert.match(c.mensaje, /intentos fallidos de autenticación/);
   assert.ok(Number(bloqueado.headers.get('retry-after')) >= 1);
-  const otraIp = await fetch(s1.url + '/api/pools', { headers: { ...bearer(bueno), 'X-Forwarded-For': '192.0.2.100' } });
+  const otraIp = await fetch(s1.url + '/api/v1/pools', { headers: { ...bearer(bueno), 'X-Forwarded-For': '192.0.2.100' } });
   assert.equal(otraIp.status, 200, 'otra IP con el mismo token funciona');
   // Pasado el minuto (simulado vaciando los contadores) vuelve a entrar.
   await reiniciar();
-  assert.equal((await fetch(s1.url + '/api/pools', { headers: { ...bearer(bueno), ...ip } })).status, 200);
+  assert.equal((await fetch(s1.url + '/api/v1/pools', { headers: { ...bearer(bueno), ...ip } })).status, 200);
   assert.equal((await b.sql("select count(*)::int as n from auditoria where accion = 'token_rechazado'")).rows[0].n >= 4, true);
 });

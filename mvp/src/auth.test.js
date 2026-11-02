@@ -137,7 +137,7 @@ test('sin sesión: la página redirige al login y la API responde 401; salud abi
   const r = await n.pedir(base + '/');
   assert.equal(r.status, 302);
   assert.match(r.headers.get('location'), /^\/login\?next=/, 'sin sesión se va a la pantalla de acceso, no directo al proveedor');
-  const a = await n.api('/api/pools');
+  const a = await n.api('/api/v1/pools');
   assert.equal(a.status, 401);
   assert.equal((await a.json()).login, '/login');
   assert.equal((await n.api('/api/health')).status, 200);
@@ -148,22 +148,25 @@ test('login OIDC como administrador (correo de la configuración) y auditoría',
   const cb = await n.entrar('root@empresa.cl');
   assert.equal(cb.status, 302);
   assert.equal(cb.headers.get('location'), '/');
-  const me = await (await n.api('/api/me')).json();
+  const me = await (await n.api('/api/v1/me')).json();
   assert.equal(me.rol, 'admin');
   assert.equal(me.usuario, 'root@empresa.cl');
-  assert.equal((await n.api('/api/pools')).status, 200);
-  const aud = await (await n.api('/api/auditoria')).json();
+  assert.equal((await n.api('/api/v1/pools')).status, 200);
+  const aud = await (await n.api('/api/v1/auditoria')).json();
   assert.ok(aud.some((x) => x.accion === 'login' && x.usuario === 'root@empresa.cl'));
 });
 
 test('roles por grupo: solicitante reserva pero no asigna directo ni libera; el admin aprueba; lector solo lee', opts, async () => {
   const ana = new Navegador();
   await ana.entrar('ana@empresa.cl');
-  assert.equal((await (await ana.api('/api/me')).json()).rol, 'solicitante');
+  assert.equal((await (await ana.api('/api/v1/me')).json()).rol, 'solicitante');
   // Asignar directo es solo de admin: el solicitante pasa por una reserva que otra persona (admin) aprueba.
-  const directo = await ana.api('/api/solicitudes', { method: 'POST', body: JSON.stringify({ pool: 'onprem-lan-dev', vpc: 'rbac', cidr: '192.168.70.0/24' }) });
+  const directo = await ana.api('/api/v1/solicitudes', {
+    method: 'POST',
+    body: JSON.stringify({ pool: 'onprem-lan-dev', vpc: 'rbac', cidr: '192.168.70.0/24' }),
+  });
   assert.equal(directo.status, 403);
-  const r = await ana.api('/api/reservas', {
+  const r = await ana.api('/api/v1/reservas', {
     method: 'POST',
     headers: { 'Idempotency-Key': 'rbac-ana-1' },
     body: JSON.stringify({ pool: 'onprem-lan-dev', vpc: 'rbac', cidr: '192.168.70.0/24' }),
@@ -171,60 +174,63 @@ test('roles por grupo: solicitante reserva pero no asigna directo ni libera; el 
   assert.equal(r.status, 201);
   const reserva = await r.json();
   assert.equal(reserva.solicitante, 'ana@empresa.cl');
-  assert.equal((await ana.api('/api/auditoria')).status, 403);
+  assert.equal((await ana.api('/api/v1/auditoria')).status, 403);
 
   const lector = new Navegador();
   await lector.entrar('lector@empresa.cl');
-  assert.equal((await (await lector.api('/api/me')).json()).rol, 'lector');
-  assert.equal((await lector.api('/api/solicitudes', { method: 'POST', body: JSON.stringify({ pool: 'onprem-lan-dev', vpc: 'x', mascara: 24 }) })).status, 403);
-  assert.equal((await lector.api('/api/exportar.xlsx')).status, 200);
+  assert.equal((await (await lector.api('/api/v1/me')).json()).rol, 'lector');
+  assert.equal(
+    (await lector.api('/api/v1/solicitudes', { method: 'POST', body: JSON.stringify({ pool: 'onprem-lan-dev', vpc: 'x', mascara: 24 }) })).status,
+    403,
+  );
+  assert.equal((await lector.api('/api/v1/exportar.xlsx')).status, 200);
 
   // El admin aprueba la reserva (confirmar) y puede liberar la asignación; el solicitante no.
   const jefe = new Navegador();
   await jefe.entrar('jefe@empresa.cl');
-  const conf = await jefe.api(`/api/reservas/${reserva.id}/confirmar`, { method: 'POST', body: '{}' });
+  const conf = await jefe.api(`/api/v1/reservas/${reserva.id}/confirmar`, { method: 'POST', body: '{}' });
   assert.equal(conf.status, 200);
   const asig = (await conf.json()).asignacion;
-  assert.equal((await ana.api('/api/asignaciones/' + asig.id, { method: 'DELETE' })).status, 403);
-  assert.equal((await jefe.api('/api/asignaciones/' + asig.id, { method: 'DELETE' })).status, 200);
+  assert.equal((await ana.api('/api/v1/asignaciones/' + asig.id, { method: 'DELETE' })).status, 403);
+  assert.equal((await jefe.api('/api/v1/asignaciones/' + asig.id, { method: 'DELETE' })).status, 200);
 });
 
 test('SSO (camino A): el admin pre-registra por correo con su rol y puede dar de baja; la baja impide iniciar sesión', opts, async () => {
   const root = new Navegador();
   await root.entrar('root@empresa.cl');
-  const alta = await root.api('/api/usuarios', {
+  const alta = await root.api('/api/v1/usuarios', {
     method: 'POST',
     body: JSON.stringify({ email: 'preregistrada@empresa.cl', nombre: 'Pre', rol: 'solicitante' }),
   });
   assert.equal(alta.status, 201);
   const n = new Navegador();
   await n.entrar('preregistrada@empresa.cl');
-  assert.equal((await (await n.api('/api/me')).json()).rol, 'solicitante', 'entra con el rol pre-asignado');
+  assert.equal((await (await n.api('/api/v1/me')).json()).rol, 'solicitante', 'entra con el rol pre-asignado');
   // Baja: no puede iniciar sesión de nuevo (aunque el proveedor la autentique).
-  assert.equal((await root.api('/api/usuarios/preregistrada@empresa.cl/desactivar', { method: 'POST' })).status, 200);
+  assert.equal((await root.api('/api/v1/usuarios/preregistrada@empresa.cl/desactivar', { method: 'POST' })).status, 200);
   const baja = new Navegador();
   const r = await baja.entrar('preregistrada@empresa.cl');
   assert.equal(r.status, 403);
   // Reactivada, vuelve a entrar.
-  assert.equal((await root.api('/api/usuarios/preregistrada@empresa.cl/activar', { method: 'POST' })).status, 200);
+  assert.equal((await root.api('/api/v1/usuarios/preregistrada@empresa.cl/activar', { method: 'POST' })).status, 200);
   const otra = new Navegador();
   await otra.entrar('preregistrada@empresa.cl');
-  assert.equal((await (await otra.api('/api/me')).json()).rol, 'solicitante');
+  assert.equal((await (await otra.api('/api/v1/me')).json()).rol, 'solicitante');
   // Un admin no puede desactivarse a sí mismo.
-  assert.equal((await root.api('/api/usuarios/root@empresa.cl/desactivar', { method: 'POST' })).status, 409);
+  assert.equal((await root.api('/api/v1/usuarios/root@empresa.cl/desactivar', { method: 'POST' })).status, 409);
 });
 
 test('un administrador cambia el rol de otra persona y rige en su próximo login', opts, async () => {
   const root = new Navegador();
   await root.entrar('root@empresa.cl');
-  const put = await root.api('/api/usuarios/lector@empresa.cl', { method: 'PUT', body: JSON.stringify({ rol: 'solicitante' }) });
+  const put = await root.api('/api/v1/usuarios/lector@empresa.cl', { method: 'PUT', body: JSON.stringify({ rol: 'solicitante' }) });
   assert.equal(put.status, 200);
-  assert.equal((await root.api('/api/usuarios/lector@empresa.cl', { method: 'PUT', body: JSON.stringify({ rol: 'dios' }) })).status, 400);
+  assert.equal((await root.api('/api/v1/usuarios/lector@empresa.cl', { method: 'PUT', body: JSON.stringify({ rol: 'dios' }) })).status, 400);
   const n = new Navegador();
   await n.entrar('lector@empresa.cl');
-  assert.equal((await (await n.api('/api/me')).json()).rol, 'solicitante');
-  await root.api('/api/usuarios/lector@empresa.cl', { method: 'PUT', body: JSON.stringify({ rol: null }) });
-  const aud = await (await root.api('/api/auditoria')).json();
+  assert.equal((await (await n.api('/api/v1/me')).json()).rol, 'solicitante');
+  await root.api('/api/v1/usuarios/lector@empresa.cl', { method: 'PUT', body: JSON.stringify({ rol: null }) });
+  const aud = await (await root.api('/api/v1/auditoria')).json();
   assert.ok(aud.some((x) => x.accion === 'cambiar_rol' && x.usuario === 'root@empresa.cl'));
 });
 
@@ -232,13 +238,13 @@ test('dominio de correo no permitido → 403 y sin sesión', opts, async () => {
   const n = new Navegador();
   const cb = await n.entrar('intruso@gmail.com');
   assert.equal(cb.status, 403);
-  assert.equal((await n.api('/api/pools')).status, 401);
+  assert.equal((await n.api('/api/v1/pools')).status, 401);
 });
 
 test('CSRF, cookie manipulada y cierre de sesión', opts, async () => {
   const n = new Navegador();
   await n.entrar('root@empresa.cl');
-  const sinCab = await n.pedir(base + '/api/solicitudes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  const sinCab = await n.pedir(base + '/api/v1/solicitudes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
   assert.equal(sinCab.status, 403);
 
   const falso = new Navegador();
@@ -254,11 +260,11 @@ test('CSRF, cookie manipulada y cierre de sesión', opts, async () => {
       ],
     ]),
   );
-  assert.equal((await falso.api('/api/me')).status, 401);
+  assert.equal((await falso.api('/api/v1/me')).status, 401);
 
   const out = await n.api('/auth/logout', { method: 'POST', body: '{}' });
   assert.equal(out.status, 200);
-  assert.equal((await n.api('/api/me')).status, 401);
+  assert.equal((await n.api('/api/v1/me')).status, 401);
 });
 
 test('el parámetro next no permite redirigir a otros sitios', opts, async () => {
@@ -272,9 +278,9 @@ test('modo OIDC: un token de servicio entra por Bearer sin cookie ni X-Requested
   const root = new Navegador();
   await root.entrar('root@empresa.cl');
   const nombre = `oidc-${Date.now().toString(36)}`;
-  const creado = await (await root.api('/api/tokens', { method: 'POST', body: JSON.stringify({ nombre, rol: 'lector' }) })).json();
+  const creado = await (await root.api('/api/v1/tokens', { method: 'POST', body: JSON.stringify({ nombre, rol: 'lector' }) })).json();
   assert.match(creado.token, /^ipam_/);
-  const me = await fetch(base + '/api/me', { headers: { Authorization: `Bearer ${creado.token}` } });
+  const me = await fetch(base + '/api/v1/me', { headers: { Authorization: `Bearer ${creado.token}` } });
   assert.deepEqual(await me.json(), {
     modo: 'token',
     usuario: `svc:${nombre}`,
@@ -284,10 +290,10 @@ test('modo OIDC: un token de servicio entra por Bearer sin cookie ni X-Requested
     debe_cambiar_clave: false,
     cuentas_locales: false,
   });
-  const malo = await fetch(base + '/api/pools', { headers: { Authorization: `Bearer ipam_${'C'.repeat(43)}` }, redirect: 'manual' });
+  const malo = await fetch(base + '/api/v1/pools', { headers: { Authorization: `Bearer ipam_${'C'.repeat(43)}` }, redirect: 'manual' });
   assert.equal(malo.status, 401);
   assert.equal((await malo.json()).error, 'token_invalido');
-  assert.equal((await root.api(`/api/tokens/${creado.id}`, { method: 'DELETE' })).status, 200);
+  assert.equal((await root.api(`/api/v1/tokens/${creado.id}`, { method: 'DELETE' })).status, 200);
 });
 
 // ---------- Sesiones revalidadas (cambio de rol, baja, formato de la cookie, CSRF en logout) ----------
@@ -307,7 +313,7 @@ const admin = async () => {
   await n.entrar('root@empresa.cl');
   return n;
 };
-const poner = (root, email, rol) => root.api('/api/usuarios/' + email, { method: 'PUT', body: JSON.stringify({ rol }) });
+const poner = (root, email, rol) => root.api('/api/v1/usuarios/' + email, { method: 'PUT', body: JSON.stringify({ rol }) });
 
 test('la sesión dura 4 h por defecto y la cookie guarda el rol base (v:2), no el efectivo', opts, async () => {
   const cb = await new Navegador().entrar('horas@empresa.cl');
@@ -323,20 +329,20 @@ test('un cambio de rol rige sin volver a entrar: ascenso, degradación y «hered
   const root = await admin();
   const ana = new Navegador();
   await ana.entrar('ana@empresa.cl'); // solicitante por su grupo
-  const rol = async () => (await (await ana.api('/api/me')).json()).rol;
+  const rol = async () => (await (await ana.api('/api/v1/me')).json()).rol;
   assert.equal(await rol(), 'solicitante');
-  assert.equal((await ana.api('/api/auditoria')).status, 403);
+  assert.equal((await ana.api('/api/v1/auditoria')).status, 403);
   assert.equal((await poner(root, 'ana@empresa.cl', 'admin')).status, 200);
   assert.equal(await rol(), 'admin');
-  assert.equal((await ana.api('/api/auditoria')).status, 200);
+  assert.equal((await ana.api('/api/v1/auditoria')).status, 200);
   await poner(root, 'ana@empresa.cl', 'lector');
   assert.equal(await rol(), 'lector');
-  assert.equal((await ana.api('/api/auditoria')).status, 403);
+  assert.equal((await ana.api('/api/v1/auditoria')).status, 403);
   await poner(root, 'ana@empresa.cl', null);
   assert.equal(await rol(), 'solicitante');
   // un administrador de la configuración no se degrada desde la base
   await poner(root, 'root@empresa.cl', 'lector');
-  assert.equal((await (await root.api('/api/me')).json()).rol, 'admin');
+  assert.equal((await (await root.api('/api/v1/me')).json()).rol, 'admin');
   await poner(root, 'root@empresa.cl', null);
 });
 
@@ -346,9 +352,9 @@ test('baja y reactivación rigen de inmediato en esta réplica; la sesión revoc
   const api = new Navegador();
   await web.entrar('baja@empresa.cl');
   await api.entrar('baja@empresa.cl');
-  assert.equal((await api.api('/api/pools')).status, 200);
-  assert.equal((await root.api('/api/usuarios/baja@empresa.cl/desactivar', { method: 'POST', body: '{}' })).status, 200);
-  const r = await api.api('/api/pools');
+  assert.equal((await api.api('/api/v1/pools')).status, 200);
+  assert.equal((await root.api('/api/v1/usuarios/baja@empresa.cl/desactivar', { method: 'POST', body: '{}' })).status, 200);
+  const r = await api.api('/api/v1/pools');
   assert.equal(r.status, 401);
   assert.equal((await r.json()).error, 'sesion_revocada');
   assert.ok(
@@ -358,10 +364,10 @@ test('baja y reactivación rigen de inmediato en esta réplica; la sesión revoc
   const pagina = await web.pedir(base + '/');
   assert.equal(pagina.status, 302);
   assert.match(pagina.headers.get('location'), /^\/login\?error=revocada&next=/);
-  await root.api('/api/usuarios/baja@empresa.cl/activar', { method: 'POST', body: '{}' });
+  await root.api('/api/v1/usuarios/baja@empresa.cl/activar', { method: 'POST', body: '{}' });
   const otra = new Navegador();
   await otra.entrar('baja@empresa.cl');
-  assert.equal((await otra.api('/api/pools')).status, 200, 'reactivada: vuelve a entrar');
+  assert.equal((await otra.api('/api/v1/pools')).status, 200, 'reactivada: vuelve a entrar');
 });
 
 test(
@@ -370,18 +376,18 @@ test(
   async () => {
     const n = new Navegador();
     await n.entrar('directo@empresa.cl');
-    assert.equal((await n.api('/api/pools')).status, 200);
+    assert.equal((await n.api('/api/v1/pools')).status, 200);
     await db.query("update usuarios set activo = false where email = 'directo@empresa.cl'");
-    assert.equal((await n.api('/api/pools')).status, 200, 'dentro de la caché sigue valiendo');
+    assert.equal((await n.api('/api/v1/pools')).status, 200, 'dentro de la caché sigue valiendo');
     revalidador.olvidarTodos(); // equivale a que venza la caché
-    assert.equal((await n.api('/api/pools')).status, 401);
+    assert.equal((await n.api('/api/v1/pools')).status, 401);
 
     const m = new Navegador();
     await m.entrar('directo2@empresa.cl');
     await conEntorno({ SESSION_REVALIDAR_SEG: '0' }, async () => {
-      assert.equal((await m.api('/api/pools')).status, 200);
+      assert.equal((await m.api('/api/v1/pools')).status, 200);
       await db.query("delete from usuarios where email = 'directo2@empresa.cl'");
-      assert.equal((await m.api('/api/pools')).status, 401, 'eliminado: sin caché rige al instante');
+      assert.equal((await m.api('/api/v1/pools')).status, 401, 'eliminado: sin caché rige al instante');
     });
   },
 );
@@ -391,7 +397,7 @@ test('una cookie con el formato anterior (sin revalidación) obliga a entrar de 
   const vieja = S.sellar({ email: 'root@empresa.cl', nombre: 'x', rol: 'admin', exp: Date.now() / 1000 + 3600 });
   const n = new Navegador();
   n.jar.set(base, new Map([['ipam_sesion', vieja]]));
-  assert.equal((await n.api('/api/me')).status, 401);
+  assert.equal((await n.api('/api/v1/me')).status, 401);
 });
 
 test('/auth/logout exige X-Requested-With (defensa CSRF): sin él no cierra la sesión', opts, async () => {
@@ -399,9 +405,9 @@ test('/auth/logout exige X-Requested-With (defensa CSRF): sin él no cierra la s
   const sin = await n.pedir(base + '/auth/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
   assert.equal(sin.status, 403);
   assert.match((await sin.json()).error, /X-Requested-With/);
-  assert.equal((await n.api('/api/me')).status, 200, 'la sesión sigue activa');
+  assert.equal((await n.api('/api/v1/me')).status, 200, 'la sesión sigue activa');
   assert.equal((await n.api('/auth/logout', { method: 'POST', body: '{}' })).status, 200);
-  assert.equal((await n.api('/api/me')).status, 401);
+  assert.equal((await n.api('/api/v1/me')).status, 401);
 });
 
 // ---------- Pantalla de acceso y páginas de error (solo con SSO) ----------

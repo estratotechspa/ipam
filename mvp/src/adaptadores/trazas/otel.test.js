@@ -38,15 +38,15 @@ test('activadas: un span por petición, continúa traceparent y anota trace_id; 
     {
       method: 'GET',
       headers: { traceparent: '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01', authorization: 'Bearer secreto' },
-      url: '/api/pools?token=secreto',
+      url: '/api/v1/pools?token=secreto',
     },
     datos,
   );
   assert.equal(datos.trace_id, '0af7651916cd43dd8448eb211c80319c');
-  span.terminar(500, '/api/pools');
+  span.terminar(500, '/api/v1/pools');
   await t.apagar();
   const [s] = vistos;
-  assert.equal(s.name, 'GET /api/pools');
+  assert.equal(s.name, 'GET /api/v1/pools');
   assert.equal(s.attributes['http.response.status_code'], 500);
   assert.equal(s.status.code, 2);
   assert.ok(!JSON.stringify(s.attributes).includes('secreto'));
@@ -79,7 +79,7 @@ test(
       OTEL_SERVICE_NAME: 'ipam-prueba',
     });
     try {
-      await fetch(`${s.url}/api/pools`, { headers: { traceparent: '00-11111111111111111111111111111111-2222222222222222-01' } });
+      await fetch(`${s.url}/api/v1/pools`, { headers: { traceparent: '00-11111111111111111111111111111111-2222222222222222-01' } });
       const esperar = async (cond, ms = 8000) => {
         const fin = Date.now() + ms;
         while (Date.now() < fin && !cond()) await dormir(50);

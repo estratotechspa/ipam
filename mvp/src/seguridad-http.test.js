@@ -54,7 +54,7 @@ test('cabeceras de seguridad en la interfaz y la API: CSP sin scripts en línea,
   const b = await crearBaseAislada();
   const s = await lanzarServicio({ DATABASE_URL: b.url });
   try {
-    for (const ruta of ['/', '/api/pools', '/healthz']) {
+    for (const ruta of ['/', '/api/v1/pools', '/healthz']) {
       const r = await fetch(s.url + ruta, { headers: { 'X-Requested-With': 'ipam' } });
       const h = r.headers;
       const csp = h.get('content-security-policy');
@@ -90,7 +90,7 @@ test('con TRUST_PROXY la IP del cliente sale de X-Forwarded-For (para el límite
   const b = await crearBaseAislada();
   const s = await lanzarServicio({ DATABASE_URL: b.url, TRUST_PROXY: '1' });
   try {
-    await fetch(s.url + '/api/solicitudes', {
+    await fetch(s.url + '/api/v1/solicitudes', {
       method: 'POST',
       headers: { 'X-Requested-With': 'ipam', 'Content-Type': 'application/json', 'X-Forwarded-For': '203.0.113.7' },
       body: JSON.stringify({ pool: 'gke-nodos-qa', vpc: 'ip', mascara: 28 }),
@@ -103,7 +103,7 @@ test('con TRUST_PROXY la IP del cliente sale de X-Forwarded-For (para el límite
   const b2 = await crearBaseAislada();
   const s2 = await lanzarServicio({ DATABASE_URL: b2.url }); // sin TRUST_PROXY: la cabecera NO se cree
   try {
-    await fetch(s2.url + '/api/solicitudes', {
+    await fetch(s2.url + '/api/v1/solicitudes', {
       method: 'POST',
       headers: { 'X-Requested-With': 'ipam', 'Content-Type': 'application/json', 'X-Forwarded-For': '203.0.113.7' },
       body: JSON.stringify({ pool: 'gke-nodos-qa', vpc: 'ip', mascara: 28 }),

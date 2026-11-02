@@ -54,13 +54,13 @@ test.after(async () => {
 });
 
 test('el contrato publicado por el servicio es el mismo que construye el código', opts, async () => {
-  for (const ruta of ['/api/openapi.json', '/api/v1/openapi.json']) {
+  for (const ruta of ['/api/v1/openapi.json', '/api/v1/openapi.json']) {
     const r = await llamar('GET', ruta);
     assert.equal(r.status, 200);
     assert.deepEqual(await r.json(), JSON.parse(JSON.stringify({ ...doc })));
   }
   assert.equal(
-    (await fetch(`${url}/api/openapi.json`, { headers: { Authorization: `Bearer ipam_${'Z'.repeat(43)}` } })).status,
+    (await fetch(`${url}/api/v1/openapi.json`, { headers: { Authorization: `Bearer ipam_${'Z'.repeat(43)}` } })).status,
     401,
     'el contrato exige credenciales',
   );
@@ -72,10 +72,10 @@ test('lecturas: sondas, sesión, marca, pools, resumen, asignaciones, eventos', 
   await verificar(await fetch(`${url}/api/health`), 'GET', '/api/health');
   await verificar(await fetch(`${url}/api/config`), 'GET', '/api/config');
   await verificar(await llamar('GET', '/api/v1/me'), 'GET', '/api/v1/me');
-  await verificar(await llamar('GET', '/api/me', undefined, comoAgente()), 'GET', '/api/v1/me');
+  await verificar(await llamar('GET', '/api/v1/me', undefined, comoAgente()), 'GET', '/api/v1/me');
   const pools = await verificar(await llamar('GET', '/api/v1/pools?ambiente=qa'), 'GET', '/api/v1/pools');
   assert.ok(pools.length >= 1);
-  await verificar(await llamar('GET', '/api/pools'), 'GET', '/api/v1/pools');
+  await verificar(await llamar('GET', '/api/v1/pools'), 'GET', '/api/v1/pools');
   assert.equal((await verificar(await llamar('GET', '/api/v1/pools/gke-nodos-qa/libres?mascara=24'), 'GET', '/api/v1/pools/{id}/libres')).length, 3);
   await verificar(await llamar('GET', '/api/v1/pools/no-existe/libres?mascara=24'), 'GET', '/api/v1/pools/{id}/libres');
   await verificar(await llamar('GET', '/api/v1/pools/gke-nodos-qa/libres?mascara=3'), 'GET', '/api/v1/pools/{id}/libres');
@@ -88,10 +88,10 @@ test('lecturas: sondas, sesión, marca, pools, resumen, asignaciones, eventos', 
 test('asignaciones directas: 201, 400, 404, 409 con conflicto y sugeridos, y liberar', opts, async () => {
   const a = await verificar(await llamar('POST', '/api/v1/solicitudes', { pool: 'gke-nodos-qa', vpc: 'contrato', mascara: 24 }), 'POST', '/api/v1/solicitudes');
   assert.equal(a.origen, 'panel');
-  await verificar(await llamar('POST', '/api/solicitudes', { pool: 'gke-nodos-qa', vpc: 'contrato', cidr: a.cidr }), 'POST', '/api/v1/solicitudes');
-  await verificar(await llamar('POST', '/api/solicitudes', { pool: 'no-existe', vpc: 'x', mascara: 24 }), 'POST', '/api/v1/solicitudes');
-  await verificar(await llamar('POST', '/api/solicitudes', { pool: 'gke-nodos-qa', vpc: 'x', cidr: 'hola' }), 'POST', '/api/v1/solicitudes');
-  const malo = await llamar('POST', '/api/solicitudes', { pool: 5 });
+  await verificar(await llamar('POST', '/api/v1/solicitudes', { pool: 'gke-nodos-qa', vpc: 'contrato', cidr: a.cidr }), 'POST', '/api/v1/solicitudes');
+  await verificar(await llamar('POST', '/api/v1/solicitudes', { pool: 'no-existe', vpc: 'x', mascara: 24 }), 'POST', '/api/v1/solicitudes');
+  await verificar(await llamar('POST', '/api/v1/solicitudes', { pool: 'gke-nodos-qa', vpc: 'x', cidr: 'hola' }), 'POST', '/api/v1/solicitudes');
+  const malo = await llamar('POST', '/api/v1/solicitudes', { pool: 5 });
   assert.equal(malo.status, 400);
   assert.equal((await verificar(malo, 'POST', '/api/v1/solicitudes')).error, 'validacion');
   await verificar(await llamar('POST', '/api/v1/solicitudes', { vpc: 'x' }, comoAgente()), 'POST', '/api/v1/solicitudes');
@@ -130,7 +130,7 @@ test('reservas: todos los códigos de respuesta reales cumplen el contrato', opt
   await verificar(await llamar('POST', `${R}/${r.id}/confirmar`, {}, ADM), 'POST', `${R}/{id}/confirmar`); // repetida
   await verificar(await llamar('POST', `${R}/${r.id}/confirmar`, { raro: 1 }, comoAgente()), 'POST', `${R}/{id}/confirmar`); // 400 forma
   await verificar(await llamar('POST', `${R}/11111111-1111-4111-8111-111111111111/confirmar`, {}, ADM), 'POST', `${R}/{id}/confirmar`); // 404
-  const otro = await (await llamar('POST', '/api/tokens', { nombre: 'otro-contrato', rol: 'agente' })).json();
+  const otro = await (await llamar('POST', '/api/v1/tokens', { nombre: 'otro-contrato', rol: 'agente' })).json();
   await verificar(await llamar('DELETE', `${R}/${r.id}`, undefined, { Authorization: `Bearer ${otro.token}` }), 'DELETE', `${R}/{id}`); // 403 no es dueño
   const denegada = await llamar('DELETE', `${R}/${r.id}`, undefined, comoAgente()); // 403: la asignación definitiva solo la libera un admin
   assert.equal(denegada.status, 403);

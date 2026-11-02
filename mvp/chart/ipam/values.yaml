@@ -24,7 +24,7 @@ config:
   hsts: false                   # true si el acceso es siempre por HTTPS
   logLevel: info                # debug | info | warn | error (logs JSON a stdout)
   role: todos                   # api | worker | todos: qué hace cada réplica (api = solo HTTP, worker = solo barredor)
-  enableSimulador: false        # true = deja disponible POST /api/jira/simular en producción (la imagen corre con NODE_ENV=production). Solo demos.
+  enableSimulador: false        # true = deja disponible POST /api/v1/jira/simular en producción (la imagen corre con NODE_ENV=production). Solo demos.
   retencionDias: 365            # días que se conservan los eventos; los borra `npm run purgar` (usuario migrador, p. ej. un CronJob). 0 = conservar todo
   jiraReintentos: 3             # intentos de la sincronización saliente con Jira (corre en segundo plano)
   databaseSchema: public        # esquema de PostgreSQL donde viven las tablas (el POC usa «ipam»)
