@@ -47,6 +47,17 @@ test('misma petición: solo compara lo que el agente indicó', () => {
   assert.equal(R.mismaPeticion(ex, { vpc: 'v', cidr: '10.0.1.0/24' }), false);
 });
 
+test('misma petición: el tamaño pedido por máscara, la VLAN y el ticket también cuentan', () => {
+  const ex = { pool_id: 'p1', cidr: '10.0.0.0/26', vpc: 'v', vlan: 10, vlan_nombre: 'Datos', ticket: 'NET-1' };
+  assert.equal(R.mismaPeticion(ex, { vpc: 'v', mascara: 26 }), true);
+  assert.equal(R.mismaPeticion(ex, { vpc: 'v', mascara: 27 }), false);
+  assert.equal(R.mismaPeticion(ex, { vpc: 'v', mascara: 26, vlan: 10, vlan_nombre: 'Datos', ticket: 'NET-1' }), true);
+  assert.equal(R.mismaPeticion(ex, { vpc: 'v', vlan: 11 }), false);
+  assert.equal(R.mismaPeticion(ex, { vpc: 'v', vlan_nombre: 'Otra' }), false);
+  assert.equal(R.mismaPeticion(ex, { vpc: 'v', ticket: 'NET-2' }), false);
+  assert.equal(R.mismaPeticion(ex, { vpc: 'v', vlan: null, vlan_nombre: null, ticket: null }), true); // lo que no indicó no cuenta
+});
+
 test('máquina de estados: confirmar y liberar son idempotentes y coherentes', () => {
   assert.deepEqual(R.decidirConfirmacion('reservada'), { accion: 'confirmar' });
   assert.deepEqual(R.decidirConfirmacion('confirmada'), { accion: 'repetida' });
