@@ -133,7 +133,7 @@ async function revisarIdempotencia(tx, actor, d) {
       mensaje: `Esa Idempotency-Key ya se usó para una reserva que está ${ex.estado}. Usa una clave nueva para pedir otra.`,
     });
   }
-  if (!R.mismaPeticion(ex, { pool: d.pool, cidr: d.cidr, vpc: d.vpc })) {
+  if (!R.mismaPeticion(ex, d)) {
     return fallo('conflicto', 'idempotencia_conflicto', {
       mensaje: 'Esa Idempotency-Key ya se usó con otros parámetros. Usa una clave nueva o repite la misma petición.',
     });

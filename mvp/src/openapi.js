@@ -857,7 +857,7 @@ const ID_TOKEN = param('id', 'path', 'Identificador del token (UUID).', { type: 
 const CLAVE_IDEM = param(
   'Idempotency-Key',
   'header',
-  'Clave de idempotencia (1 a 128 caracteres: letras, números, . - _ :). Repetir la petición con la misma clave no duplica la reserva.',
+  'Clave de idempotencia (1 a 128 caracteres: letras, números, . - _ :). Repetir la petición con la misma clave no duplica la reserva; si cambian el pool, el rango o la máscara, el proyecto, la VLAN o el ticket, responde `409 idempotencia_conflicto`.',
   { type: 'string', maxLength: 128 },
   false,
 );
