@@ -40,7 +40,7 @@ def(
   { ejemplo: '1' },
 );
 def('JSON_LIMIT', 'texto', '100kb', 'Tamaño máximo del cuerpo JSON de las peticiones normales.', { ejemplo: '100kb' });
-def('JSON_LIMIT_IMPORTAR', 'texto', '5mb', 'Tamaño máximo del cuerpo en POST /api/importar (respaldos).', { ejemplo: '5mb' });
+def('JSON_LIMIT_IMPORTAR', 'texto', '5mb', 'Tamaño máximo del cuerpo en POST /api/v1/importar (respaldos).', { ejemplo: '5mb' });
 def('HSTS', 'booleano', false, 'Envía Strict-Transport-Security. Actívalo solo si el acceso es siempre por HTTPS.');
 def('PUBLIC_URL', 'texto', '', 'URL pública del IPAM (base del login OIDC y de los enlaces). Obligatoria con OIDC.', {
   ejemplo: 'https://ipam.empresa.example',
@@ -187,7 +187,7 @@ def(
   'ENABLE_SIMULADOR',
   'booleano',
   false,
-  'Deja disponible POST /api/jira/simular en producción (fuera de producción siempre lo está). Solo demos: crea reservas reales.',
+  'Deja disponible POST /api/v1/jira/simular en producción (fuera de producción siempre lo está). Solo demos: crea reservas reales.',
 );
 def('JIRA_ENABLED', 'booleano', false, 'Activa la integración saliente con Jira.');
 def('JIRA_REINTENTOS', 'entero', 3, 'Intentos de la sincronización saliente con Jira (corre en segundo plano). Si todos fallan, queda un evento jira_error.', {
