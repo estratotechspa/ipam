@@ -3,6 +3,13 @@ import { $, api, errorApi, fail, fecha, fechaHora, get, h, msg } from './base.js
 import { diasPara } from './reservas.js';
 import { confirmar, tabla } from './ui.js';
 
+// Grupos de la API que se pueden dar a un token (los mismos de dominio/alcance.js).
+const GRUPOS = [
+  ['reservas', 'Reservas', 'reservar, consultar, confirmar y liberar reservas', true],
+  ['consulta', 'Consulta', 'ver pools, disponibilidad y asignaciones (para comprobar solapamientos)', true],
+  ['direcciones', 'Direcciones IP', 'consultar y registrar IP fijas', false],
+];
+
 export async function renderTokens() {
   const raiz = $('tokens');
   try {
@@ -15,6 +22,7 @@ export async function renderTokens() {
         h('td', null, t.nombre),
         h('td', null, h('code', null, t.prefijo + '…')),
         h('td', null, t.rol),
+        h('td', null, t.alcance ? t.alcance.join(', ') : 'todo lo de su rol'),
         h('td', null, fecha(t.expira_en), ' ', t.por_vencer && h('span', { class: 'tag pronto' }, 'vence en ' + diasPara(t.expira_en) + ' d')),
         h('td', null, t.ultimo_uso ? fechaHora(t.ultimo_uso) : 'nunca'),
         h('td', null, h('span', { class: 'tag ' + t.estado }, t.estado)),
@@ -44,7 +52,7 @@ export async function renderTokens() {
         'Credenciales para agentes y sistemas (no para personas). El token se muestra una sola vez al crearlo; aquí solo queda su prefijo. Rotar: crea uno nuevo, actualiza el agente y revoca el anterior.',
       ),
       estado,
-      tabla('Tokens de servicio', ['Nombre', 'Prefijo', 'Rol', 'Vence', 'Último uso', 'Estado', 'Acciones'], filas, 'Todavía no hay tokens.'),
+      tabla('Tokens de servicio', ['Nombre', 'Prefijo', 'Rol', 'Alcance', 'Vence', 'Último uso', 'Estado', 'Acciones'], filas, 'Todavía no hay tokens.'),
     );
   } catch (e) {
     fail('tokens', e);
@@ -96,6 +104,14 @@ export function dialogoToken(zona) {
   );
   const dias = h('input', { id: 'tk-dias', name: 'expira_dias', type: 'number', min: '1', max: '365', value: '90', required: true });
   const cuota = h('input', { id: 'tk-cuota', name: 'cuota_reservas', type: 'number', min: '1', placeholder: '(la general)' });
+  const alcance = GRUPOS.map(([clave, titulo, ayuda, marcado]) =>
+    h(
+      'label',
+      { class: 'casilla', style: 'display:flex;gap:8px;align-items:baseline' },
+      h('input', { type: 'checkbox', name: 'alcance', value: clave, checked: marcado, style: 'width:auto' }),
+      h('span', null, h('b', null, titulo), ' · ', ayuda),
+    ),
+  );
   const enviar = h('button', { class: 'btn', type: 'submit', id: 'tk-crear' }, 'Crear token');
   const form = h(
     'form',
@@ -105,6 +121,15 @@ export function dialogoToken(zona) {
         enviar.disabled = true;
         const body = { nombre: nombre.value.trim(), rol: rol.value, expira_dias: Number(dias.value) };
         if (cuota.value) body.cuota_reservas = Number(cuota.value);
+        body.alcance = alcance
+          .map((l) => l.querySelector('input'))
+          .filter((c) => c.checked)
+          .map((c) => c.value);
+        if (!body.alcance.length) {
+          enviar.disabled = false;
+          msg(error, 'Elige al menos un grupo de la API para el token.', 'error');
+          return;
+        }
         const r = await api('/api/v1/tokens', { body });
         enviar.disabled = false;
         if (!r.ok) {
@@ -124,6 +149,7 @@ export function dialogoToken(zona) {
     dias,
     h('label', { for: 'tk-cuota' }, 'Cuota de reservas vigentes (opcional)'),
     cuota,
+    h('fieldset', null, h('legend', null, 'Qué puede usar este token'), ...alcance),
     error,
     h('div', { class: 'fila-botones' }, h('button', { class: 'btn sec', type: 'button', onclick: cierre }, 'Cancelar'), enviar),
   );

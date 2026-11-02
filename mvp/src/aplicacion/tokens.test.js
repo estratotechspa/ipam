@@ -53,7 +53,7 @@ test('autenticar: actor svc:<nombre> con su rol; formato, desconocido, vencido y
   const e = entorno();
   const { token, meta } = await e.tokens.crear(ADMIN, { nombre: 'agente-redes', rol: 'agente', cuota_reservas: 7, expira_dias: 2 });
   const a = await e.tokens.autenticar(token);
-  assert.deepEqual(a, { ok: true, actor: { nombre: 'svc:agente-redes', rol: 'agente', tipo: 'token', tokenId: meta.id, cuota: 7 } });
+  assert.deepEqual(a, { ok: true, actor: { nombre: 'svc:agente-redes', rol: 'agente', tipo: 'token', tokenId: meta.id, cuota: 7, alcance: null } });
   assert.deepEqual(await e.tokens.autenticar('no-es-un-token'), { ok: false, motivo: 'formato' });
   assert.deepEqual(await e.tokens.autenticar(generador.generar().token), { ok: false, motivo: 'desconocido' });
   e.reloj.avanzar(3 * 86400_000);

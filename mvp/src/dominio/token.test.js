@@ -45,6 +45,7 @@ test('validarCreacion: nombre, rol, vigencia (1 a 365, 90 por defecto) y cuota',
     rol: 'agente',
     dias: 90,
     cuota: null,
+    alcance: null,
   });
   assert.deepEqual(T.validarCreacion({ nombre: 'a1', rol: 'lector', expira_dias: 365, cuota_reservas: 5 }, cfg), {
     ok: true,
@@ -52,6 +53,7 @@ test('validarCreacion: nombre, rol, vigencia (1 a 365, 90 por defecto) y cuota',
     rol: 'lector',
     dias: 365,
     cuota: 5,
+    alcance: null,
   });
   for (const n of ['A', 'a', '-ab', 'Agente', 'a b', 'a_b', 'x'.repeat(42), '', null, 7])
     assert.equal(T.validarCreacion({ nombre: n, rol: 'agente' }, cfg).error, 'nombre_invalido', String(n));

@@ -175,7 +175,7 @@ function crearRepositorioMemoria({ reloj = { ahora: () => new Date() }, pools = 
       por_vencer: estadoToken(t) === 'activo' && t.expira_en.getTime() - ahora().getTime() < 7 * 86400_000,
     };
   const tokens = {
-    async insertarToken({ nombre, prefijo, hash, rol, cuota, creadoPor, dias }) {
+    async insertarToken({ nombre, prefijo, hash, rol, cuota, creadoPor, dias, alcance = null }) {
       if (datos.tokens.some((t) => t.nombre === nombre || t.hash === hash)) throw new ConflictoDeDatos('nombre repetido', '23505');
       const t = {
         id: crypto.randomUUID(),
@@ -184,6 +184,7 @@ function crearRepositorioMemoria({ reloj = { ahora: () => new Date() }, pools = 
         hash,
         rol,
         cuota_reservas: cuota,
+        alcance,
         creado_por: creadoPor,
         creado_en: ahora(),
         expira_en: new Date(ahora().getTime() + dias * 86400_000),

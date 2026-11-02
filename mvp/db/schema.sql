@@ -303,6 +303,12 @@ alter table reservas add column if not exists subred text check (char_length(sub
 insert into esquema_version (version, descripcion) values (11, 'proyecto y subred por segmento')
   on conflict (version) do nothing;
 
+-- Alcance de un token de servicio: grupos de la API que puede usar. Nulo = todo lo que permita su rol (los tokens anteriores).
+alter table tokens_servicio add column if not exists alcance text[] check (alcance <@ array['reservas','consulta','direcciones']::text[] and cardinality(alcance) > 0);
+
+insert into esquema_version (version, descripcion) values (12, 'alcance por token de servicio')
+  on conflict (version) do nothing;
+
 -- Rendimiento de la purga por retención (`npm run purgar`, filtra por fecha). Idempotente y opcional: no cambia la versión del esquema.
 create index if not exists eventos_ts_idx on eventos (ts);
 

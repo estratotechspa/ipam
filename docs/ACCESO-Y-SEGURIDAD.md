@@ -53,6 +53,8 @@ Los usuarios pueden ser `lector`, `solicitante` o `admin`; los tokens, `lector` 
 - Vencen (`TOKEN_VIDA_DIAS`, máximo 365) y se revocan al instante.
 - Tienen **cuota** de reservas vigentes (`CUOTA_RESERVAS_POR_TOKEN`, o una propia por token) y **límite de peticiones**.
 - El campo «último uso» se actualiza como máximo una vez por minuto.
+- Tienen un **alcance**: los grupos de la API que pueden usar (`reservas`, `consulta`, `direcciones`). Fuera de ellos responden `403 fuera_de_alcance` aunque su rol lo permitiera; `GET /me` y `GET /openapi.json` siempre están permitidos. Un token sin alcance (los creados antes de existir) usa todo lo que permite su rol. **Da a cada pipeline solo lo que necesita:** el agente de redes, por ejemplo, `reservas` y `consulta`.
+- **Módulos apagados:** lo que no se usa se apaga con `MODULOS_DESACTIVADOS` (`jira`, `importacion`, `direcciones`, `respaldo`, `excel`); responde 404 `modulo_desactivado`, también el webhook público de Jira.
 - Si un token se filtra: **revócalo** en la interfaz y crea otro.
 
 ## 4 · Secretos

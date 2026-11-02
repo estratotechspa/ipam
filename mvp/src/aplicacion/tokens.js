@@ -10,6 +10,7 @@ const presentar = (t) => ({
   prefijo: t.prefijo,
   rol: t.rol,
   cuota_reservas: t.cuota_reservas,
+  alcance: t.alcance ?? null,
   creado_por: t.creado_por,
   creado_en: t.creado_en,
   expira_en: t.expira_en,
@@ -35,6 +36,7 @@ function crearTokens({ repo, generador, config }) {
         hash,
         rol: v.rol,
         cuota: v.cuota,
+        alcance: v.alcance,
         creadoPor: actor.nombre,
         dias: v.dias,
       });
@@ -61,7 +63,7 @@ function crearTokens({ repo, generador, config }) {
 
   /**
    * Autentica un token presentado en `Authorization: Bearer`. Devuelve el actor o el motivo del rechazo.
-   * @returns {Promise<{ok: true, actor: {nombre: string, rol: string, tipo: 'token', tokenId: string, cuota: number|null}} | {ok: false, motivo: 'formato'|'desconocido'|'vencido'|'revocado', nombre?: string}>}
+   * @returns {Promise<{ok: true, actor: {nombre: string, rol: string, tipo: 'token', tokenId: string, cuota: number|null, alcance: string[]|null}} | {ok: false, motivo: 'formato'|'desconocido'|'vencido'|'revocado', nombre?: string}>}
    */
   async function autenticar(token) {
     if (!T.pareceToken(token)) return { ok: false, motivo: 'formato' };
@@ -71,7 +73,7 @@ function crearTokens({ repo, generador, config }) {
     if (t.estado === 'revocado') return { ok: false, motivo: 'revocado', nombre: t.nombre };
     if (t.estado === 'vencido') return { ok: false, motivo: 'vencido', nombre: t.nombre };
     await repo.tocarUltimoUso(t.id); // como máximo una vez por minuto (lo decide la base)
-    return { ok: true, actor: { nombre: `svc:${t.nombre}`, rol: t.rol, tipo: 'token', tokenId: t.id, cuota: t.cuota_reservas } };
+    return { ok: true, actor: { nombre: `svc:${t.nombre}`, rol: t.rol, tipo: 'token', tokenId: t.id, cuota: t.cuota_reservas, alcance: t.alcance ?? null } };
   }
 
   return { crear, listar, revocar, autenticar };

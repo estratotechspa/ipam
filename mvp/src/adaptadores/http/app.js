@@ -24,6 +24,8 @@ const metricasRutas = require('./rutas/metricas');
 const { construirOpenApi } = require('../../openapi');
 const { crearValidador } = require('./validacion');
 const { crearMiddlewareLimite } = require('./middleware/limite');
+const { apagado } = require('../../dominio/modulos');
+const contexto = require('./contexto');
 
 const RUTAS_IMPORTAR = new Set(['/api/v1/importar', '/api/v1/importaciones/simular', '/api/v1/importaciones/aplicar']);
 
@@ -94,6 +96,15 @@ function crearApp(deps) {
   const jsonGrande = express.json({ limit: config.http.jsonLimiteImportar, verify: guardarRaw });
   app.use((req, res, next) => (RUTAS_IMPORTAR.has(req.path) ? jsonGrande : jsonNormal)(req, res, next));
 
+  // Módulos apagados por configuración (MODULOS_DESACTIVADOS): 404 antes de cualquier otra cosa, también para el webhook público.
+  app.use((req, res, next) =>
+    apagado(config.modulos.desactivados, req.path)
+      ? res
+          .status(404)
+          .json({ error: 'modulo_desactivado', mensaje: 'Este módulo está desactivado en este entorno.', request_id: contexto.actual().request_id })
+      : next(),
+  );
+
   // Públicas (no exigen sesión): sondas, marca, /auth.
   sistema.montar(app, { db, estado, log });
   metricasRutas.montar(app, { metricas });
@@ -114,7 +125,7 @@ function crearApp(deps) {
     }),
   );
   app.use((req, _res, next) => {
-    if (req.actor) require('./contexto').actual().actor = req.actor.nombre;
+    if (req.actor) contexto.actual().actor = req.actor.nombre;
     next();
   });
   app.use(crearMiddlewareLimite({ limite }));

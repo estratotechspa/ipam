@@ -290,3 +290,28 @@ test('los tokens nunca aparecen en los logs del servicio', opts, async () => {
   for (const t of creados) assert.ok(!log.includes(t), 'un token se coló en los logs');
   assert.ok(!/ipam_[A-Za-z0-9_-]{30,}/.test(log), 'ningún texto con forma de token en los logs');
 });
+
+test('alcance: un token limitado solo usa sus grupos; sin alcance usa todo lo de su rol; el alcance se valida', opts, async () => {
+  const consulta = await crearToken('solo-consulta', 'agente', { alcance: ['consulta'] });
+  assert.deepEqual(consulta.alcance, ['consulta']);
+  const h = bearer(consulta.token);
+  assert.equal((await llamar('GET', '/api/v1/pools', undefined, h)).status, 200);
+  assert.equal((await llamar('GET', '/api/v1/asignaciones', undefined, h)).status, 200);
+  assert.equal((await llamar('GET', '/api/v1/me', undefined, h)).status, 200, 'siempre permitido');
+  const fuera = await json(await llamar('POST', '/api/v1/reservas', { ambiente: 'qa', tipo: 'Nodos', mascara: 28, vpc: 'x' }, h));
+  assert.deepEqual({ e: fuera.estado, c: fuera.cuerpo.error }, { e: 403, c: 'fuera_de_alcance' });
+  assert.equal((await llamar('GET', '/api/v1/direcciones', undefined, h)).status, 403);
+
+  const reservas = await crearToken('solo-reservas', 'agente', { alcance: ['reservas'] });
+  assert.equal((await llamar('GET', '/api/v1/pools', undefined, bearer(reservas.token))).status, 403);
+  assert.equal((await reservar(reservas.token)).status, 201);
+
+  const libre = await crearToken('sin-alcance', 'agente');
+  assert.equal(libre.alcance, null);
+  assert.equal((await llamar('GET', '/api/v1/pools', undefined, bearer(libre.token))).status, 200);
+
+  for (const malo of [[], ['otro'], 'reservas'])
+    assert.equal((await admin('POST', '/api/v1/tokens', { nombre: 'malo-alcance', rol: 'agente', alcance: malo })).status, 400, JSON.stringify(malo));
+  const lista = await (await admin('GET', '/api/v1/tokens')).json();
+  assert.deepEqual(lista.find((t) => t.nombre === 'solo-consulta').alcance, ['consulta']);
+});

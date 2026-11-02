@@ -62,7 +62,7 @@ const SQL_RESERVA_POR_ID = `select ${COLUMNAS_RESERVA} from reservas where id=$1
 const SQL_RESERVA_POR_ID_BLOQUEADA = `${SQL_RESERVA_POR_ID} for update`; // FOR UPDATE: nadie más cambia esta reserva mientras decidimos
 
 // Tokens de servicio (nunca se devuelve el hash). El estado y el «por vencer» se calculan con el reloj de la base.
-const COLUMNAS_TOKEN = `id, nombre, prefijo, rol, cuota_reservas, creado_por, creado_en, expira_en, ultimo_uso, revocado_en,
+const COLUMNAS_TOKEN = `id, nombre, prefijo, rol, cuota_reservas, alcance, creado_por, creado_en, expira_en, ultimo_uso, revocado_en,
   case when revocado_en is not null then 'revocado' when expira_en <= now() then 'vencido' else 'activo' end as estado,
   (revocado_en is null and expira_en > now() and expira_en < now() + interval '7 days') as por_vencer`;
 
@@ -425,15 +425,15 @@ function consultasDeAdministracion(db) {
       ]);
     },
     // ---------- Tokens de servicio ----------
-    async insertarToken({ nombre, prefijo, hash, rol, cuota, creadoPor, dias }) {
+    async insertarToken({ nombre, prefijo, hash, rol, cuota, creadoPor, dias, alcance = null }) {
       return (
         await db
           .query(
             `with t as (
-           insert into tokens_servicio (nombre, prefijo, hash, rol, cuota_reservas, creado_por, expira_en)
-           values ($1,$2,$3,$4,$5,$6, now() + make_interval(days => $7::int)) returning *)
+           insert into tokens_servicio (nombre, prefijo, hash, rol, cuota_reservas, creado_por, expira_en, alcance)
+           values ($1,$2,$3,$4,$5,$6, now() + make_interval(days => $7::int), $8) returning *)
          select ${COLUMNAS_TOKEN} from t`,
-            [nombre, prefijo, hash, rol, cuota, creadoPor, dias],
+            [nombre, prefijo, hash, rol, cuota, creadoPor, dias, alcance],
           )
           .catch((e) => {
             throw traducir(e);

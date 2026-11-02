@@ -156,6 +156,11 @@ def('LIMITE_ALMACEN', 'texto', 'postgres', 'Dónde se cuentan las peticiones: «
   opciones: ['postgres', 'memoria'],
 });
 
+// Módulos de la API
+def('MODULOS_DESACTIVADOS', 'lista', [], 'Módulos de la API que quedan apagados (responden 404): jira, importacion, direcciones, respaldo, excel.', {
+  ejemplo: 'jira,importacion',
+});
+
 // Métricas y eventos
 def('METRICS_TOKEN', 'texto', '', 'Token de lectura para GET /metrics (Authorization: Bearer). Sin token ni redes permitidas, /metrics queda deshabilitado.', {
   secreta: true,
@@ -375,6 +380,9 @@ const config = {
   get retencion() {
     return { dias: valor('RETENCION_DIAS') };
   },
+  get modulos() {
+    return { desactivados: valor('MODULOS_DESACTIVADOS') };
+  },
   get metricas() {
     return { token: texto('METRICS_TOKEN'), redesPermitidas: valor('METRICS_ALLOW_CIDRS') };
   },
@@ -509,11 +517,15 @@ function validarReservasEventosYTrazas({ errores, intenta }) {
 function validar() {
   const ctx = crearContexto();
   // Cada grupo se lee dentro de intenta(): reúne todos los errores de tipo/rango/opciones.
-  for (const g of ['http', 'bd', 'auth', 'reservas', 'limite', 'metricas', 'eventos', 'otel', 'jira', 'marca', 'webhookJira']) ctx.intenta(() => config[g]);
+  for (const g of ['http', 'bd', 'auth', 'reservas', 'limite', 'metricas', 'eventos', 'otel', 'jira', 'marca', 'webhookJira', 'modulos'])
+    ctx.intenta(() => config[g]);
   for (const n of DEFINICIONES.keys()) {
     if (process.env[n] && process.env[`${n}_FILE`]) ctx.avisos.push(`${n} y ${n}_FILE están definidas a la vez: se usa ${n}.`);
   }
   validarBaseDeDatos(ctx);
+  const raros = ctx.intenta(() => require('./dominio/modulos').desconocidos(valor('MODULOS_DESACTIVADOS'))) || [];
+  if (raros.length)
+    ctx.errores.push(`MODULOS_DESACTIVADOS tiene nombres desconocidos: ${raros.join(', ')}. Válidos: ${require('./dominio/modulos').NOMBRES.join(', ')}.`);
   validarAutenticacion(ctx);
   validarReservasEventosYTrazas(ctx);
   return { errores: [...new Set(ctx.errores)], avisos: [...new Set(ctx.avisos)] };

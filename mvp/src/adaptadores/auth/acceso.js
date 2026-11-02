@@ -3,6 +3,7 @@
 // Deja en la petición: req.actor = {nombre, rol, tipo} (y por compatibilidad req.usuario / req.rol / req.nombre).
 const { config } = require('../../config');
 const { tiene } = require('../../dominio/roles');
+const { permite } = require('../../dominio/alcance');
 const S = require('./sesion');
 const contexto = require('../http/contexto');
 const { igualConstante, verificar } = require('./contrasena');
@@ -129,7 +130,15 @@ function crearAcceso({ rechazo = () => {}, autenticarToken, auditar = async () =
           .status(401)
           .json({ error: 'token_invalido', mensaje: 'Token inválido, vencido o revocado.', request_id: contexto.actual().request_id });
       }
-      fijar(r.actor.nombre, r.actor.rol, 'token', r.actor.nombre, { tokenId: r.actor.tokenId, cuota: r.actor.cuota });
+      fijar(r.actor.nombre, r.actor.rol, 'token', r.actor.nombre, { tokenId: r.actor.tokenId, cuota: r.actor.cuota, alcance: r.actor.alcance });
+      if (!permite(r.actor.alcance, req.method, req.path)) {
+        rechazo('token_fuera_de_alcance', req);
+        return res.status(403).json({
+          error: 'fuera_de_alcance',
+          mensaje: 'Este token no tiene permiso para usar esta parte de la API (su alcance: ' + r.actor.alcance.join(', ') + ').',
+          request_id: contexto.actual().request_id,
+        });
+      }
       return next();
     }
     if (modo === 'none') fijar('anonimo', 'admin', 'anonimo');

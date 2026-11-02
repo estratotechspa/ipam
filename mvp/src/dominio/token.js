@@ -12,6 +12,7 @@ const PREFIJO_LARGO = 9; // «ipam_» + 4 caracteres: sirve para reconocer un to
 const MAX_DIAS = 365;
 const DIAS_POR_VENCER = 7;
 const ROLES = ['lector', 'agente'];
+const { validarAlcance } = require('./alcance');
 
 /** ¿Parece un token IPAM? (comprobación barata antes de ir a la base) @param {unknown} v */
 const pareceToken = (v) => typeof v === 'string' && FORMATO.test(v);
@@ -21,9 +22,9 @@ const prefijoDe = (token) => token.slice(0, PREFIJO_LARGO);
 
 /**
  * Valida la petición de crear un token.
- * @param {{nombre?: unknown, rol?: unknown, expira_dias?: unknown, cuota_reservas?: unknown}} e
+ * @param {{nombre?: unknown, rol?: unknown, expira_dias?: unknown, cuota_reservas?: unknown, alcance?: unknown}} e
  * @param {{vidaDefectoDias: number}} cfg
- * @returns {{ok: true, nombre: string, rol: string, dias: number, cuota: number|null} | {ok: false, error: string, mensaje: string}}
+ * @returns {{ok: true, nombre: string, rol: string, dias: number, cuota: number|null, alcance: string[]|null} | {ok: false, error: string, mensaje: string}}
  */
 function validarCreacion(e, { vidaDefectoDias }) {
   const malo = (/** @type {string} */ error, /** @type {string} */ mensaje) => ({ ok: /** @type {false} */ (false), error, mensaje });
@@ -40,7 +41,9 @@ function validarCreacion(e, { vidaDefectoDias }) {
     cuota = Number(e.cuota_reservas);
     if (!Number.isInteger(cuota) || cuota < 1 || cuota > 100000) return malo('cuota_invalida', 'cuota_reservas debe ser un entero de 1 en adelante.');
   }
-  return { ok: true, nombre: e.nombre, rol: e.rol, dias, cuota };
+  const al = validarAlcance(e.alcance);
+  if (!al.ok) return malo(al.error, al.mensaje);
+  return { ok: true, nombre: e.nombre, rol: e.rol, dias, cuota, alcance: al.alcance };
 }
 
 /** Estado según las fechas. @param {{expira_en: Date|string, revocado_en?: Date|string|null}} t @param {Date} ahora */
