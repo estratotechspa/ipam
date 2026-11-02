@@ -269,3 +269,15 @@ tr.seg-reservado td:first-child{box-shadow:inset 3px 0 0 #8a4b00}
 .menu-item{background:none;border:0;text-align:left;font:inherit;color:inherit;padding:var(--sp-2) var(--sp-3);border-radius:var(--r-md);cursor:pointer}
 .menu-item:hover,.menu-item:focus-visible{background:var(--line)}.menu-item.peligro{color:#c62828}
 .filtros [hidden]{display:none}.filtros .casilla{display:flex;align-items:baseline;gap:var(--sp-2);min-width:0}.filtros .casilla input{width:auto;min-height:0;margin:0}
+
+/* Pools: cada fila despliega sus segmentos en la misma tabla (además de la ficha en el panel lateral). */
+.celda-pool{white-space:nowrap}
+.btn-expandir{background:none;border:1px solid transparent;border-radius:var(--r-md);padding:2px 4px;margin-right:var(--sp-1);cursor:pointer;color:inherit;vertical-align:middle;line-height:0}
+.btn-expandir:hover{background:var(--line)}
+.btn-expandir svg{transition:transform .15s}
+.btn-expandir[aria-expanded=true] svg{transform:rotate(90deg)}
+@media (prefers-reduced-motion:reduce){.btn-expandir svg{transition:none}}
+.barra-pools{display:flex;gap:var(--sp-2);margin:0 0 var(--sp-2)}
+tbody tr.detalle-pool:hover td{background:transparent}
+tr.detalle-pool>td{background:var(--line2);padding:var(--sp-3) var(--sp-4)}
+tr.detalle-pool .tablewrap{margin:0}

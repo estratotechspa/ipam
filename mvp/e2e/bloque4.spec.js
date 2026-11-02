@@ -27,7 +27,7 @@ test('pools: indicadores y barras de uso con umbrales', async ({ page }) => {
 
 test('ficha del pool: mapa de bloques', async ({ page }) => {
   await page.goto('/');
-  const primero = page.locator('#pools tbody tr button').first();
+  const primero = page.locator('#pools [data-ficha-pool]').first(); // el nombre del pool (la flecha de al lado despliega sus segmentos)
   await primero.click();
   await expect(page.getByRole('dialog').locator('.mapa').first()).toBeVisible();
   await page.keyboard.press('Escape');

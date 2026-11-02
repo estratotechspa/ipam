@@ -127,3 +127,40 @@ test('pools: «Nuevo pool» es un botón visible y el formulario permite elegir 
   await expect(page.locator('#np-ambiente option')).toHaveText(['Elige…', 'dev', 'qa', 'pre', 'prod']);
   await expect(page.locator('#pools details', { hasText: 'Nuevo pool' })).toContainText('en el ambiente que corresponda');
 });
+
+test('pools: cada fila despliega y contrae sus segmentos en la misma pestaña, y el nombre sigue abriendo la ficha lateral', async ({ page, request }) => {
+  const marca = `desplegar-${Date.now()}`;
+  const a = await (await request.post('/api/v1/solicitudes', { headers: H, data: { pool: 'gke-nodos-qa', vpc: marca, mascara: 28 } })).json();
+  await page.goto('/');
+  await page.locator('#nav').getByRole('button', { name: 'Pools', exact: true }).click();
+  const boton = page.getByRole('button', { name: 'Mostrar los segmentos de gke-nodos-qa' });
+  await expect(boton).toHaveAttribute('aria-expanded', 'false');
+  await boton.click();
+  const detalle = page.locator('#seg-pool-gke-nodos-qa');
+  await expect(detalle).toBeVisible();
+  await expect(detalle).toContainText(marca);
+  await expect(page.getByRole('button', { name: 'Ocultar los segmentos de gke-nodos-qa' })).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByRole('dialog')).toHaveCount(0); // sin panel lateral
+
+  // Un segmento asignado abre su ficha en el panel lateral (la otra opción).
+  await detalle.getByRole('button', { name: new RegExp(a.cidr.replace(/[./]/g, '\\$&')) }).click();
+  await expect(page.getByRole('dialog')).toContainText(marca);
+  await page.getByRole('dialog').getByRole('button', { name: 'Cerrar' }).click();
+
+  // Contraer una fila, y expandir / contraer todos.
+  await page.getByRole('button', { name: 'Ocultar los segmentos de gke-nodos-qa' }).click();
+  await expect(detalle).toBeHidden();
+  await page.getByRole('button', { name: 'Expandir todos' }).click();
+  const filas = await page.locator('#pools [data-expandir-pool]').count();
+  await expect(page.locator('#pools tr.detalle-pool:not([hidden])')).toHaveCount(filas);
+  await expect(detalle).toContainText(marca);
+  await page.getByRole('button', { name: 'Contraer todos' }).click();
+  await expect(page.locator('#pools tr.detalle-pool:not([hidden])')).toHaveCount(0);
+
+  // El nombre del pool sigue abriendo la ficha en el panel lateral.
+  await page.locator('#pools').getByRole('button', { name: 'gke-nodos-qa', exact: true }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.getByRole('dialog').getByRole('button', { name: 'Cerrar' }).click();
+
+  await request.delete(`/api/v1/asignaciones/${a.id}`, { headers: H });
+});
