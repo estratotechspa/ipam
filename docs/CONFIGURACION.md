@@ -28,8 +28,8 @@ Tipos: *texto*, *entero*, *booleano* (`true`/`false`) y *lista* (valores separad
 | `BARREDOR_INTERVALO_SEGUNDOS` | entero | 60 | Cada cuánto corre el barredor (limpia reservas vencidas y contadores).  |
 | `CUOTA_RESERVAS_POR_TOKEN` | entero | 20 | Reservas «reservada» vigentes simultáneas por token (se puede fijar otra al crearlo).  |
 | `LIMITE_ALMACEN` | texto | postgres | Dónde se cuentan las peticiones: «postgres» (varias réplicas) o «memoria» (solo pruebas). Opciones: postgres, memoria. |
+| `MODULOS_DESACTIVADOS` | lista | (vacía) | Módulos de la API que quedan apagados (responden 404): jira, importacion, direcciones, respaldo, excel. Ej.: `jira,importacion` |
 | `ENABLE_SIMULADOR` | booleano | false | Deja disponible POST /api/v1/jira/simular en producción (fuera de producción siempre lo está). Solo demos: crea reservas reales.  |
-| `MODULOS_DESACTIVADOS` | lista | (vacío) | Módulos de la API que quedan apagados (responden 404): jira, importacion, direcciones, respaldo, excel. Ej.: `jira,importacion` |
 
 ## Límites de cuerpo
 
