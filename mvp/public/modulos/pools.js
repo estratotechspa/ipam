@@ -25,19 +25,29 @@ export async function renderPools() {
   <p class="nota">${I('info')} Los solapamientos no son un indicador: la base de datos los impide con una restricción de exclusión.</p>
   <div id="pool-nuevo"></div><div id="pools-msg" aria-live="polite"></div>
   <p class="muted leyenda"><span><span class="muestra asig"></span> asignado</span> <span><span class="muestra res"></span> reservado</span> <span>Haz clic en un pool para ver su ficha.</span></p>
-  <div class="card tablewrap" tabindex="0" role="region" aria-label="Pools"><table><thead><tr><th scope="col">Pool</th><th scope="col">Tipo</th><th scope="col">Ambiente</th><th scope="col">Proveedor</th><th scope="col">CIDR base</th><th scope="col">Asig.</th><th scope="col">Reservas</th><th scope="col">Uso</th></tr></thead><tbody>
+  <div class="card tablewrap" tabindex="0" role="region" aria-label="Pools"><table><thead><tr><th scope="col">Pool</th><th scope="col">Tipo</th><th scope="col">Ambiente</th><th scope="col">Proveedor</th><th scope="col">CIDR base</th><th scope="col">Asig.</th><th scope="col">Reservas</th><th scope="col">Uso</th>${puede('admin') ? '<th scope="col"><span class="sr-only">Acciones</span></th>' : ''}</tr></thead><tbody>
   ${pools
     .map(
       (
         p,
       ) => `<tr><td><button type="button" class="enlace" data-ficha-pool="${esc(p.id)}">${esc(p.id)}</button></td><td>${esc(p.tipo)}</td><td>${tag(p.ambiente)}</td><td>${esc(p.proveedor)}</td><td><code>${esc(p.cidr)}</code></td><td>${p.asignaciones}</td><td>${p.reservas_vigentes || 0}</td>
-  <td>${barraUsoHtml(p.uso, p.uso_reservado || 0)}</td></tr>`,
+  <td>${barraUsoHtml(p.uso, p.uso_reservado || 0)}</td>${puede('admin') ? `<td class="col-menu"><button type="button" class="btn-menu" data-menu-pool="${esc(p.id)}" aria-haspopup="menu" aria-expanded="false" aria-label="Acciones de ${esc(p.id)}">⋮</button></td>` : ''}</tr>`,
     )
     .join('')}</tbody></table></div>`;
     $('pools').prepend(barraFiltro(todos, renderPools));
     $('pools')
       .querySelectorAll('[data-ficha-pool]')
       .forEach((b) => (b.onclick = () => fichaPool(b.dataset.fichaPool)));
+    $('pools')
+      .querySelectorAll('[data-menu-pool]')
+      .forEach(
+        (b) =>
+          (b.onclick = () =>
+            menuPool(
+              b,
+              pools.find((p) => p.id === b.dataset.menuPool),
+            )),
+      );
     const imp = $('btn-importar');
     if (imp) imp.onclick = () => show('importar');
     if (puede('admin')) $('pool-nuevo').replaceWith(formularioNuevoPool(renderPools));
@@ -48,6 +58,66 @@ export async function renderPools() {
   } catch (e) {
     fail('pools', e);
   }
+}
+
+/** Menú de tres puntos de una fila: ver ficha o eliminar. Va con position:fixed para que la tabla con scroll no lo recorte. */
+function menuPool(boton, p) {
+  document.querySelectorAll('.menu-pool').forEach((m) => m.remove());
+  const cerrar = () => {
+    menu.remove();
+    boton.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('click', fuera, true);
+    document.removeEventListener('keydown', tecla, true);
+    window.removeEventListener('scroll', colocar, true);
+  };
+  const fuera = (e) => {
+    if (!menu.contains(e.target)) cerrar();
+  };
+  const tecla = (e) => {
+    if (e.key === 'Escape') {
+      cerrar();
+      boton.focus();
+    }
+  };
+  const item = (texto, peligro, accion) =>
+    h('button', { type: 'button', role: 'menuitem', class: 'menu-item' + (peligro ? ' peligro' : ''), onclick: () => (cerrar(), accion()) }, texto);
+  const menu = h(
+    'div',
+    { class: 'menu-pool', role: 'menu', 'aria-label': 'Acciones de ' + p.id },
+    item('Ver ficha', false, () => fichaPool(p.id)),
+    item('Eliminar pool', true, () => eliminarPool(p)),
+  );
+  document.body.append(menu);
+  const colocar = () => {
+    const r = boton.getBoundingClientRect();
+    menu.style.top = `${Math.min(r.bottom + 4, window.innerHeight - menu.offsetHeight - 8)}px`;
+    menu.style.left = `${Math.max(8, r.right - menu.offsetWidth)}px`;
+  };
+  colocar();
+  boton.setAttribute('aria-expanded', 'true');
+  menu.querySelector('button').focus();
+  document.addEventListener('click', fuera, true);
+  document.addEventListener('keydown', tecla, true);
+  window.addEventListener('scroll', colocar, true);
+}
+
+/** Confirma y elimina un pool vacío. Si tiene contenido, la API responde pool_en_uso y se muestra el motivo. Devuelve true si se eliminó. */
+async function eliminarPool(p, estado = $('pools-msg')) {
+  const seguro = await confirmar({
+    titulo: `¿Eliminar el pool ${p.id}?`,
+    mensaje: `${p.cidr}. Solo se puede si no tiene segmentos, reservas vigentes ni IPs.`,
+    confirmar: 'Eliminar pool',
+    peligro: true,
+  });
+  if (!seguro) return false;
+  const r = await api('/api/v1/pools/' + encodeURIComponent(p.id), { method: 'DELETE' });
+  if (!r.ok) {
+    msg(estado, errorApi(r), 'error');
+    return false;
+  }
+  ESTADO.poolsAviso = `Pool ${p.id} eliminado.`;
+  show('pools');
+  return true;
 }
 
 /* ===== Pools: alta (admin) ===== */
@@ -122,18 +192,7 @@ export function accionesPool(p, cerrar) {
     fichaPool(p.id);
   };
   const eliminar = async () => {
-    const seguro = await confirmar({
-      titulo: `¿Eliminar el pool ${p.id}?`,
-      mensaje: `${p.cidr}. Solo se puede si no tiene segmentos, reservas vigentes ni IPs.`,
-      confirmar: 'Eliminar pool',
-      peligro: true,
-    });
-    if (!seguro) return;
-    const r = await api('/api/v1/pools/' + encodeURIComponent(p.id), { method: 'DELETE' });
-    if (!r.ok) return msg(estado, errorApi(r), 'error');
-    ESTADO.poolsAviso = `Pool ${p.id} eliminado.`;
-    cerrar();
-    show('pools');
+    if (await eliminarPool(p, estado)) cerrar();
   };
   return h(
     'details',

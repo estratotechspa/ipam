@@ -3,6 +3,12 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y versionado semántico.
 
 ## [Sin publicar]
+### Interfaz
+- **Pools: menú de tres puntos en cada fila** (solo admin) con «Ver ficha» y «Eliminar pool»; antes había que abrir la ficha. La regla no cambia: solo se elimina un pool sin asignaciones, reservas vigentes ni IPs, y si no, se muestra el motivo.
+
+### Datos
+- Nuevo `mvp/db/limpiar-semilla.sql`: quita de una base ya cargada los datos de ejemplo (asignaciones con origen `semilla` y los pools de `seed.sql`/`seed-poc.sql` que queden vacíos). No toca pools con trabajo real. Termina en `rollback` hasta que se descomente `commit`.
+
 ### Correcciones
 - **Idempotencia de reservas:** repetir una `Idempotency-Key` con otro tamaño (`mascara`), VLAN, nombre de VLAN o ticket ahora responde `409 idempotencia_conflicto`. Antes solo se comparaban pool, CIDR y VPC, y un cambio de máscara devolvía en silencio la reserva original (un /26 donde se había pedido un /27). Lo que el agente no indica sigue sin contar.
 
