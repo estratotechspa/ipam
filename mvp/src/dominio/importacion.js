@@ -67,8 +67,7 @@ function validarFila(/** @type {FilaEntrada} */ f, /** @type {{proveedor?: strin
       .slice(0, 120) || // archivos antiguos usaban «proyecto» como nombre de la VPC
     String(f.descripcion || '')
       .trim()
-      .slice(0, 120) ||
-    'sin-nombre';
+      .slice(0, 120);
   const v = validarVlan(f);
   if (!v.ok) return { error: v.mensaje };
   const nom = validarNombres(f);

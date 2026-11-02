@@ -92,7 +92,7 @@ const clave = {
   },
   pool: (x) => x.pool_id,
   proyecto: (x) => x.proyecto || '',
-  vpc: (x) => x.vpc,
+  vpc: (x) => x.vpc || '',
   subred: (x) => x.subred || '',
   vlan: (x) => (x.vlan ? Number(x.vlan) : Infinity),
   dir: (x) => tamanoCidr(x.cidr),
@@ -152,7 +152,7 @@ const celdaAcciones = (x, puedeOperar) => {
 const fila = (x, puedeOperar) =>
   `<tr class="seg-${x.tipo}"><td><span class="tag ${esc(x.marca)}">${ETIQUETA[x.marca]}</span></td>
   <td>${x.tipo === 'asignado' ? `<button type="button" class="enlace" data-ficha-asig="${esc(x.ref.id)}"><code>${esc(x.id)}</code></button>` : `<code>${esc(x.id)}</code>`}</td>
-  <td><code>${esc(x.cidr)}</code></td><td>${esc(x.pool_id)}</td><td>${esc(x.proyecto || '—')}</td><td>${esc(x.vpc)}</td><td>${esc(x.subred || '—')}</td><td>${esc(textoVlan(x))}</td><td>${fmt(size(x.cidr))}</td><td>${esc(x.solicitante)}</td><td>${esc(x.origen)}</td><td>${esc(x.ticket)}</td><td>${celdaFecha(x)}</td>
+  <td><code>${esc(x.cidr)}</code></td><td>${esc(x.pool_id)}</td><td>${esc(x.proyecto || '—')}</td><td>${esc(x.vpc || '—')}</td><td>${esc(x.subred || '—')}</td><td>${esc(textoVlan(x))}</td><td>${fmt(size(x.cidr))}</td><td>${esc(x.solicitante)}</td><td>${esc(x.origen)}</td><td>${esc(x.ticket)}</td><td>${celdaFecha(x)}</td>
   <td>${celdaAcciones(x, puedeOperar)}</td></tr>`;
 
 const textoVacio = (vista, filtrando) =>

@@ -118,8 +118,7 @@ test('los ejemplos de peticiones y respuestas en cada operación cumplen el esqu
 test('la validación de entrada sale del contrato: campos faltantes, desconocidos y de tipo equivocado se rechazan con mensajes en español', () => {
   const v = crearValidador(doc);
   assert.equal(v.validar('ReservaCrear', { vpc: 'v', mascara: 24, ambiente: 'qa', tipo: 'Nodos' }).ok, true);
-  const falta = v.validar('ReservaCrear', { mascara: 24 });
-  assert.deepEqual(falta.errores, [{ campo: '/vpc', mensaje: 'es obligatorio' }]);
+  assert.equal(v.validar('ReservaCrear', { mascara: 24, ambiente: 'qa', tipo: 'Nodos' }).ok, true, 'la VPC es opcional');
   const extra = v.validar('ReservaCrear', { vpc: 'v', mascar: 24 });
   assert.deepEqual(extra.errores, [{ campo: '/mascar', mensaje: 'campo no permitido' }]);
   assert.deepEqual(v.validar('ReservaCrear', { vpc: 5 }).errores, [{ campo: '/vpc', mensaje: 'debe ser texto' }]);

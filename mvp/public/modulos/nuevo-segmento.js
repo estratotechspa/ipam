@@ -1,6 +1,6 @@
 // Formulario «Nuevo segmento»: una reserva (pide aprobación) o, solo para admin, una asignación definitiva e inmediata.
 import { api, errorApi, h, ico, msg, puede } from './base.js';
-import { ASIG, camposVlan, cuerpoVlan, selectorPoolMascara } from './asignaciones.js';
+import { ASIG, campoRed, cuerpoRed, selectorPoolMascara } from './asignaciones.js';
 import { RES } from './reservas.js';
 import { confirmar, vincularCidr } from './ui.js';
 
@@ -9,10 +9,9 @@ export function formularioNuevoSegmento(pools, estado, recargar) {
   const esAdmin = puede('admin');
   const { pool, mascara, disp } = selectorPoolMascara('ns', pools);
   const proyecto = h('input', { id: 'ns-proyecto', maxlength: 120, placeholder: 'opcional: p. ej. tienda-web' });
-  const vpc = h('input', { id: 'ns-vpc', required: true, maxlength: 120, placeholder: 'vpc-mi-proyecto' });
-  const subred = h('input', { id: 'ns-subred', maxlength: 80, placeholder: 'opcional: p. ej. subnet-nodos-qa' });
+  const vpc = h('input', { id: 'ns-vpc', maxlength: 120, placeholder: 'opcional: p. ej. vpc-mi-proyecto' });
   const cidr = h('input', { id: 'ns-cidr', placeholder: 'opcional: vacío = el primer rango libre' });
-  const vl = camposVlan('ns');
+  const red = campoRed('ns');
   const ticket = h('input', { id: 'ns-ticket', maxlength: 60, placeholder: 'opcional (si no, se genera NET-xxx)' });
   const ttl = h('input', { id: 'ns-ttl', type: 'number', min: 1, max: 72, value: 24 });
   // Reservar es lo normal y lo seguro: la casilla viene marcada. Quien no es admin no la ve y siempre reserva.
@@ -48,7 +47,7 @@ export function formularioNuevoSegmento(pools, estado, recargar) {
         { class: 'alert', role: 'alert' },
         h('b', null, ico('alerta'), ' Solapamiento detectado'),
         h('br'),
-        `${pedido || 'El rango pedido'} se cruza con ${d.conflicto.cidr} de ${d.conflicto.vpc} (pidió ${d.conflicto.solicitante}, ticket ${d.conflicto.ticket}). No se creó nada.`,
+        `${pedido || 'El rango pedido'} se cruza con ${d.conflicto.cidr} de ${d.conflicto.vpc || 'una red sin VPC'} (pidió ${d.conflicto.solicitante}, ticket ${d.conflicto.ticket}). No se creó nada.`,
       ),
       h('b', null, 'Segmentos libres sugeridos'),
       ...((d.sugeridos || []).length
@@ -80,9 +79,8 @@ export function formularioNuevoSegmento(pools, estado, recargar) {
     if (!pool.value) return msg(res, 'Elige un pool.', 'error');
     if (!cidr.value.trim() && !mascara.value) return msg(res, 'Elige una máscara o escribe un CIDR.', 'error');
     const comoReserva = esReserva();
-    const cuerpo = { pool: pool.value, vpc: vpc.value.trim(), ...cuerpoVlan(vl) };
+    const cuerpo = { pool: pool.value, vpc: vpc.value.trim(), ...cuerpoRed(red) };
     if (proyecto.value.trim()) cuerpo.proyecto = proyecto.value.trim();
-    if (subred.value.trim()) cuerpo.subred = subred.value.trim();
     if (cidr.value.trim()) cuerpo.cidr = cidr.value.trim();
     else cuerpo.mascara = +mascara.value;
     if (ticket.value.trim()) cuerpo.ticket = ticket.value.trim();
@@ -90,7 +88,7 @@ export function formularioNuevoSegmento(pools, estado, recargar) {
     else if (
       !(await confirmar({
         titulo: '¿Asignar ahora, sin aprobación?',
-        mensaje: `${cuerpo.cidr || `Un /${cuerpo.mascara}`} en ${cuerpo.pool} para ${cuerpo.vpc}. Se entrega de forma definitiva y de inmediato; para deshacerlo hay que liberar el segmento.`,
+        mensaje: `${cuerpo.cidr || `Un /${cuerpo.mascara}`} en ${cuerpo.pool}${cuerpo.vpc ? ' para ' + cuerpo.vpc : ''}. Se entrega de forma definitiva y de inmediato; para deshacerlo hay que liberar el segmento.`,
         confirmar: 'Asignar ahora',
         peligro: true,
       }))
@@ -108,7 +106,7 @@ export function formularioNuevoSegmento(pools, estado, recargar) {
           texto: `Reservado ${d.cidr} en ${d.pool_id} por ${ttl.value || 24} h. Falta la aprobación de un admin para que sea asignación; si no se aprueba, expira sola.`,
           tipo: 'ok',
         };
-      else ASIG.aviso = `Asignado ${d.cidr} (${d.codigo || 'sin ID'}) en ${d.pool_id} para ${d.vpc}. Ticket ${d.ticket}.`;
+      else ASIG.aviso = `Asignado ${d.cidr} (${d.codigo || 'sin ID'}) en ${d.pool_id}${d.vpc ? ' para ' + d.vpc : ''}. Ticket ${d.ticket}.`;
       ASIG.formAbierto = false;
       return recargar();
     }
@@ -134,12 +132,10 @@ export function formularioNuevoSegmento(pools, estado, recargar) {
         : null,
       campo('Pool', pool),
       campo('Proyecto', proyecto),
-      campo('VPC', vpc),
-      campo('Nombre de la subred', subred),
+      campo('VPC (opcional)', vpc),
       campo('Máscara', mascara),
       campo('CIDR manual', cidr),
-      campo('VLAN (opcional)', vl.vlan),
-      campo('Nombre de la VLAN (opcional)', vl.vlanNombre),
+      campo('VLAN o subred (opcional)', red),
       campo('Ticket', ticket),
       campoTtl,
       definitivo,

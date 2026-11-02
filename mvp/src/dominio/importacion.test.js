@@ -49,7 +49,7 @@ test('invalida: CIDR mal escrito, desalineado (con sugerencia), máscara demasia
 test('los valores por defecto completan proveedor, ambiente y tipo', () => {
   const r = analizar({ ...vacio, defectos: { proveedor: 'On-prem', ambiente: 'qa', tipo: 'LAN' }, filas: [{ n: 2, cidr: '172.16.5.0/24' }] });
   assert.equal(r.filas[0].estado, 'ok');
-  assert.deepEqual([r.filas[0].proveedor, r.filas[0].ambiente, r.filas[0].tipo, r.filas[0].vpc], ['On-prem', 'qa', 'LAN', 'sin-nombre']);
+  assert.deepEqual([r.filas[0].proveedor, r.filas[0].ambiente, r.filas[0].tipo, r.filas[0].vpc], ['On-prem', 'qa', 'LAN', '']);
 });
 
 test('solapa con un pool distinto → requiere aprobación; con el mismo pool → no importable; repetido → se omite', () => {

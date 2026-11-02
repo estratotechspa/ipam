@@ -38,7 +38,7 @@ Una entrada de `ipam_reservations` con *n* rangos produce *n* reservas. La clave
 
 | Rango del YAML | Llamada | `Idempotency-Key` |
 |---|---|---|
-| `primary` | `POST /api/v1/reservas` con `ambiente`, `tipo`, `mascara`, `vpc` (VPC; `proyecto` y `subred` opcionales), `ticket`, `ttl_horas` | `<proyecto>:<ambiente>:<subnet>:primary` |
+| `primary` | `POST /api/v1/reservas` con `ambiente`, `tipo`, `mascara`, `vpc` (opcional; también `proyecto` y `subred`), `ticket`, `ttl_horas` | `<proyecto>:<ambiente>:<subnet>:primary` |
 | `secondary_ranges[i]` | igual, con el `tipo` y `mascara` del rango | `<proyecto>:<ambiente>:<subnet>:<name>` |
 
 - Si el IPAM responde **422 `ambiguo`** trae las `opciones` (pools candidatos): hay que indicar `pool` en el YAML.

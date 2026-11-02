@@ -15,8 +15,7 @@ const dormir = (/** @type {number} */ ms) => new Promise((listo) => setTimeout(l
  */
 function crearAsignaciones({ repo, eventos, tickets, tareas = crearTareas(), config = { jira: { reintentos: 1, esperaMs: 0 } } }) {
   /** Validaciones que no dependen del estado de la base. */
-  function validar({ vpc, cidr, mascara }, base, pool) {
-    if (!vpc || !String(vpc).trim()) return fallo('validacion', 'Indica la VPC.');
+  function validar({ cidr, mascara }, base, pool) {
     if (cidr) {
       const objetivo = String(cidr).trim();
       const c = parse(objetivo);
@@ -38,7 +37,7 @@ function crearAsignaciones({ repo, eventos, tickets, tareas = crearTareas(), con
     const p = await repo.obtenerPool(pool);
     if (!p) return fallo('no_encontrado', `Pool «${pool}» no existe.`);
     const base = /** @type {NonNullable<ReturnType<typeof parse>>} */ (parse(p.cidr));
-    const invalido = validar({ vpc, cidr, mascara }, base, p);
+    const invalido = validar({ cidr, mascara }, base, p);
     if (invalido) return invalido;
     const v = validarVlan({ vlan, vlan_nombre });
     if (!v.ok) return fallo('validacion', v.mensaje);
@@ -60,7 +59,7 @@ function crearAsignaciones({ repo, eventos, tickets, tareas = crearTareas(), con
       const asignacion = await tx.insertarAsignacion({
         pool,
         cidr: objetivo,
-        vpc: String(vpc).trim(),
+        vpc: String(vpc ?? '').trim(),
         solicitante,
         ticket: t,
         origen,

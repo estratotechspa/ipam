@@ -25,16 +25,15 @@ export async function liberarAsignacion(id, cidr, despues) {
   return r.ok;
 }
 
-// VLAN opcional (número y nombre) en los formularios de asignación y reserva.
-export const camposVlan = (prefijo) => ({
-  vlan: h('input', { id: prefijo + '-vlan', type: 'number', min: 1, max: 4094, step: 1, inputmode: 'numeric', placeholder: '1–4094' }),
-  vlanNombre: h('input', { id: prefijo + '-vlan-nombre', maxlength: 80, placeholder: 'p. ej. Branch_Data' }),
-});
+// Una sola casilla para la red del segmento: un número (1–4094) es la VLAN; cualquier otro texto, el nombre de la subred.
+export const campoRed = (prefijo) =>
+  h('input', { id: prefijo + '-red', maxlength: 80, placeholder: 'VLAN (210) o subred (subnet-nodos-qa)', autocomplete: 'off' });
 
-export const cuerpoVlan = ({ vlan, vlanNombre }) => ({
-  ...(vlan.value.trim() ? { vlan: Number(vlan.value) } : {}),
-  ...(vlanNombre.value.trim() ? { vlan_nombre: vlanNombre.value.trim() } : {}),
-});
+export const cuerpoRed = (campo) => {
+  const t = campo.value.trim();
+  if (!t) return {};
+  return /^\d+$/.test(t) ? { vlan: Number(t) } : { subred: t };
+};
 
 // Pool y máscara de los formularios: NINGÚN pool viene elegido; la máscara se habilita al elegirlo y solo ofrece las que caben en él.
 export function selectorPoolMascara(prefijo, pools) {

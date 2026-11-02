@@ -228,7 +228,7 @@ test('Reservar desde la interfaz: se crea, queda pendiente y un admin la aprueba
   await page.selectOption('#ns-pool', 'gke-nodos-qa');
   await page.fill('#ns-vpc', vpc);
   await page.selectOption('#ns-mascara', '26');
-  await page.fill('#ns-vlan', '300');
+  await page.fill('#ns-red', '300');
   await page.click('#ns-go');
   await expect(page.locator('#seg-msg')).toContainText('Falta la aprobación de un admin');
   const fila = page.locator('tr', { hasText: vpc });
@@ -268,4 +268,31 @@ test('Nuevo segmento: la casilla «Es una reserva» cambia el botón y avisa que
   await page.locator('#ns-reserva').check();
   await expect(page.locator('#ns-go')).toHaveText('Reservar');
   await expect(page.locator('#ns-ttl')).toBeVisible();
+});
+
+test('Nuevo segmento: la misma casilla acepta una VLAN (número) o una subred (nombre), y la VPC es opcional', async ({ page }) => {
+  const marca = `red-${Date.now()}`;
+  await irA(page, 'Segmentos');
+  await page.locator('#segmentos summary', { hasText: 'Nuevo segmento' }).click();
+  await expect(page.locator('#ns-vpc')).not.toHaveAttribute('required', '');
+  for (const [texto, mascara] of [
+    ['410', '28'],
+    [`${marca}-subnet`, '29'],
+  ]) {
+    await page.selectOption('#ns-pool', 'gke-nodos-qa');
+    await page.fill('#ns-proyecto', `${marca}-${mascara}`);
+    await page.selectOption('#ns-mascara', mascara);
+    await page.fill('#ns-red', texto);
+    await page.click('#ns-go');
+    await expect(page.locator('#seg-msg')).toContainText('Falta la aprobación de un admin');
+    await page.locator('#segmentos summary', { hasText: 'Nuevo segmento' }).click();
+  }
+  const reservas = (await (await page.request.get('/api/v1/reservas?estado=reservada&limite=500')).json()).filter((r) => (r.proyecto || '').startsWith(marca));
+  expect(reservas.map((r) => [r.vlan, r.subred, r.vpc]).sort()).toEqual(
+    [
+      [410, null, ''],
+      [null, `${marca}-subnet`, ''],
+    ].sort(),
+  );
+  for (const r of reservas) await page.request.delete(`/api/v1/reservas/${r.id}`, { headers: { 'X-Requested-With': 'ipam' } });
 });

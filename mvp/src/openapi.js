@@ -309,7 +309,7 @@ const schemas = {
       pool_id: { type: 'string' },
       ambiente: { $ref: '#/components/schemas/Ambiente', description: 'Ambiente del pool (solo en la lista paginada).' },
       cidr: { $ref: '#/components/schemas/Cidr' },
-      vpc: { type: 'string', description: 'Nombre de la VPC.' },
+      vpc: { type: 'string', description: 'Nombre de la VPC (opcional; vacío si no se indica).' },
       proyecto: { type: ['string', 'null'], maxLength: 120, description: 'Nombre del proyecto (opcional).' },
       subred: { type: ['string', 'null'], maxLength: 80, description: 'Nombre de la subred (opcional).' },
       vlan: { type: ['integer', 'null'], minimum: 1, maximum: 4094, description: 'VLAN (opcional).' },
@@ -332,12 +332,12 @@ const schemas = {
   },
   Solicitud: {
     type: 'object',
-    required: ['pool', 'vpc'],
+    required: ['pool'],
     description:
       'Asignación directa (sin reserva previa ni aprobación de otra persona), solo para admin. El flujo normal es reservar (`POST /reservas`) y que un admin apruebe.',
     properties: {
       pool: { type: 'string' },
-      vpc: { type: 'string', description: 'Nombre de la VPC.' },
+      vpc: { type: 'string', description: 'Nombre de la VPC (opcional; vacío si no se indica).' },
       proyecto: { type: ['string', 'null'], maxLength: 120, description: 'Nombre del proyecto (opcional).' },
       subred: { type: ['string', 'null'], maxLength: 80, description: 'Nombre de la subred (opcional).' },
       cidr: { $ref: '#/components/schemas/Cidr' },
@@ -357,7 +357,6 @@ const schemas = {
   },
   ReservaCrear: {
     type: 'object',
-    required: ['vpc'],
     additionalProperties: false,
     description:
       'Indica el destino con `pool`, o con `ambiente` + `tipo` (si hay más de un pool candidato, la respuesta es 422 con `opciones`), y el tamaño con `mascara` o con `cidr`.',
@@ -367,7 +366,7 @@ const schemas = {
       tipo: { type: 'string', maxLength: 40, description: 'Tipo de pool: Nodos, Pods, Servicios, Control plane…' },
       mascara: { type: 'integer', description: 'Tamaño del bloque (24 = /24), de 8 a 32. Se busca el primer rango libre.' },
       cidr: { $ref: '#/components/schemas/Cidr' },
-      vpc: { type: 'string', maxLength: 120, description: 'VPC a la que se destina.' },
+      vpc: { type: 'string', maxLength: 120, description: 'VPC a la que se destina (opcional).' },
       proyecto: { type: ['string', 'null'], maxLength: 120, description: 'Nombre del proyecto (opcional).' },
       subred: { type: ['string', 'null'], maxLength: 80, description: 'Nombre de la subred (opcional).' },
       ticket: { type: 'string', maxLength: 64, description: 'Referencia de seguimiento. Si falta, el IPAM genera una (NET-n).' },
@@ -384,7 +383,7 @@ const schemas = {
       id: { type: 'string', format: 'uuid' },
       pool_id: { type: 'string' },
       cidr: { $ref: '#/components/schemas/Cidr' },
-      vpc: { type: 'string', description: 'Nombre de la VPC.' },
+      vpc: { type: 'string', description: 'Nombre de la VPC (opcional; vacío si no se indica).' },
       proyecto: { type: ['string', 'null'], maxLength: 120, description: 'Nombre del proyecto (opcional).' },
       subred: { type: ['string', 'null'], maxLength: 80, description: 'Nombre de la subred (opcional).' },
       vlan: { type: ['integer', 'null'], minimum: 1, maximum: 4094, description: 'VLAN (opcional).' },

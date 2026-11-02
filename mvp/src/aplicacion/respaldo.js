@@ -33,7 +33,8 @@ function crearRespaldo({ repo, reloj, rolesUsuario }) {
     }
     for (const a of d.asignaciones) {
       const c = parse(String(a.cidr));
-      if (!a.pool_id || !a.vpc || !a.ticket || !c || !c.aligned) return fallo('validacion', `Asignación inválida: ${JSON.stringify(a).slice(0, 120)}`);
+      if (!a.pool_id || typeof a.vpc !== 'string' || !a.ticket || !c || !c.aligned)
+        return fallo('validacion', `Asignación inválida: ${JSON.stringify(a).slice(0, 120)}`);
       const v = validarVlan(a);
       if (!v.ok) return fallo('validacion', `${v.mensaje} (${String(a.cidr).slice(0, 40)})`);
     }

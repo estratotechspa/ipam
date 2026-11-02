@@ -62,7 +62,8 @@ function validarTamano(e) {
 
 /** Valida y normaliza la petición sin tocar la base. */
 function normalizarReserva(e, claveHeader, config) {
-  if (typeof e.vpc !== 'string' || !SIN_CONTROL.test(e.vpc.trim())) return malo('vpc_invalido', 'Indica la VPC (hasta 120 caracteres).');
+  if (e.vpc !== undefined && e.vpc !== null && (typeof e.vpc !== 'string' || (e.vpc.trim() && !SIN_CONTROL.test(e.vpc.trim()))))
+    return malo('vpc_invalido', 'La VPC admite hasta 120 caracteres.');
   const destino = validarDestino(e);
   if (!destino.ok) return destino;
   const tamano = validarTamano(e);
@@ -86,7 +87,7 @@ function normalizarReserva(e, claveHeader, config) {
       tipo,
       cidr,
       mascara,
-      vpc: e.vpc.trim(),
+      vpc: (e.vpc || '').trim(),
       ticket: t.ticket,
       ttlHoras: ttl.horas,
       clave: k.clave,

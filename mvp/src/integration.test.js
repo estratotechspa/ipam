@@ -211,6 +211,13 @@ test('proyecto, VPC y subred se guardan por separado y pasan de la reserva a la 
 
   assert.equal((await post('/api/v1/solicitudes', { pool: 'gke-nodos-qa', vpc: 'v', mascara: 28, proyecto: 'x'.repeat(121) })).status, 400);
 
+  const sinVpc = await post('/api/v1/solicitudes', { pool: 'gke-nodos-qa', proyecto: 'solo-proyecto', mascara: 28 });
+  assert.equal(sinVpc.status, 201, 'la VPC es opcional');
+  assert.equal((await sinVpc.json()).vpc, '');
+  const resSinVpc = await post('/api/v1/reservas', { pool: 'gke-nodos-qa', subred: 'solo-subred', mascara: 28 }, { 'Idempotency-Key': crypto.randomUUID() });
+  assert.equal(resSinVpc.status, 201);
+  assert.equal((await resSinVpc.json()).vpc, '');
+
   const clave = crypto.randomUUID();
   const cuerpo = { pool: 'gke-nodos-qa', vpc: 'vpc-nombres-res', proyecto: 'tienda-web', subred: 'subnet-res', mascara: 28 };
   const res = await post('/api/v1/reservas', cuerpo, { 'Idempotency-Key': clave });

@@ -120,7 +120,7 @@ export function mapaDelPool(p, ocupantes) {
   if (!bloques.length) return null;
   const linea = h('p', { class: 'mapa-detalle', 'aria-live': 'polite' }, '\u00a0');
   const celdas = bloques.map((b) => {
-    const quien = b.asignaciones.map((a) => `${a.vpc} (${a.cidr}${a.reserva ? ', reserva' : a.ticket ? ', ' + a.ticket : ''})`).join('; ');
+    const quien = b.asignaciones.map((a) => `${a.vpc || 'sin VPC'} (${a.cidr}${a.reserva ? ', reserva' : a.ticket ? ', ' + a.ticket : ''})`).join('; ');
     const texto = `${b.cidr} · ${TEXTO_BLOQUE[b.estado]}${quien ? ' · ' + quien : ''}`;
     return h('div', { class: `bloque bloque-${b.estado}`, title: texto, onmouseenter: () => (linea.textContent = texto) });
   });
@@ -238,7 +238,7 @@ export async function fichaPool(id) {
                 ),
                 h('td', null, h('span', { class: 'tag ' + (x.estado === 'asignada' ? 'confirmada' : 'reservada') }, x.estado)),
                 h('td', null, x.proyecto || '—'),
-                h('td', null, x.vpc),
+                h('td', null, x.vpc || '—'),
                 h('td', null, x.subred || '—'),
                 h('td', null, textoVlan(x)),
                 h('td', null, fmt(size(x.cidr))),
@@ -270,7 +270,7 @@ export async function fichaAsignacion(id) {
   const r = rango(a.cidr);
   abrirPanel(
     a.cidr,
-    `${a.codigo || 'Asignación'} · ${a.vpc}`,
+    `${a.codigo || 'Asignación'}${a.vpc ? ' · ' + a.vpc : ''}`,
     [
       {
         nombre: 'Detalle',
