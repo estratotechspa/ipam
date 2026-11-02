@@ -9,14 +9,14 @@ import { confirmar, vincularCidr } from './ui.js';
 
 export async function renderPools() {
   try {
-    const todos = await get('/api/pools');
+    const todos = await get('/api/v1/pools');
     const pools = todos.filter(pasaFiltro);
     // Uso total ponderado por tamaño: direcciones ocupadas (asignadas + reservadas) de todos los pools ÷ direcciones totales.
     const total = pools.reduce((n, p) => n + size(p.cidr), 0);
     const ocupadas = pools.reduce((n, p) => n + (p.uso + (p.uso_reservado || 0)) * size(p.cidr), 0);
     const sobre80 = pools.filter((p) => p.uso + (p.uso_reservado || 0) > 0.8).length;
     $('pools').innerHTML =
-      `<div class="cabecera"><h2 tabindex="-1">Estado de pools</h2><span class="acciones">${puede('admin') ? `<button type="button" class="btn" id="btn-importar">${I('subir')}Importar segmentos</button>` : ''}<a class="btn sec" href="/api/exportar.xlsx" download>${I('descargar')}Exportar a Excel</a></span></div>
+      `<div class="cabecera"><h2 tabindex="-1">Estado de pools</h2><span class="acciones">${puede('admin') ? `<button type="button" class="btn" id="btn-importar">${I('subir')}Importar segmentos</button>` : ''}<a class="btn sec" href="/api/v1/exportar.xlsx" download>${I('descargar')}Exportar a Excel</a></span></div>
   <div class="kpis"><div class="card"><div class="kpi">${pools.length}</div><div class="sub">Pools</div></div>
   <div class="card"><div class="kpi">${pools.reduce((n, p) => n + p.asignaciones, 0)}</div><div class="sub">Asignaciones activas</div></div>
   <div class="card"><div class="kpi">${pct(total ? ocupadas / total : 0)}</div><div class="sub">Uso total (asignado + reservado)</div></div>

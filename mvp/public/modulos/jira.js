@@ -29,8 +29,8 @@ export const flujoJira = (pasos) => `<div class="flow">${pasos.map(([t, c]) => c
 export async function renderJira() {
   // Los eventos son solo para admin; el estado de la integración lo ve cualquiera, y uno no depende del otro.
   const [ev, je] = await Promise.all([
-    puede('admin') ? get('/api/eventos').catch(() => []) : [],
-    get('/api/jira/estado').catch(() => ({ activa: false, faltantes: [] })),
+    puede('admin') ? get('/api/v1/eventos').catch(() => []) : [],
+    get('/api/v1/jira/estado').catch(() => ({ activa: false, faltantes: [] })),
   ]);
   const incompleta = je.activa && je.faltantes.length > 0;
   const insignia = !je.activa
@@ -75,7 +75,7 @@ export async function renderJira() {
   }
   $('j-go').onclick = async () => {
     $('j-go').disabled = true;
-    const r = await api('/api/jira/simular', {
+    const r = await api('/api/v1/jira/simular', {
       body: { ambiente: $('j-amb').value, tipo: $('j-tipo').value, mascara: +$('j-len').value, vpc: $('j-vpc').value.trim() || 'vpc-sin-nombre' },
     });
     ESTADO.ultimoJira = r.ok

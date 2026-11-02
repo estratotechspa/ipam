@@ -9,10 +9,9 @@ function ruta(app, metodo, camino, ...manejadores) {
   app[metodo](camino, ...manejadores);
 }
 
-/** Registra una ruta de la API en su forma versionada (/api/v1/…) y en la forma histórica (/api/…, alias compatible). */
+/** Registra una ruta de la API en su forma versionada (/api/v1/…). Los alias sin versión (/api/…) se retiraron: cada operación existe una sola vez. */
 function api(app, metodo, subruta, ...manejadores) {
   ruta(app, metodo, `/api/v1${subruta}`, ...manejadores);
-  ruta(app, metodo, `/api${subruta}`, ...manejadores);
 }
 
 /** Lista las rutas registradas en una app de Express 5: [{metodo, camino}]. */

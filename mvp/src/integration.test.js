@@ -43,11 +43,11 @@ test.after(async () => {
 
 test('salud y estado de Jira (desactivada por defecto)', opts, async () => {
   assert.deepEqual(await (await fetch(base + '/api/health')).json(), { ok: true });
-  assert.equal((await (await fetch(base + '/api/jira/estado')).json()).activa, false);
+  assert.equal((await (await fetch(base + '/api/v1/jira/estado')).json()).activa, false);
 });
 
 test('solapamiento: 409 con el conflicto y segmentos sugeridos', opts, async () => {
-  const r = await post('/api/solicitudes', { pool: 'gke-pods-prod', vpc: 'vpc-x', cidr: '10.64.8.0/22' });
+  const r = await post('/api/v1/solicitudes', { pool: 'gke-pods-prod', vpc: 'vpc-x', cidr: '10.64.8.0/22' });
   assert.equal(r.status, 409);
   const d = await r.json();
   assert.equal(d.error, 'solapamiento');
@@ -57,30 +57,30 @@ test('solapamiento: 409 con el conflicto y segmentos sugeridos', opts, async () 
 
 test('validaciones: CIDR inválido, desalineado y fuera del pool', opts, async () => {
   for (const cidr of ['hola', '10.64.9.0/22', '11.0.0.0/22']) {
-    assert.equal((await post('/api/solicitudes', { pool: 'gke-pods-prod', vpc: 'v', cidr })).status, 400, cidr);
+    assert.equal((await post('/api/v1/solicitudes', { pool: 'gke-pods-prod', vpc: 'v', cidr })).status, 400, cidr);
   }
-  assert.equal((await post('/api/solicitudes', { pool: 'no-existe', vpc: 'v', mascara: 24 })).status, 404);
+  assert.equal((await post('/api/v1/solicitudes', { pool: 'no-existe', vpc: 'v', mascara: 24 })).status, 404);
 });
 
 test('concurrencia: 20 solicitudes simultáneas → 20 segmentos distintos', opts, async () => {
-  const rs = await Promise.all(Array.from({ length: 20 }, (_, i) => post('/api/solicitudes', { pool: 'gke-nodos-qa', vpc: `conc-${i}`, mascara: 24 })));
+  const rs = await Promise.all(Array.from({ length: 20 }, (_, i) => post('/api/v1/solicitudes', { pool: 'gke-nodos-qa', vpc: `conc-${i}`, mascara: 24 })));
   assert.ok(rs.every((r) => r.status === 201));
   const cidrs = (await Promise.all(rs.map((r) => r.json()))).map((x) => x.cidr);
   assert.equal(new Set(cidrs).size, 20);
-  for (const a of await (await fetch(base + '/api/asignaciones')).json()) {
+  for (const a of await (await fetch(base + '/api/v1/asignaciones')).json()) {
     if (a.vpc.startsWith('conc-'))
-      assert.equal((await fetch(`${base}/api/asignaciones/${a.id}`, { method: 'DELETE', headers: { 'X-Requested-With': 'ipam' } })).status, 200);
+      assert.equal((await fetch(`${base}/api/v1/asignaciones/${a.id}`, { method: 'DELETE', headers: { 'X-Requested-With': 'ipam' } })).status, 200);
   }
 });
 
 test('asignar y liberar devuelve el espacio', opts, async () => {
-  const a = await (await post('/api/solicitudes', { pool: 'onprem-lan-dev', vpc: 'ciclo', cidr: '192.168.50.0/24' })).json();
-  assert.equal((await post('/api/solicitudes', { pool: 'onprem-lan-dev', vpc: 'ciclo2', cidr: '192.168.50.0/24' })).status, 409);
-  assert.equal((await fetch(`${base}/api/asignaciones/${a.id}`, { method: 'DELETE', headers: { 'X-Requested-With': 'ipam' } })).status, 200);
-  assert.equal((await fetch(`${base}/api/asignaciones/${a.id}`, { method: 'DELETE', headers: { 'X-Requested-With': 'ipam' } })).status, 404);
-  const b = await post('/api/solicitudes', { pool: 'onprem-lan-dev', vpc: 'ciclo3', cidr: '192.168.50.0/24' });
+  const a = await (await post('/api/v1/solicitudes', { pool: 'onprem-lan-dev', vpc: 'ciclo', cidr: '192.168.50.0/24' })).json();
+  assert.equal((await post('/api/v1/solicitudes', { pool: 'onprem-lan-dev', vpc: 'ciclo2', cidr: '192.168.50.0/24' })).status, 409);
+  assert.equal((await fetch(`${base}/api/v1/asignaciones/${a.id}`, { method: 'DELETE', headers: { 'X-Requested-With': 'ipam' } })).status, 200);
+  assert.equal((await fetch(`${base}/api/v1/asignaciones/${a.id}`, { method: 'DELETE', headers: { 'X-Requested-With': 'ipam' } })).status, 404);
+  const b = await post('/api/v1/solicitudes', { pool: 'onprem-lan-dev', vpc: 'ciclo3', cidr: '192.168.50.0/24' });
   assert.equal(b.status, 201);
-  await fetch(`${base}/api/asignaciones/${(await b.json()).id}`, { method: 'DELETE', headers: { 'X-Requested-With': 'ipam' } });
+  await fetch(`${base}/api/v1/asignaciones/${(await b.json()).id}`, { method: 'DELETE', headers: { 'X-Requested-With': 'ipam' } });
 });
 
 test('webhook de Jira: firma inválida → 401; firma válida → RESERVA y solo la aprobación de un admin asigna', opts, async () => {
@@ -100,28 +100,28 @@ test('webhook de Jira: firma inválida → 401; firma válida → RESERVA y solo
   assert.ok(d.reserva);
 
   // Sin aprobación NO hay asignación: el rango solo está apartado.
-  const antes = (await (await fetch(base + '/api/asignaciones')).json()).find((x) => x.ticket === 'NET-9001');
+  const antes = (await (await fetch(base + '/api/v1/asignaciones')).json()).find((x) => x.ticket === 'NET-9001');
   assert.equal(antes, undefined, 'el webhook no debe asignar sin aprobación');
   // Un reintento de Jira con el mismo ticket no duplica la reserva.
   const otra = await (await enviar()).json();
   assert.equal(otra.reserva, d.reserva);
 
   // Un admin aprueba (confirma la reserva): recién ahí nace la asignación, con origen «jira».
-  const ok = await fetch(`${base}/api/reservas/${d.reserva}/confirmar`, {
+  const ok = await fetch(`${base}/api/v1/reservas/${d.reserva}/confirmar`, {
     method: 'POST',
     headers: { 'X-Requested-With': 'ipam', 'Content-Type': 'application/json' },
     body: '{}',
   });
   assert.equal(ok.status, 200);
-  const a = (await (await fetch(base + '/api/asignaciones')).json()).find((x) => x.ticket === 'NET-9001');
+  const a = (await (await fetch(base + '/api/v1/asignaciones')).json()).find((x) => x.ticket === 'NET-9001');
   assert.equal(a.origen, 'jira');
   assert.match(a.codigo, /^ASG-\d{6,}$/, 'la asignación lleva su ID legible');
   assert.equal(a.codigo, `ASG-${String(a.id).padStart(6, '0')}`);
-  await fetch(`${base}/api/asignaciones/${a.id}`, { method: 'DELETE', headers: { 'X-Requested-With': 'ipam' } });
+  await fetch(`${base}/api/v1/asignaciones/${a.id}`, { method: 'DELETE', headers: { 'X-Requested-With': 'ipam' } });
 });
 
 test('exportación a Excel: archivo .xlsx válido', opts, async () => {
-  const r = await fetch(base + '/api/exportar.xlsx');
+  const r = await fetch(base + '/api/v1/exportar.xlsx');
   assert.equal(r.status, 200);
   assert.match(r.headers.get('content-type'), /spreadsheetml/);
   const buf = Buffer.from(await r.arrayBuffer());
@@ -130,22 +130,22 @@ test('exportación a Excel: archivo .xlsx válido', opts, async () => {
 
 test('respaldo JSON: exporta, restaura lo borrado y rechaza solapamientos sin importar nada', opts, async () => {
   const H = { 'X-Requested-With': 'ipam' };
-  const r = await fetch(base + '/api/exportar.json');
+  const r = await fetch(base + '/api/v1/exportar.json');
   assert.equal(r.status, 200);
   const resp = await r.json();
   assert.equal(resp.formato, 'ipam-respaldo');
   assert.ok(resp.pools.length >= 6 && resp.asignaciones.length >= 12);
 
   // Importar lo mismo no duplica nada.
-  const igual = await (await post('/api/importar', resp)).json();
+  const igual = await (await post('/api/v1/importar', resp)).json();
   assert.equal(igual.asignaciones, 0);
   assert.equal(igual.omitidas, resp.asignaciones.length);
 
   // Se borra una asignación y el respaldo la devuelve.
-  const lista = await (await fetch(base + '/api/asignaciones')).json();
+  const lista = await (await fetch(base + '/api/v1/asignaciones')).json();
   const a = lista.find((x) => x.ticket === 'NET-101');
-  await fetch(`${base}/api/asignaciones/${a.id}`, { method: 'DELETE', headers: H });
-  const rest = await (await post('/api/importar', resp)).json();
+  await fetch(`${base}/api/v1/asignaciones/${a.id}`, { method: 'DELETE', headers: H });
+  const rest = await (await post('/api/v1/importar', resp)).json();
   assert.equal(rest.asignaciones, 1);
 
   // Un respaldo con un segmento que se solapa con otro existente se rechaza completo.
@@ -153,11 +153,11 @@ test('respaldo JSON: exporta, restaura lo borrado y rechaza solapamientos sin im
     ...resp,
     asignaciones: [{ pool_id: 'gke-pods-prod', cidr: '10.64.8.0/22', vpc: 'choque', solicitante: 'x', ticket: 'NET-7777', origen: 'panel' }],
   };
-  const res = await post('/api/importar', malo);
+  const res = await post('/api/v1/importar', malo);
   assert.equal(res.status, 409);
-  assert.ok(!(await (await fetch(base + '/api/asignaciones')).json()).some((x) => x.ticket === 'NET-7777'));
+  assert.ok(!(await (await fetch(base + '/api/v1/asignaciones')).json()).some((x) => x.ticket === 'NET-7777'));
 
-  assert.equal((await post('/api/importar', { hola: 1 })).status, 400);
+  assert.equal((await post('/api/v1/importar', { hola: 1 })).status, 400);
 });
 
 test('marca por API y logo inexistente', opts, async () => {
@@ -167,13 +167,13 @@ test('marca por API y logo inexistente', opts, async () => {
 });
 
 test('disponibilidad por máscara: totales, bloques libres y utilizables de un pool real', opts, async () => {
-  const d = await (await fetch(base + '/api/pools/gke-nodos-qa/disponibilidad')).json();
+  const d = await (await fetch(base + '/api/v1/pools/gke-nodos-qa/disponibilidad')).json();
   assert.equal(d.pool, 'gke-nodos-qa');
   assert.equal(d.ocupadas + d.libres, d.total);
   const m24 = d.por_mascara.find((x) => x.mascara === 24);
   assert.deepEqual([m24.direcciones, m24.utilizables], [256, 254]);
   assert.ok(m24.bloques_libres > 0 && m24.direcciones_libres === m24.bloques_libres * 256);
-  assert.equal((await fetch(base + '/api/pools/no-existe/disponibilidad')).status, 404);
+  assert.equal((await fetch(base + '/api/v1/pools/no-existe/disponibilidad')).status, 404);
 });
 
 test('VLAN opcional: se guarda al asignar, pasa de la reserva a la asignación y se valida', opts, async () => {
@@ -358,7 +358,7 @@ const conEntorno = async (vars, fn) => {
   }
 };
 const liberarReserva = (id) =>
-  fetch(`${base}/api/reservas/${id}/liberar`, { method: 'POST', headers: { ...H, 'Content-Type': 'application/json' }, body: '{}' });
+  fetch(`${base}/api/v1/reservas/${id}/liberar`, { method: 'POST', headers: { ...H, 'Content-Type': 'application/json' }, body: '{}' });
 
 test(
   'webhook con timestamp: exige la cabecera, la ventana de ±5 min y que la firma lo cubra; un reenvío dentro de la ventana es idempotente',
@@ -393,7 +393,7 @@ test(
     const b = await (await enviar(txt, h)).json();
     assert.equal(b.reserva, dA.reserva, 'reenvío idempotente por ticket');
     await liberarReserva(dA.reserva);
-    const rechazos = (await getJson('/api/eventos')).filter((e) => e.tipo === 'jira_firma_invalida');
+    const rechazos = (await getJson('/api/v1/eventos')).filter((e) => e.tipo === 'jira_firma_invalida');
     assert.ok(
       rechazos.some((e) => /ventana/.test(e.detalle.motivo)),
       'el motivo queda en los eventos',
@@ -402,22 +402,22 @@ test(
 );
 
 test('simulador de Jira: disponible fuera de producción (firma con timestamp); en producción solo con ENABLE_SIMULADOR=true', opts, async () => {
-  const simular = () => post('/api/jira/simular', { ambiente: 'qa', tipo: 'Nodos', mascara: 28, vpc: 'vpc-sim' });
-  assert.equal((await getJson('/api/jira/estado')).simulador, true);
+  const simular = () => post('/api/v1/jira/simular', { ambiente: 'qa', tipo: 'Nodos', mascara: 28, vpc: 'vpc-sim' });
+  assert.equal((await getJson('/api/v1/jira/estado')).simulador, true);
   const r = await simular();
   assert.equal(r.status, 200);
   const d = await r.json();
   await liberarReserva(d.reserva);
-  const ev = (await getJson('/api/eventos')).find((e) => e.tipo === 'jira_webhook_recibido' && e.detalle.ticket === d.ticket);
+  const ev = (await getJson('/api/v1/eventos')).find((e) => e.tipo === 'jira_webhook_recibido' && e.detalle.ticket === d.ticket);
   assert.match(ev.detalle.timestamp, /^\d{10}$/, 'el simulador firma con timestamp');
 
   await conEntorno({ NODE_ENV: 'production' }, async () => {
-    assert.equal((await getJson('/api/jira/estado')).simulador, false);
+    assert.equal((await getJson('/api/v1/jira/estado')).simulador, false);
     const bloqueado = await simular();
     assert.equal(bloqueado.status, 404);
     assert.equal((await bloqueado.json()).error, 'simulador_deshabilitado');
     await conEntorno({ ENABLE_SIMULADOR: 'true' }, async () => {
-      assert.equal((await getJson('/api/jira/estado')).simulador, true);
+      assert.equal((await getJson('/api/v1/jira/estado')).simulador, true);
       const ok = await simular();
       assert.equal(ok.status, 200);
       await liberarReserva((await ok.json()).reserva);
@@ -458,7 +458,7 @@ function jiraFalso({ fallos = 0, demoraMs = 0 } = {}) {
 }
 const esperarEvento = async (tipo, filtro = () => true) => {
   for (let i = 0; i < 100; i++) {
-    const e = (await getJson('/api/eventos')).find((x) => x.tipo === tipo && filtro(x));
+    const e = (await getJson('/api/v1/eventos')).find((x) => x.tipo === tipo && filtro(x));
     if (e) return e;
     await new Promise((ok) => setTimeout(ok, 50));
   }
@@ -470,7 +470,7 @@ test('Jira fuera del camino crítico: la respuesta no espera a Jira y el resulta
   try {
     await conEntorno(j.entorno(), async () => {
       const t0 = Date.now();
-      const r = await post('/api/solicitudes', { pool: 'onprem-lan-dev', vpc: 'jira-bg', cidr: '192.168.91.0/24' });
+      const r = await post('/api/v1/solicitudes', { pool: 'onprem-lan-dev', vpc: 'jira-bg', cidr: '192.168.91.0/24' });
       const ms = Date.now() - t0;
       assert.equal(r.status, 201);
       assert.ok(ms < 1000, `respondió en ${ms} ms, no debe esperar a Jira (1,5 s)`);
@@ -478,9 +478,9 @@ test('Jira fuera del camino crítico: la respuesta no espera a Jira y el resulta
       assert.match(a.ticket, /^NET-\d+$/, 'la respuesta trae el ticket interno');
       const ev = await esperarEvento('jira_ticket_creado', (e) => e.detalle.rango === '192.168.91.0/24');
       assert.equal(ev.detalle.ticket, 'JIRA-77');
-      const guardada = (await getJson('/api/asignaciones')).find((x) => x.id === a.id);
+      const guardada = (await getJson('/api/v1/asignaciones')).find((x) => x.id === a.id);
       assert.equal(guardada.ticket, 'JIRA-77', 'la clave real reemplaza al ticket interno');
-      await fetch(`${base}/api/asignaciones/${a.id}`, { method: 'DELETE', headers: H });
+      await fetch(`${base}/api/v1/asignaciones/${a.id}`, { method: 'DELETE', headers: H });
     });
   } finally {
     j.srv.close();
@@ -491,10 +491,10 @@ test('Jira con un fallo transitorio se reintenta; con Jira caído la asignación
   const transitorio = await jiraFalso({ fallos: 1 }).listen();
   try {
     await conEntorno(transitorio.entorno(), async () => {
-      const a = await (await post('/api/solicitudes', { pool: 'onprem-lan-dev', vpc: 'jira-reint', cidr: '192.168.92.0/24' })).json();
+      const a = await (await post('/api/v1/solicitudes', { pool: 'onprem-lan-dev', vpc: 'jira-reint', cidr: '192.168.92.0/24' })).json();
       await esperarEvento('jira_ticket_creado', (e) => e.detalle.rango === '192.168.92.0/24');
       assert.equal(transitorio.llamadas.filter((l) => l === 'POST /rest/api/3/issue').length, 2, 'un intento fallido y uno bueno');
-      await fetch(`${base}/api/asignaciones/${a.id}`, { method: 'DELETE', headers: H });
+      await fetch(`${base}/api/v1/asignaciones/${a.id}`, { method: 'DELETE', headers: H });
     });
   } finally {
     transitorio.srv.close();
@@ -502,15 +502,15 @@ test('Jira con un fallo transitorio se reintenta; con Jira caído la asignación
   const caido = await jiraFalso({ fallos: 99 }).listen();
   try {
     await conEntorno({ ...caido.entorno(), JIRA_REINTENTOS: '3' }, async () => {
-      const r = await post('/api/solicitudes', { pool: 'onprem-lan-dev', vpc: 'jira-caido', cidr: '192.168.93.0/24' });
+      const r = await post('/api/v1/solicitudes', { pool: 'onprem-lan-dev', vpc: 'jira-caido', cidr: '192.168.93.0/24' });
       assert.equal(r.status, 201);
       const a = await r.json();
       const ev = await esperarEvento('jira_error', (e) => e.detalle.ticket === a.ticket);
       assert.equal(ev.detalle.intentos, 3);
       assert.match(ev.detalle.motivo, /500/);
       assert.equal(caido.llamadas.length, 3);
-      assert.equal((await getJson('/api/asignaciones')).find((x) => x.id === a.id).ticket, a.ticket, 'sigue con su ticket interno');
-      await fetch(`${base}/api/asignaciones/${a.id}`, { method: 'DELETE', headers: H });
+      assert.equal((await getJson('/api/v1/asignaciones')).find((x) => x.id === a.id).ticket, a.ticket, 'sigue con su ticket interno');
+      await fetch(`${base}/api/v1/asignaciones/${a.id}`, { method: 'DELETE', headers: H });
     });
   } finally {
     caido.srv.close();
@@ -529,7 +529,7 @@ test('Excel por streaming: hojas, estilos y más filas que un lote (segmentos e 
       `insert into direcciones_ip (ip, pool_id, rol, dispositivo, excepcion, creado_por)
      select inet '192.168.200.0' + i, 'onprem-lan-dev', 'otro', 'bulk-ip-' || i, 'prueba de exportación', 'prueba' from generate_series(0, 1199) i`,
     );
-    const r = await fetch(base + '/api/exportar.xlsx');
+    const r = await fetch(base + '/api/v1/exportar.xlsx');
     assert.equal(r.status, 200);
     assert.match(r.headers.get('content-disposition'), /ipam-segmentos-\d{4}-\d{2}-\d{2}\.xlsx/);
     const wb = new ExcelJS.Workbook();
@@ -561,8 +561,8 @@ test('cabeceras: Permissions-Policy y Referrer-Policy', opts, async () => {
 });
 
 // ---------- Bloque 3 · lista de asignaciones paginada ----------
-test('GET /api/asignaciones: paginación, filtros, orden y X-Total-Count', opts, async () => {
-  const get = (q) => fetch(`${base}/api/asignaciones?${q}`);
+test('GET /api/v1/asignaciones: paginación, filtros, orden y X-Total-Count', opts, async () => {
+  const get = (q) => fetch(`${base}/api/v1/asignaciones?${q}`);
   let r = await get('limit=5');
   const total = Number(r.headers.get('x-total-count'));
   assert.ok(total >= 12);

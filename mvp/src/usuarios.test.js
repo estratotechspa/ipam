@@ -198,7 +198,7 @@ test('Basic · /auth/salir responde 401 con el desafío para que el navegador ol
   assert.equal(abierta.headers.get('location'), '/');
 });
 
-test('Basic · /api/me informa el modo, el rol y si hay cuentas locales (la interfaz decide Salir y Usuarios con eso)', opts, async () => {
+test('Basic · /api/v1/me informa el modo, el rol y si hay cuentas locales (la interfaz decide Salir y Usuarios con eso)', opts, async () => {
   const me = (await json(await root('GET', '/api/v1/me'))).cuerpo;
   assert.equal(me.modo, 'basic');
   assert.equal(me.rol, 'admin');

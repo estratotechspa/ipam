@@ -28,14 +28,14 @@ Tipos: *texto*, *entero*, *booleano* (`true`/`false`) y *lista* (valores separad
 | `BARREDOR_INTERVALO_SEGUNDOS` | entero | 60 | Cada cuánto corre el barredor (limpia reservas vencidas y contadores).  |
 | `CUOTA_RESERVAS_POR_TOKEN` | entero | 20 | Reservas «reservada» vigentes simultáneas por token (se puede fijar otra al crearlo).  |
 | `LIMITE_ALMACEN` | texto | postgres | Dónde se cuentan las peticiones: «postgres» (varias réplicas) o «memoria» (solo pruebas). Opciones: postgres, memoria. |
-| `ENABLE_SIMULADOR` | booleano | false | Deja disponible POST /api/jira/simular en producción (fuera de producción siempre lo está). Solo demos: crea reservas reales.  |
+| `ENABLE_SIMULADOR` | booleano | false | Deja disponible POST /api/v1/jira/simular en producción (fuera de producción siempre lo está). Solo demos: crea reservas reales.  |
 
 ## Límites de cuerpo
 
 | Variable | Tipo | Por defecto | Descripción |
 |---|---|---|---|
 | `JSON_LIMIT` | texto | 100kb | Tamaño máximo del cuerpo JSON de las peticiones normales. Ej.: `100kb` |
-| `JSON_LIMIT_IMPORTAR` | texto | 5mb | Tamaño máximo del cuerpo en POST /api/importar (respaldos). Ej.: `5mb` |
+| `JSON_LIMIT_IMPORTAR` | texto | 5mb | Tamaño máximo del cuerpo en POST /api/v1/importar (respaldos). Ej.: `5mb` |
 
 ## Base de datos
 

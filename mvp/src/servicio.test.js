@@ -55,19 +55,19 @@ test('correlación: X-Request-Id se acepta, se genera si falta, se reemplaza si 
   const s = await lanzarServicio({ DATABASE_URL: b.url });
   try {
     const dado = 'prueba-correlacion-123';
-    const r1 = await fetch(`${s.url}/api/pools`, { headers: { 'X-Request-Id': dado } });
+    const r1 = await fetch(`${s.url}/api/v1/pools`, { headers: { 'X-Request-Id': dado } });
     assert.equal(r1.headers.get('x-request-id'), dado);
-    const r2 = await fetch(`${s.url}/api/pools`);
+    const r2 = await fetch(`${s.url}/api/v1/pools`);
     assert.match(r2.headers.get('x-request-id'), /^[0-9a-f-]{36}$/);
-    const r3 = await fetch(`${s.url}/api/pools`, { headers: { 'X-Request-Id': 'x; DROP TABLE auditoria' } });
+    const r3 = await fetch(`${s.url}/api/v1/pools`, { headers: { 'X-Request-Id': 'x; DROP TABLE auditoria' } });
     assert.match(r3.headers.get('x-request-id'), /^[0-9a-f-]{36}$/);
 
-    const nf = await fetch(`${s.url}/api/no-existe`, { headers: { 'X-Request-Id': dado } });
+    const nf = await fetch(`${s.url}/api/v1/no-existe`, { headers: { 'X-Request-Id': dado } });
     assert.equal(nf.status, 404);
     assert.equal((await nf.json()).request_id, dado);
 
     const idAuditoria = 'auditoria-trace-0001';
-    const a = await fetch(`${s.url}/api/solicitudes`, {
+    const a = await fetch(`${s.url}/api/v1/solicitudes`, {
       method: 'POST',
       headers: { ...H, 'X-Request-Id': idAuditoria },
       body: JSON.stringify({ pool: 'gke-nodos-qa', vpc: 'corr', mascara: 24 }),
@@ -89,7 +89,7 @@ test('errores: nunca devuelven trazas ni detalles internos, solo el request_id; 
   const s = await lanzarServicio({ DATABASE_URL: b.url });
   try {
     await b.sql('drop table asignaciones cascade'); // fuerza un fallo interno real
-    const r = await fetch(`${s.url}/api/asignaciones`, { headers: { 'X-Request-Id': 'falla-interna-001' } });
+    const r = await fetch(`${s.url}/api/v1/asignaciones`, { headers: { 'X-Request-Id': 'falla-interna-001' } });
     assert.equal(r.status, 500);
     const txt = await r.text();
     assert.ok(!/relation|asignaciones|stack|at |pg_|syntax/i.test(txt), `filtró detalles: ${txt}`);
@@ -99,10 +99,10 @@ test('errores: nunca devuelven trazas ni detalles internos, solo el request_id; 
       'la causa sí queda en el log del servidor',
     );
 
-    const malo = await fetch(`${s.url}/api/solicitudes`, { method: 'POST', headers: H, body: '{no es json' });
+    const malo = await fetch(`${s.url}/api/v1/solicitudes`, { method: 'POST', headers: H, body: '{no es json' });
     assert.equal(malo.status, 400);
     assert.equal((await malo.json()).error, 'cuerpo_invalido');
-    const grande = await fetch(`${s.url}/api/solicitudes`, { method: 'POST', headers: H, body: JSON.stringify({ vpc: 'x'.repeat(200 * 1024) }) });
+    const grande = await fetch(`${s.url}/api/v1/solicitudes`, { method: 'POST', headers: H, body: JSON.stringify({ vpc: 'x'.repeat(200 * 1024) }) });
     assert.equal(grande.status, 413);
   } finally {
     await s.parar();
@@ -127,7 +127,7 @@ test('arranque seguro: en producción sin autenticación NO arranca; con ALLOW_A
       basic.logs().some((l) => l.nivel === 'warn' && /Modo Basic/.test(l.mensaje)),
       'el modo Basic avisa al arrancar',
     );
-    assert.equal((await fetch(`${basic.url}/api/pools`)).status, 401);
+    assert.equal((await fetch(`${basic.url}/api/v1/pools`)).status, 401);
     await basic.parar();
   } finally {
     await b.borrar();
@@ -215,8 +215,8 @@ test('esquema dedicado (DATABASE_SCHEMA=ipam): migrar y servicio trabajan solo e
     const s = await lanzarServicio({ DATABASE_URL: b.url, DATABASE_SCHEMA: 'ipam' });
     try {
       assert.equal((await fetch(`${s.url}/readyz`)).status, 200);
-      assert.equal((await (await fetch(`${s.url}/api/resumen`)).json()).pools, 6);
-      const a = await fetch(`${s.url}/api/solicitudes`, {
+      assert.equal((await (await fetch(`${s.url}/api/v1/resumen`)).json()).pools, 6);
+      const a = await fetch(`${s.url}/api/v1/solicitudes`, {
         method: 'POST',
         headers: H,
         body: JSON.stringify({ pool: 'gke-nodos-qa', vpc: 'esq', mascara: 24 }),
@@ -252,7 +252,7 @@ test('ROL=worker: expone solo sondas (no la API)', opts, async () => {
   try {
     assert.equal((await fetch(`${s.url}/healthz`)).status, 200);
     assert.equal((await fetch(`${s.url}/readyz`)).status, 200);
-    assert.equal((await fetch(`${s.url}/api/pools`)).status, 404);
+    assert.equal((await fetch(`${s.url}/api/v1/pools`)).status, 404);
   } finally {
     await s.parar();
     await b.borrar();
@@ -272,7 +272,7 @@ test('apagado ordenado: con SIGTERM deja de aceptar conexiones, termina la petic
     });
     await new Promise((ok) => sock.on('connect', ok));
     sock.write(
-      `POST /api/solicitudes HTTP/1.1\r\nHost: x\r\nX-Requested-With: ipam\r\nContent-Type: application/json\r\nContent-Length: ${cuerpo.length}\r\nConnection: close\r\n\r\n${cuerpo.slice(0, 10)}`,
+      `POST /api/v1/solicitudes HTTP/1.1\r\nHost: x\r\nX-Requested-With: ipam\r\nContent-Type: application/json\r\nContent-Length: ${cuerpo.length}\r\nConnection: close\r\n\r\n${cuerpo.slice(0, 10)}`,
     );
     await dormir(100);
     s.proceso.kill('SIGTERM');
@@ -330,7 +330,7 @@ test('dos instancias contra la misma base: no duplican asignaciones bajo concurr
   const [s1, s2] = await Promise.all([lanzarServicio({ DATABASE_URL: b.url }), lanzarServicio({ DATABASE_URL: b.url })]);
   try {
     const pedir = (s, i) =>
-      fetch(`${s.url}/api/solicitudes`, { method: 'POST', headers: H, body: JSON.stringify({ pool: 'gke-nodos-qa', vpc: `dos-${i}`, mascara: 24 }) });
+      fetch(`${s.url}/api/v1/solicitudes`, { method: 'POST', headers: H, body: JSON.stringify({ pool: 'gke-nodos-qa', vpc: `dos-${i}`, mascara: 24 }) });
     const rs = await Promise.all(Array.from({ length: 30 }, (_, i) => pedir(i % 2 ? s1 : s2, i)));
     assert.ok(
       rs.every((r) => r.status === 201),

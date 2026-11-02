@@ -79,7 +79,7 @@ Si la IP está fuera de todo segmento asignado, es una **excepción**: agrega `"
 Los errores son JSON con `error`, `mensaje` y `request_id` (el mismo que viaja en los logs y la auditoría; pásalo al soporte). Códigos habituales: `400` validación, `401` sin credenciales, `403` rol insuficiente, `404`, `409` solapamiento o estado inválido, `429` límite o cuota (con `Retry-After`). El límite por minuto es configurable ([CONFIGURACION](CONFIGURACION.md)).
 
 ## 5 · Compatibilidad
-Las rutas `/api/...` sin versión siguen funcionando como alias de `/api/v1/...`. Las nuevas integraciones deben usar `/api/v1`. El contrato se valida contra las respuestas reales en las pruebas automáticas.
+Toda la API vive bajo `/api/v1`. Los alias antiguos sin versión (`/api/pools`, `/api/solicitudes`…) se retiraron: responden 404. Solo quedan fuera de `/api/v1` la salud (`/healthz`, `/readyz`, `/api/health`), la marca (`/api/config`), `/metrics` y el webhook de Jira. El contrato se valida contra las respuestas reales en las pruebas automáticas.
 
 ## 6 · Ejemplo de pipeline
 Un pipeline completo (OpenTofu con aprobación manual y `confirmar-ipam` / `liberar-ipam`) está en [ops/gitlab](ops/gitlab/README.md). El contrato del YAML de entrada: [CONTRATO-YAML-REDES](CONTRATO-YAML-REDES.md).

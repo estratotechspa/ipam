@@ -10,11 +10,11 @@ const captura = () => {
 test('una línea JSON por evento con nivel, mensaje y contexto', () => {
   const { salida, l } = captura();
   const log = crearLogger({ salida, base: { servicio: 'ipam' }, contexto: () => ({ request_id: 'r-1', trace_id: 't-1' }) });
-  log.info('hola', { ruta: '/api/x', duracion_ms: 3 });
+  log.info('hola', { ruta: '/api/v1/x', duracion_ms: 3 });
   assert.equal(l.length, 1);
   assert.deepEqual(
     { nivel: l[0].nivel, mensaje: l[0].mensaje, servicio: l[0].servicio, request_id: l[0].request_id, trace_id: l[0].trace_id, ruta: l[0].ruta },
-    { nivel: 'info', mensaje: 'hola', servicio: 'ipam', request_id: 'r-1', trace_id: 't-1', ruta: '/api/x' },
+    { nivel: 'info', mensaje: 'hola', servicio: 'ipam', request_id: 'r-1', trace_id: 't-1', ruta: '/api/v1/x' },
   );
   assert.ok(!Number.isNaN(Date.parse(l[0].ts)));
 });

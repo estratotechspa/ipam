@@ -15,5 +15,5 @@ done
 # La semilla se copia por la API de Docker (sin montajes del equipo): funciona también con Docker remoto o Docker-en-Docker.
 docker compose -p "$proy" cp ../../mvp/db/seed.sql db:/tmp/seed.sql
 docker compose -p "$proy" exec -T db psql -U ipam -d ipam -v ON_ERROR_STOP=1 -q -f /tmp/seed.sql
-docker compose -p "$proy" exec -T api node -e "fetch('http://127.0.0.1:8080/api/resumen').then(async r=>{const j=await r.json();console.log('resumen',JSON.stringify(j));process.exit(j.pools===6?0:1)})"
+docker compose -p "$proy" exec -T api node -e "fetch('http://127.0.0.1:8080/api/v1/resumen').then(async r=>{const j=await r.json();console.log('resumen',JSON.stringify(j));process.exit(j.pools===6?0:1)})"
 echo "docker compose: OK"

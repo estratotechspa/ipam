@@ -81,7 +81,7 @@ async function sesionOidc(req, res, { revalidador, rechazo }) {
 }
 
 // Mientras la clave sea temporal, la cuenta solo puede ver quién es y cambiarla.
-const SIN_CAMBIO_DE_CLAVE = new Set(['/api/me', '/api/v1/me', '/api/yo/clave', '/api/v1/yo/clave', '/api/config']);
+const SIN_CAMBIO_DE_CLAVE = new Set(['/api/v1/me', '/api/v1/yo/clave', '/api/config']);
 
 /**
  * @param {{rechazo?: (motivo: string, req: any) => unknown, autenticarToken?: (token: string) => Promise<any>, auditar?: Function}} [deps]
