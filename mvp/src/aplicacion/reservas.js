@@ -322,6 +322,11 @@ function crearReservas({ repo, eventos, config, alConfirmar }) {
       if (!actual) return fallo('no_encontrado', 'no_encontrado', { mensaje: 'La reserva no existe.' });
       const dec = R.decidirLiberacion(actual.estado);
       if (dec.accion === 'repetida') return ok({ reserva: actual, repetida: true, asignacionBorrada: false });
+      // Una asignación definitiva solo la libera un admin (igual que DELETE /asignaciones/:id): un agente no deshace lo que confirmó.
+      if (dec.accion === 'borrar_asignacion' && actor.rol !== 'admin')
+        return fallo('prohibido', 'solo_admin_libera_asignacion', {
+          mensaje: 'La reserva ya es una asignación definitiva: solo un admin puede liberarla.',
+        });
       let borrada = false;
       if (dec.accion === 'borrar_asignacion' && actual.asignacion_id && tx.contarDireccionesDe && (await tx.contarDireccionesDe(actual.asignacion_id)))
         return fallo('conflicto', 'tiene_direcciones', {

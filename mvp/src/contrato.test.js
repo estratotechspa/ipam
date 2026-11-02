@@ -132,9 +132,12 @@ test('reservas: todos los códigos de respuesta reales cumplen el contrato', opt
   await verificar(await llamar('POST', `${R}/11111111-1111-4111-8111-111111111111/confirmar`, {}, ADM), 'POST', `${R}/{id}/confirmar`); // 404
   const otro = await (await llamar('POST', '/api/tokens', { nombre: 'otro-contrato', rol: 'agente' })).json();
   await verificar(await llamar('DELETE', `${R}/${r.id}`, undefined, { Authorization: `Bearer ${otro.token}` }), 'DELETE', `${R}/{id}`); // 403 no es dueño
-  const lib = await verificar(await llamar('DELETE', `${R}/${r.id}`, undefined, comoAgente()), 'DELETE', `${R}/{id}`);
+  const denegada = await llamar('DELETE', `${R}/${r.id}`, undefined, comoAgente()); // 403: la asignación definitiva solo la libera un admin
+  assert.equal(denegada.status, 403);
+  assert.equal((await verificar(denegada, 'DELETE', `${R}/{id}`)).error, 'solo_admin_libera_asignacion');
+  const lib = await verificar(await llamar('DELETE', `${R}/${r.id}`, undefined, ADM), 'DELETE', `${R}/{id}`);
   assert.equal(lib.asignacion_borrada, true);
-  await verificar(await llamar('DELETE', `${R}/${r.id}`, undefined, comoAgente()), 'DELETE', `${R}/{id}`); // repetida
+  await verificar(await llamar('DELETE', `${R}/${r.id}`, undefined, ADM), 'DELETE', `${R}/{id}`); // repetida
   const vieja = await (await llamar('POST', R, { ...base, pool: 'gke-nodos-qa-2', ambiente: undefined, tipo: undefined, ttl_horas: 1 }, ADM)).json();
   await b.sql("update reservas set expira_en = now() - interval '1 minute' where id = $1", [vieja.id]);
   await verificar(await llamar('POST', `${R}/${vieja.id}/confirmar`, {}, ADM), 'POST', `${R}/{id}/confirmar`); // 409 expirada

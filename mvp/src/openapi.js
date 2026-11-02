@@ -1263,7 +1263,8 @@ function rutasDeReservas(p) {
     delete: op({
       tag: 'Reservas',
       summary: 'Libera la reserva',
-      description: 'Solo el dueño o un admin. Si estaba confirmada, borra también la asignación definitiva. Idempotente.',
+      description:
+        'Solo el dueño o un admin. Si la reserva sigue vigente, la libera. Si ya estaba confirmada (es una asignación definitiva), solo un admin puede liberarla y se borra también la asignación; un agente recibe 403 `solo_admin_libera_asignacion`. Idempotente.',
       params: [ID_RESERVA],
       ok: { 200: respuesta('Liberada (o ya lo estaba: `repetida: true`).', 'ReservaLiberada') },
       extra: { ...e403, ...e404 },
@@ -1518,8 +1519,10 @@ function rutasDeAdministracion(p) {
     'x-alias-legado': '/api/eventos',
     get: op({
       tag: 'Administración',
-      summary: 'Últimos eventos',
+      summary: 'Últimos eventos (solo admin)',
+      description: 'Traen mensajes de error de Jira y de ganchos, tickets y solicitantes: por eso solo los lee un admin.',
       ok: { 200: respuesta('Eventos.', { type: 'array', items: { $ref: '#/components/schemas/Evento' } }) },
+      extra: e403,
     }),
   };
 }
