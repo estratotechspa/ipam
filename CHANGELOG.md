@@ -5,6 +5,7 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y 
 ## [Sin publicar]
 ### Interfaz
 - **Pools: menú de tres puntos en cada fila** (solo admin) con «Ver ficha» y «Eliminar pool»; antes había que abrir la ficha. La regla no cambia: solo se elimina un pool sin asignaciones, reservas vigentes ni IPs, y si no, se muestra el motivo.
+- **Un solo formulario «Nuevo segmento»** en lugar de «Reservar un segmento» y «Asignar ahora» (compartían 6 de 8 campos). La casilla **«Es una reserva»** viene marcada: pide aprobación y muestra la vigencia. Un admin puede desmarcarla para asignar de inmediato: el botón pasa a «Asignar ahora», la vigencia se oculta, aparece un aviso de que es definitivo y se pide una segunda confirmación. Quien no es admin no ve la casilla y siempre reserva. El ticket se puede indicar en ambos modos, y el panel de solapamiento con segmentos libres sugeridos sirve ahora también al reservar. La API no cambia.
 
 ### Datos
 - Nuevo `mvp/db/limpiar-semilla.sql`: quita de una base ya cargada los datos de ejemplo (asignaciones con origen `semilla` y los pools de `seed.sql`/`seed-poc.sql` que queden vacíos). No toca pools con trabajo real. Termina en `rollback` hasta que se descomente `commit`.

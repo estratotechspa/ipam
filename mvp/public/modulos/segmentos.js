@@ -3,8 +3,9 @@ import { fmt as _fmt, parseCidr, tamanoCidr } from '../calculos.js';
 import { $, ESTADO, I, YO, esc, fail, fecha, fechaHora, fmt, get, h, msg, puede, size, todasLasAsignaciones } from './base.js';
 import { FILTRO, barraFiltro, pasaFiltro } from './filtro.js';
 import { fichaAsignacion } from './fichas.js';
-import { ASIG, formularioNuevaAsignacion, liberarAsignacion, textoVlan } from './asignaciones.js';
-import { RES, accionReserva, formularioNuevaReserva, restante, tictac } from './reservas.js';
+import { ASIG, liberarAsignacion, textoVlan } from './asignaciones.js';
+import { RES, accionReserva, restante, tictac } from './reservas.js';
+import { formularioNuevoSegmento } from './nuevo-segmento.js';
 
 export const POR_PAGINA = 25;
 
@@ -286,11 +287,6 @@ function montarEncabezados(raiz, pools) {
     msg(aviso, RES.aviso.texto, RES.aviso.tipo);
     RES.aviso = null;
   }
-  const nuevo = h(
-    'div',
-    { class: 'nuevo' },
-    puede('solicitante') ? formularioNuevaReserva(pools, aviso, renderSegmentos) : null,
-    puede('admin') ? formularioNuevaAsignacion(pools, renderSegmentos) : null,
-  );
+  const nuevo = h('div', { class: 'nuevo' }, puede('solicitante') ? formularioNuevoSegmento(pools, aviso, renderSegmentos) : null);
   raiz.querySelector('.cabecera').after(nuevo, aviso, barra);
 }

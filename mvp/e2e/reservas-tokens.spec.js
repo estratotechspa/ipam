@@ -224,12 +224,12 @@ test('Jira → reserva → aprobación manual de un admin → asignación (nada 
 test('Reservar desde la interfaz: se crea, queda pendiente y un admin la aprueba', async ({ page }) => {
   const vpc = `nueva-res-${Date.now()}`;
   await irA(page, 'Segmentos');
-  await page.locator('#segmentos summary', { hasText: 'Reservar un segmento' }).click();
-  await page.selectOption('#nr-pool', 'gke-nodos-qa');
-  await page.fill('#nr-vpc', vpc);
-  await page.selectOption('#nr-mascara', '26');
-  await page.fill('#nr-vlan', '300');
-  await page.click('#nr-go');
+  await page.locator('#segmentos summary', { hasText: 'Nuevo segmento' }).click(); // la casilla «Es una reserva» viene marcada
+  await page.selectOption('#ns-pool', 'gke-nodos-qa');
+  await page.fill('#ns-vpc', vpc);
+  await page.selectOption('#ns-mascara', '26');
+  await page.fill('#ns-vlan', '300');
+  await page.click('#ns-go');
   await expect(page.locator('#seg-msg')).toContainText('Falta la aprobación de un admin');
   const fila = page.locator('tr', { hasText: vpc });
   await expect(fila).toContainText('Reservado');
@@ -241,4 +241,31 @@ test('Reservar desde la interfaz: se crea, queda pendiente y un admin la aprueba
   expect(a.cidr).toMatch(/\/26$/);
   expect(a.vlan).toBe(300); // la VLAN de la reserva pasa a la asignación
   await page.request.delete(`/api/v1/asignaciones/${a.id}`, { headers: { 'X-Requested-With': 'ipam' } });
+});
+
+test('Nuevo segmento: la casilla «Es una reserva» cambia el botón y avisa que la asignación es definitiva', async ({ page }) => {
+  const vpc = `casilla-${Date.now()}`;
+  await irA(page, 'Segmentos');
+  await page.locator('#segmentos summary', { hasText: 'Nuevo segmento' }).click();
+  // Por defecto: reserva (lo seguro). Se ve la vigencia y no el aviso de asignación definitiva.
+  await expect(page.locator('#ns-reserva')).toBeChecked();
+  await expect(page.locator('#ns-go')).toHaveText('Reservar');
+  await expect(page.locator('#ns-ttl')).toBeVisible();
+  await expect(page.locator('#ns-definitivo')).toBeHidden();
+  // Desmarcada: asignación directa. Cambia el botón, desaparece la vigencia y aparece el aviso.
+  await page.locator('#ns-reserva').uncheck();
+  await expect(page.locator('#ns-go')).toHaveText('Asignar ahora');
+  await expect(page.locator('#ns-ttl')).toBeHidden();
+  await expect(page.locator('#ns-definitivo')).toContainText('de forma definitiva');
+  // Pide una segunda confirmación y, si se cancela, no se crea nada.
+  await page.selectOption('#ns-pool', 'gke-nodos-qa');
+  await page.fill('#ns-vpc', vpc);
+  await page.selectOption('#ns-mascara', '26');
+  await page.click('#ns-go');
+  await cancelar(page, { contiene: 'sin aprobación' });
+  expect((await (await page.request.get('/api/v1/asignaciones')).json()).some((a) => a.vpc === vpc)).toBe(false);
+  // Al volver a marcarla, todo vuelve al modo reserva.
+  await page.locator('#ns-reserva').check();
+  await expect(page.locator('#ns-go')).toHaveText('Reservar');
+  await expect(page.locator('#ns-ttl')).toBeVisible();
 });

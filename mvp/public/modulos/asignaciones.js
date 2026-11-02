@@ -1,6 +1,6 @@
-// Asignaciones definitivas: liberar un segmento y el formulario «Asignar ahora» (la lista está en segmentos.js).
-import { api, errorApi, h, ico, msg } from './base.js';
-import { confirmarLiberacionDefinitiva, dialogoSimple, toast, vincularCidr } from './ui.js';
+// Asignaciones definitivas: liberar un segmento y los campos compartidos de los formularios (la lista está en segmentos.js).
+import { api, h } from './base.js';
+import { confirmarLiberacionDefinitiva, dialogoSimple, toast } from './ui.js';
 import { cargarDisponibilidad } from './disponibilidad.js';
 
 export const ASIG = { formAbierto: false, aviso: null };
@@ -52,98 +52,4 @@ export function selectorPoolMascara(prefijo, pools) {
   );
   pool.addEventListener('change', () => cargarDisponibilidad(disp, pool.value, mascara));
   return { pool, mascara, disp };
-}
-
-// Formulario «Asignar ahora» (solo admin): entrega definitiva e inmediata, sin reserva ni aprobación de otra persona.
-export function formularioNuevaAsignacion(pools, recargar) {
-  const campo = (etiqueta, control) => h('label', null, etiqueta, control);
-  const { pool, mascara, disp } = selectorPoolMascara('na', pools);
-  const vpc = h('input', { id: 'na-vpc', required: true, maxlength: 120, placeholder: 'vpc-mi-proyecto' });
-  const cidr = h('input', { id: 'na-cidr', placeholder: 'opcional: vacío = el primer libre' });
-  const vl = camposVlan('na');
-  const boton = h('button', { class: 'btn', type: 'submit', id: 'na-go' }, 'Asignar');
-  const revisarCidr = vincularCidr(cidr, boton, () => (pools.find((x) => x.id === pool.value) || {}).cidr);
-  pool.addEventListener('change', revisarCidr);
-  const res = h('div', { id: 'na-res', 'aria-live': 'polite', style: 'flex:1 1 100%' });
-  const enviar = async (e) => {
-    e.preventDefault();
-    if (!pool.value) return msg(res, 'Elige un pool.', 'error');
-    if (!cidr.value.trim() && !mascara.value) return msg(res, 'Elige una máscara o escribe un CIDR.', 'error');
-    const body = {
-      pool: pool.value,
-      vpc: vpc.value.trim(),
-      ...(cidr.value.trim() ? { cidr: cidr.value.trim() } : { mascara: +mascara.value }),
-      ...cuerpoVlan(vl),
-    };
-    boton.disabled = true;
-    const r = await api('/api/v1/solicitudes', { body });
-    boton.disabled = false;
-    const d = r.data || {};
-    if (r.ok) {
-      ASIG.aviso = `Asignado ${d.cidr} (${d.codigo || 'sin ID'}) en ${d.pool_id} para ${d.vpc}. Ticket ${d.ticket}.`;
-      ASIG.formAbierto = false;
-      return recargar();
-    }
-    if (d.error === 'solapamiento' && d.conflicto) {
-      const x = d.conflicto;
-      return res.replaceChildren(
-        h(
-          'div',
-          { class: 'alert', role: 'alert' },
-          h('b', null, ico('alerta'), ' Solapamiento detectado'),
-          h('br'),
-          `${body.cidr} se cruza con ${x.cidr} de ${x.vpc} (pidió ${x.solicitante}, ticket ${x.ticket}). No se asignó nada.`,
-        ),
-        h('b', null, 'Segmentos libres sugeridos'),
-        ...((d.sugeridos || []).length
-          ? d.sugeridos.map((s) =>
-              h(
-                'div',
-                { class: 'sug' },
-                h('code', null, s),
-                h(
-                  'button',
-                  {
-                    class: 'btn',
-                    type: 'button',
-                    onclick: (ev) => {
-                      cidr.value = s;
-                      ev.currentTarget.closest('form').requestSubmit();
-                    },
-                  },
-                  'Usar',
-                ),
-              ),
-            )
-          : [h('p', { class: 'muted' }, 'No hay segmentos libres de ese tamaño.')]),
-      );
-    }
-    msg(res, errorApi(r), 'error');
-  };
-  const form = h(
-    'form',
-    { class: 'filtros', style: 'margin-top:12px', 'aria-label': 'Asignar ahora', onsubmit: enviar },
-    campo('Pool', pool),
-    campo('Proyecto / VPC', vpc),
-    campo('Máscara', mascara),
-    campo('CIDR manual', cidr),
-    campo('VLAN (opcional)', vl.vlan),
-    campo('Nombre VLAN / subred (opcional)', vl.vlanNombre),
-    boton,
-    res,
-    disp,
-  );
-  return h(
-    'details',
-    { class: 'card', style: 'margin:0 0 14px', open: ASIG.formAbierto, ontoggle: (e) => (ASIG.formAbierto = e.target.open) },
-    h('summary', { style: 'cursor:pointer;font-weight:600' }, ico('mas'), 'Asignar ahora (solo admin, sin aprobación)'),
-    h(
-      'p',
-      { class: 'muted', style: 'max-width:760px' },
-      'Entrega el segmento ',
-      h('b', null, 'de inmediato y de forma definitiva'),
-      ', sin reserva ni aprobación de otra persona; queda en el historial a tu nombre. Para el flujo normal (pedir, aprobar, asignar) usa «Reservar un segmento».',
-    ),
-    form,
-  );
 }
