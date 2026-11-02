@@ -51,7 +51,8 @@ function montar(app, { casos, audita, validacion, revalidador }) {
     const texto = (v) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 100) : undefined);
     res.json(await admin.auditoria({ pool: texto(req.query.pool), cidr: texto(req.query.cidr) }));
   });
-  api(app, 'get', '/eventos', async (_q, res) => res.json(await admin.eventos()));
+  // Los eventos traen mensajes de error de Jira y de ganchos, tickets y solicitantes: solo para quien administra.
+  api(app, 'get', '/eventos', requiere('admin'), async (_q, res) => res.json(await admin.eventos()));
 }
 
 module.exports = { montar };

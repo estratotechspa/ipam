@@ -1,5 +1,5 @@
 // Pestaña Jira: estado de la integración, eventos y simulador.
-import { $, ESTADO, I, MASCARAS, api, esc, get } from './base.js';
+import { $, ESTADO, I, MASCARAS, api, esc, get, puede } from './base.js';
 
 // tipo de evento → [texto para personas, tono]. Los errores son lo que conviene revisar.
 export const EVENTOS_JIRA = {
@@ -27,12 +27,11 @@ export const cajaJira = (texto, clase = '') => `<div class="box ${clase}">${text
 export const flujoJira = (pasos) => `<div class="flow">${pasos.map(([t, c]) => cajaJira(t, c)).join(`<span class="arrow">${I('flecha', 20)}</span>`)}</div>`;
 
 export async function renderJira() {
-  let ev = [],
-    je = { activa: false, faltantes: [] };
-  try {
-    ev = await get('/api/eventos');
-    je = await get('/api/jira/estado');
-  } catch (e) {}
+  // Los eventos son solo para admin; el estado de la integración lo ve cualquiera, y uno no depende del otro.
+  const [ev, je] = await Promise.all([
+    puede('admin') ? get('/api/eventos').catch(() => []) : [],
+    get('/api/jira/estado').catch(() => ({ activa: false, faltantes: [] })),
+  ]);
   const incompleta = je.activa && je.faltantes.length > 0;
   const insignia = !je.activa
     ? `<span class="tag qa">${I('info')} Desactivada</span>`

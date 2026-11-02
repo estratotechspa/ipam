@@ -17,6 +17,9 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y 
 - **Idempotencia de reservas:** repetir una `Idempotency-Key` con otro tamaño (`mascara`), VLAN, nombre de VLAN o ticket ahora responde `409 idempotencia_conflicto`. Antes solo se comparaban pool, CIDR y VPC, y un cambio de máscara devolvía en silencio la reserva original (un /26 donde se había pedido un /27). Lo que el agente no indica sigue sin contar.
 
 ### Seguridad
+- **`GET /api/v1/eventos` pasa a ser solo para admin.** Antes lo leía cualquier cuenta autenticada, incluso un `lector`, y trae mensajes de error de Jira y de ganchos, tickets y solicitantes. La pestaña Jira ya no depende de él para mostrar el estado de la integración.
+- **Un agente ya no puede liberar una asignación definitiva.** `DELETE /api/v1/reservas/{id}` sobre una reserva ya confirmada borraba también la asignación, aunque `DELETE /asignaciones/{id}` es solo para admin. Ahora responde `403 solo_admin_libera_asignacion`; el agente sigue liberando sus reservas vigentes. **Cambio incompatible** para pipelines que deshacían así una asignación confirmada: deben pedírselo a un admin.
+- **Prueba de la matriz de roles** (`src/matriz-roles.test.js`): cada ruta de `/api/v1` declara su rol mínimo y un token de rol menor debe recibir 403; una ruta nueva sin rol declarado rompe la prueba.
 - **Sesiones OIDC revalidadas:** el rol y la existencia de la persona se consultan en la base cada `SESSION_REVALIDAR_SEG` (300 s); una baja o un cambio de rol rige en ese tiempo. `SESSION_HORAS` baja de 8 a 4. La cookie pasa a un formato nuevo (se entra de nuevo una vez).
 - **Webhook de Jira con timestamp:** exige `x-ipam-timestamp` y la firma `HMAC(secreto, "<timestamp>.<cuerpo>")` con ventana de ±5 min. **Cambio incompatible** para quien firmaba solo el cuerpo.
 - `POST /api/jira/simular` solo fuera de producción o con `ENABLE_SIMULADOR=true`; `/api/jira/estado` informa `simulador`.

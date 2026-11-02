@@ -230,7 +230,10 @@ test('liberar: reservada → liberada; confirmada → borra también la asignaci
   const b = await pedir(e, AGENTE);
   const c = await e.reservas.confirmar(AGENTE, b.reserva.id, aprob);
   assert.equal(e.repo.datos.asignaciones.length, 1);
-  const lb = await e.reservas.liberar(AGENTE, b.reserva.id);
+  const denegada = await e.reservas.liberar(AGENTE, b.reserva.id);
+  assert.deepEqual({ ok: denegada.ok, tipo: denegada.tipo, error: denegada.error }, { ok: false, tipo: 'prohibido', error: 'solo_admin_libera_asignacion' });
+  assert.equal(e.repo.datos.asignaciones.length, 1, 'un agente no deshace la asignación definitiva');
+  const lb = await e.reservas.liberar(ADMIN, b.reserva.id);
   assert.deepEqual({ estado: lb.reserva.estado, borrada: lb.asignacionBorrada }, { estado: 'liberada', borrada: true });
   assert.equal(e.repo.datos.asignaciones.length, 0, 'la asignación definitiva se borró');
   assert.ok(c.ok);

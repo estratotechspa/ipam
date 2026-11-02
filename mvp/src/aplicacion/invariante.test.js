@@ -136,7 +136,7 @@ test('propiedad: una asignación confirmada desde una reserva conserva exactamen
       const r = await e.reservas.reservar(ACTORES[0], { pool: 'a', mascara, vpc: 'v' });
       const c = await e.reservas.confirmar(ACTORES[0], r.reserva.id, APROBACION);
       assert.equal(c.asignacion.cidr, r.reserva.cidr);
-      const l = await e.reservas.liberar(ACTORES[0], r.reserva.id);
+      const l = await e.reservas.liberar({ nombre: 'admin', rol: 'admin', tipo: 'oidc' }, r.reserva.id); // una asignación definitiva solo la libera un admin
       assert.equal(l.asignacionBorrada, true);
       const otra = await e.reservas.reservar(ACTORES[1], { pool: 'a', mascara, vpc: 'v' });
       assert.equal(otra.reserva.cidr, r.reserva.cidr, 'el rango liberado vuelve a estar disponible');
