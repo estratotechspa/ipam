@@ -17,6 +17,9 @@ const ALIAS = {
   vlan_nombre: ['nombre vlan / subred', 'nombre vlan', 'nombre de vlan', 'vlan nombre', 'vlan name'],
   subred: ['nombre subred', 'nombre de subred', 'nombre de la subred', 'subnet name', 'subnet', 'nombre subnet'],
   descripcion: ['descripcion', 'description', 'comentario', 'comentarios', 'observacion', 'notas'],
+  responsable: ['responsable', 'owner', 'dueno', 'solicitado por', 'requerido por', 'encargado', 'contacto'],
+  uso: ['uso', 'uso del segmento', 'proposito', 'purpose', 'finalidad'],
+  fecha: ['fecha', 'fecha creacion', 'fecha de creacion', 'fecha de solicitud', 'creado', 'creado en', 'created', 'created at', 'creation date'],
 };
 const sinTildes = (t) =>
   String(t || '')

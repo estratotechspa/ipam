@@ -72,7 +72,7 @@ export async function renderImportar() {
       ': no se escribe nada hasta que confirmes. Si no hay pools que los contengan, el IPAM crea uno por proveedor, ambiente y familia de red. Los segmentos que se ',
       h('b', null, 'solapan con otro pool'),
       ' los apruebas o rechazas tú; los que chocan dentro del mismo pool no se pueden importar. Columnas reconocidas: ',
-      h('code', null, 'cidr, proyecto, proveedor, ambiente, tipo, ticket, descripcion, vlan, nombre vlan'),
+      h('code', null, 'cidr, proyecto, vpc, nombre subred, proveedor, ambiente, uso, ticket, fecha, responsable, descripcion, vlan, nombre vlan'),
       ' (solo el CIDR es obligatorio). ',
       h('a', { href: '/plantilla-importacion.csv', download: '' }, 'Descargar plantilla de ejemplo'),
       '.',

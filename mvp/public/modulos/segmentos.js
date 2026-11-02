@@ -196,7 +196,10 @@ export async function renderSegmentos() {
       .filter(
         (x) =>
           !q ||
-          [x.id, x.cidr, x.proyecto, x.vpc, x.subred, x.ticket, x.solicitante, x.pool_id, x.origen, x.vlan, x.vlan_nombre].join(' ').toLowerCase().includes(q),
+          [x.id, x.cidr, x.proyecto, x.vpc, x.subred, x.ticket, x.solicitante, x.pool_id, x.origen, x.vlan, x.vlan_nombre, x.responsable, x.descripcion, x.uso]
+            .join(' ')
+            .toLowerCase()
+            .includes(q),
       );
     const total = lista.length;
     lista.sort(comparar(ORDEN.col, ORDEN.dir));

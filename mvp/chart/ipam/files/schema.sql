@@ -344,3 +344,12 @@ begin
     execute format('revoke insert, update, delete, truncate on %I.esquema_version from ipam_app', esq);
   end if;
 end $$;
+
+-- Detalle opcional por segmento: descripción libre, responsable y uso del rango (Control Plane, Private connection…). Se cargan al importar;
+-- los segmentos anteriores quedan en blanco. La fecha original de un segmento importado va en `creado_en` (ya existía).
+alter table asignaciones add column if not exists descripcion text check (char_length(descripcion) <= 500);
+alter table asignaciones add column if not exists responsable text check (char_length(responsable) <= 120);
+alter table asignaciones add column if not exists uso text check (char_length(uso) <= 60);
+
+insert into esquema_version (version, descripcion) values (13, 'descripción, responsable y uso por segmento')
+  on conflict (version) do nothing;

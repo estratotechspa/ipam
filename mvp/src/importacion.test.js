@@ -82,6 +82,36 @@ test('aplicar un Excel: crea el pool automático, importa lo válido con origen 
   assert.equal(d.ocupadas, 256 + 64);
 });
 
+test('aplicar guarda ticket, fecha original, responsable, descripción y uso; sin fecha usa la de la importación', opts, async () => {
+  const r = await post(
+    '/api/v1/importaciones/aplicar',
+    csv(
+      'cidr;proveedor;ambiente;proyecto;vpc;nombre subred;uso;ticket;fecha;responsable;descripcion\n' +
+        '10.230.0.0/24;GCP;dev;proy-x;vpc-x;subnet-x;Control Plane;GESTPRY-717 / 85909;29/08/2024;Ana Pérez;Rango de ejemplo (FICTICIO)\n' +
+        '10.230.1.0/24;GCP;dev;proy-x;vpc-x;subnet-y;;;;;\n',
+    ),
+  );
+  assert.equal(r.estado, 200, JSON.stringify(r.cuerpo));
+  assert.equal(r.cuerpo.importadas, 2);
+  const f = (await b.sql("select ticket, creado_en::date::text as dia, responsable, descripcion, uso, subred from asignaciones where cidr = '10.230.0.0/24'"))
+    .rows[0];
+  assert.deepEqual(f, {
+    ticket: 'GESTPRY-717 / 85909',
+    dia: '2024-08-29',
+    responsable: 'Ana Pérez',
+    descripcion: 'Rango de ejemplo (FICTICIO)',
+    uso: 'Control Plane',
+    subred: 'subnet-x',
+  });
+  const g = (await b.sql("select ticket, creado_en::date::text as dia, responsable from asignaciones where cidr = '10.230.1.0/24'")).rows[0];
+  assert.equal(g.ticket, 'IMPORTADO');
+  assert.equal(g.responsable, null);
+  assert.equal(g.dia, new Date().toISOString().slice(0, 10), 'sin fecha en el archivo: la de la importación');
+  const mala = await post('/api/v1/importaciones/simular', csv('cidr;proveedor;ambiente;vpc;fecha\n10.231.0.0/24;GCP;dev;v;31/02/2024\n'));
+  assert.equal(mala.cuerpo.resumen.invalida, 1);
+  assert.match(mala.cuerpo.filas[0].detalle, /Fecha inválida/);
+});
+
 test('un segmento que solapa con OTRO pool exige aprobación del admin: sin aprobar no entra; aprobado, entra en su pool', opts, async () => {
   // El pool automático de On-prem ya tiene 10.202.0.0/24; el mismo rango de GCP está en otro pool (otro espacio de direcciones).
   const archivo = csv('cidr,vpc,proveedor,ambiente\n10.202.0.0/24,gcp-mismo-rango,GCP,prod\n');

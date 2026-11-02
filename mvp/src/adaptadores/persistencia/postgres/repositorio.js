@@ -7,11 +7,12 @@ const { SOLICITANTE_JIRA } = require('../../../dominio/reserva');
 const { USO_POOL, COLUMNAS_DIRECCION } = require('./sql-comun');
 const { consultasDeExportacion } = require('./exportacion');
 
-const COLUMNAS_ASIGNACION = 'id, codigo, pool_id, cidr::text, vpc, proyecto, subred, vlan, vlan_nombre, solicitante, ticket, origen, creado_en';
+const COLUMNAS_ASIGNACION =
+  'id, codigo, pool_id, cidr::text, vpc, proyecto, subred, vlan, vlan_nombre, solicitante, ticket, origen, creado_en, descripcion, responsable, uso';
 
 // Lista de asignaciones con alias de tabla (se une con pools para filtrar por ambiente).
 const COLUMNAS_ASIGNACION_A =
-  'a.id, a.codigo, a.pool_id, a.cidr::text, a.vpc, a.proyecto, a.subred, a.vlan, a.vlan_nombre, a.solicitante, a.ticket, a.origen, a.creado_en';
+  'a.id, a.codigo, a.pool_id, a.cidr::text, a.vpc, a.proyecto, a.subred, a.vlan, a.vlan_nombre, a.solicitante, a.ticket, a.origen, a.creado_en, a.descripcion, a.responsable, a.uso';
 // Valores de la asignación que nace de una reserva confirmada, en el orden de los parámetros $1…$10 de su INSERT.
 const valoresDeReserva = (r) => [
   r.pool_id,
@@ -25,7 +26,7 @@ const valoresDeReserva = (r) => [
   r.proyecto ?? null,
   r.subred ?? null,
 ];
-// Valores de una asignación importada, en el orden de los parámetros $1…$11 de su INSERT.
+// Valores de una asignación importada, en el orden de los parámetros $1…$14 de su INSERT.
 const valoresImportada = (a) => [
   a.pool_id,
   a.cidr,
@@ -38,6 +39,9 @@ const valoresImportada = (a) => [
   a.vlan_nombre ?? null,
   a.proyecto ?? null,
   a.subred ?? null,
+  a.descripcion ?? null,
+  a.responsable ?? null,
+  a.uso ?? null,
 ];
 // Lista blanca de órdenes admitidos: la API nunca arma el ORDER BY con texto del cliente.
 const ORDEN_ASIGNACIONES = {
@@ -306,7 +310,7 @@ async function exportarDatos(db) {
   const pools = (await db.query('select id, tipo, ambiente, proveedor, cidr::text from pools order by id')).rows;
   const asignaciones = (
     await db.query(
-      'select pool_id, cidr::text, vpc, proyecto, subred, vlan, vlan_nombre, solicitante, ticket, origen, creado_en from asignaciones order by pool_id, cidr',
+      'select pool_id, cidr::text, vpc, proyecto, subred, vlan, vlan_nombre, solicitante, ticket, origen, creado_en, descripcion, responsable, uso from asignaciones order by pool_id, cidr',
     )
   ).rows;
   const usuarios = (await db.query('select email, nombre, rol from usuarios where rol is not null order by email')).rows;
@@ -550,8 +554,8 @@ function crearRepositorio(db) {
       },
       async insertarAsignacionImportada(a) {
         const x = await q(
-          `insert into asignaciones (pool_id,cidr,vpc,solicitante,ticket,origen,creado_en,vlan,vlan_nombre,proyecto,subred)
-           select $1,$2::cidr,$3,$4,$5,$6,coalesce($7::timestamptz,now()),$8,$9,$10,$11
+          `insert into asignaciones (pool_id,cidr,vpc,solicitante,ticket,origen,creado_en,vlan,vlan_nombre,proyecto,subred,descripcion,responsable,uso)
+           select $1,$2::cidr,$3,$4,$5,$6,coalesce($7::timestamptz,now()),$8,$9,$10,$11,$12,$13,$14
             where not exists (select 1 from asignaciones where pool_id=$1 and cidr=$2::cidr)`,
           valoresImportada(a),
         );
