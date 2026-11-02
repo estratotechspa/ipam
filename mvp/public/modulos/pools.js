@@ -1,24 +1,29 @@
 // Pestaña Pools: indicadores, tabla, alta, edición y baja de un pool.
 import { fmt as _fmt } from '../calculos.js';
-import { $, ESTADO, I, api, errorApi, esc, fail, get, h, ico, msg, puede, size, tag } from './base.js';
-import { barraFiltro, pasaFiltro } from './filtro.js';
+import { $, ESTADO, I, api, errorApi, esc, fail, get, h, ico, msg, puede, size, tag, todasLasAsignaciones } from './base.js';
+import { barraFiltro, pasaFiltro, textoDeSegmento } from './filtro.js';
 import { barraUsoHtml, pct } from './uso.js';
 import { fichaAsignacion, fichaPool, segmentosDePool } from './fichas.js';
 import { show } from './navegacion.js';
 import { confirmar, vincularCidr } from './ui.js';
 
+let ULTIMA_CARGA = 0; // una carga vieja no debe pisar a una nueva ni rehacer la pantalla mientras se escribe en el buscador
 export async function renderPools() {
+  const mia = ++ULTIMA_CARGA;
   try {
     const todos = await get('/api/v1/pools');
-    const pools = todos.filter(pasaFiltro);
+    const porFiltro = todos.filter(pasaFiltro); // por ambiente y proveedor: de aquí salen los indicadores
+    const q = ESTADO.busquedaPools.trim().toLowerCase();
+    const { pools, coincidencias } = q ? await buscarEnPools(porFiltro, q) : { pools: porFiltro, coincidencias: new Map() };
+    if (mia !== ULTIMA_CARGA) return;
     // Uso total ponderado por tamaño: direcciones ocupadas (asignadas + reservadas) de todos los pools ÷ direcciones totales.
-    const total = pools.reduce((n, p) => n + size(p.cidr), 0);
-    const ocupadas = pools.reduce((n, p) => n + (p.uso + (p.uso_reservado || 0)) * size(p.cidr), 0);
-    const sobre80 = pools.filter((p) => p.uso + (p.uso_reservado || 0) > 0.8).length;
+    const total = porFiltro.reduce((n, p) => n + size(p.cidr), 0);
+    const ocupadas = porFiltro.reduce((n, p) => n + (p.uso + (p.uso_reservado || 0)) * size(p.cidr), 0);
+    const sobre80 = porFiltro.filter((p) => p.uso + (p.uso_reservado || 0) > 0.8).length;
     $('pools').innerHTML =
       `<div class="cabecera"><h2 tabindex="-1">Estado de pools</h2><span class="acciones">${puede('admin') ? `<button type="button" class="btn" id="btn-importar">${I('subir')}Importar segmentos</button>` : ''}<a class="btn sec" href="/api/v1/exportar.xlsx" download>${I('descargar')}Exportar a Excel</a></span></div>
-  <div class="kpis"><div class="card"><div class="kpi">${pools.length}</div><div class="sub">Pools</div></div>
-  <div class="card"><div class="kpi">${pools.reduce((n, p) => n + p.asignaciones, 0)}</div><div class="sub">Asignaciones activas</div></div>
+  <div class="kpis"><div class="card"><div class="kpi">${porFiltro.length}</div><div class="sub">Pools</div></div>
+  <div class="card"><div class="kpi">${porFiltro.reduce((n, p) => n + p.asignaciones, 0)}</div><div class="sub">Asignaciones activas</div></div>
   <div class="card"><div class="kpi">${pct(total ? ocupadas / total : 0)}</div><div class="sub">Uso total (asignado + reservado)</div></div>
   <div class="card"><div class="kpi ${sobre80 ? 'uso-txt-alto' : ''}">${sobre80}</div><div class="sub">Pools sobre 80 %</div></div>
   <div class="card"><div class="kpi">${_fmt(Math.max(0, Math.round(total - ocupadas)))}</div><div class="sub">Espacio libre (direcciones)</div></div></div>
@@ -36,11 +41,11 @@ export async function renderPools() {
   <tr class="detalle-pool" id="seg-pool-${esc(p.id)}" hidden><td colspan="9"></td></tr>`,
     )
     .join('')}</tbody></table></div>`;
-    $('pools').prepend(barraFiltro(todos, renderPools));
+    $('pools').prepend(barraDeBusqueda(todos, pools.length, porFiltro.length, coincidencias, q));
     $('pools')
       .querySelectorAll('[data-ficha-pool]')
       .forEach((b) => (b.onclick = () => fichaPool(b.dataset.fichaPool)));
-    enlazarDespliegue($('pools'));
+    enlazarDespliegue($('pools'), coincidencias, q);
     $('pools')
       .querySelectorAll('[data-menu-pool]')
       .forEach(
@@ -63,31 +68,95 @@ export async function renderPools() {
   }
 }
 
+const textoDePool = (p) => [p.id, p.tipo, p.ambiente, p.proveedor, p.cidr].join(' ').toLowerCase();
+
+/**
+ * Pools que coinciden con el texto: por sus propios datos (nombre, tipo, ambiente, proveedor, CIDR) o porque alguno de sus segmentos
+ * coincide (proyecto, VPC, subred, ticket, responsable…). Devuelve también, por pool, cuántos segmentos coinciden.
+ */
+async function buscarEnPools(porFiltro, q) {
+  const asignaciones = await todasLasAsignaciones();
+  const ids = new Set(porFiltro.map((p) => p.id));
+  const coincidencias = new Map();
+  for (const a of asignaciones) {
+    if (ids.has(a.pool_id) && textoDeSegmento(a).includes(q)) coincidencias.set(a.pool_id, (coincidencias.get(a.pool_id) || 0) + 1);
+  }
+  return { pools: porFiltro.filter((p) => textoDePool(p).includes(q) || coincidencias.has(p.id)), coincidencias };
+}
+
+/** Cuadro «Buscar» + filtros por ambiente y proveedor, con el resultado en palabras para quien usa lector de pantalla. */
+function barraDeBusqueda(todos, visibles, total, coincidencias, q) {
+  const buscador = h('input', {
+    id: 'p-buscar',
+    type: 'search',
+    value: ESTADO.busquedaPools,
+    placeholder: 'Pool, CIDR, proyecto, VPC, subred, ticket…',
+    oninput: (e) => {
+      ESTADO.busquedaPools = e.target.value;
+      clearTimeout(ESTADO.retardoBusquedaPools);
+      // Con una pausa breve: cada render vuelve a pedir los datos y rehace la pantalla, y no debe pisar lo que se está escribiendo.
+      ESTADO.retardoBusquedaPools = setTimeout(async () => {
+        await renderPools();
+        const el = $('p-buscar');
+        if (el) {
+          el.focus();
+          el.setSelectionRange(el.value.length, el.value.length);
+        }
+      }, 250);
+    },
+  });
+  const barra = barraFiltro(todos, renderPools);
+  barra.insertBefore(h('label', null, 'Buscar', buscador), barra.firstChild);
+  const segmentos = [...coincidencias.values()].reduce((n, c) => n + c, 0);
+  barra.append(
+    h(
+      'p',
+      { class: 'muted', role: 'status', style: 'flex:1 1 100%;margin:0' },
+      q
+        ? visibles
+          ? `${visibles} de ${total} pools coinciden con «${ESTADO.busquedaPools.trim()}»${segmentos ? ` (${segmentos} segmentos)` : ''}.`
+          : `Ningún pool ni segmento coincide con «${ESTADO.busquedaPools.trim()}».`
+        : '',
+    ),
+  );
+  return barra;
+}
+
 /**
  * Despliegue de los segmentos de cada pool dentro de la misma tabla (además de la ficha en el panel lateral).
  * Los pools abiertos se recuerdan en ESTADO.poolsAbiertos: al filtrar o recargar la pestaña siguen abiertos.
  */
-function enlazarDespliegue(raiz) {
+function enlazarDespliegue(raiz, coincidencias = new Map(), q = '') {
   const abiertos = (ESTADO.poolsAbiertos ||= new Set());
   const columnas = raiz.querySelectorAll('thead th').length;
   const botones = [...raiz.querySelectorAll('[data-expandir-pool]')];
   const cargados = new Set();
-  const fijar = async (boton, abrir) => {
+  const fijar = async (boton, abrir, sinRecordar = false) => {
     const id = boton.dataset.expandirPool;
     const fila = document.getElementById('seg-pool-' + id);
     if (!fila) return;
     boton.setAttribute('aria-expanded', String(abrir));
     boton.setAttribute('aria-label', `${abrir ? 'Ocultar' : 'Mostrar'} los segmentos de ${id}`);
     fila.hidden = !abrir;
-    if (abrir) abiertos.add(id);
-    else abiertos.delete(id);
+    if (!sinRecordar) {
+      if (abrir) abiertos.add(id);
+      else abiertos.delete(id);
+    }
     if (!abrir || cargados.has(id)) return;
     cargados.add(id);
     const celda = fila.firstElementChild;
     celda.colSpan = columnas;
     celda.replaceChildren(h('p', { class: 'muted', role: 'status' }, 'Cargando segmentos…'));
     try {
-      celda.replaceChildren(await segmentosDePool(id, fichaAsignacion));
+      // Con una búsqueda activa y coincidencias en este pool, se muestran solo los segmentos que coinciden.
+      const solo = q && coincidencias.has(id) ? (s) => textoDeSegmento(s).includes(q) : undefined;
+      const tabla = await segmentosDePool(id, fichaAsignacion, solo);
+      celda.replaceChildren(
+        ...(solo
+          ? [h('p', { class: 'muted' }, `Solo los segmentos que coinciden con «${ESTADO.busquedaPools.trim()}». Borra la búsqueda para ver todos.`)]
+          : []),
+        tabla,
+      );
     } catch (e) {
       cargados.delete(id);
       celda.replaceChildren(h('p', { class: 'alert', role: 'alert' }, ico('error'), ' No se pudieron cargar los segmentos: ' + e.message));
@@ -97,7 +166,10 @@ function enlazarDespliegue(raiz) {
   const todos = (abrir) => Promise.all(botones.map((b) => fijar(b, abrir)));
   raiz.querySelector('#pools-expandir').onclick = () => todos(true);
   raiz.querySelector('#pools-contraer').onclick = () => todos(false);
-  botones.filter((b) => abiertos.has(b.dataset.expandirPool)).forEach((b) => fijar(b, true));
+  // Abiertos por el usuario y, mientras se busca, los pools donde coincide algún segmento (sin recordarlos: al borrar la búsqueda vuelven a su estado).
+  botones
+    .filter((b) => abiertos.has(b.dataset.expandirPool) || coincidencias.has(b.dataset.expandirPool))
+    .forEach((b) => fijar(b, true, coincidencias.has(b.dataset.expandirPool) && !abiertos.has(b.dataset.expandirPool)));
 }
 
 /** Menú de tres puntos de una fila: ver ficha o eliminar. Va con position:fixed para que la tabla con scroll no lo recorte. */
