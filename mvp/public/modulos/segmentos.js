@@ -3,9 +3,10 @@ import { fmt as _fmt, parseCidr, tamanoCidr } from '../calculos.js';
 import { $, ESTADO, I, YO, esc, fail, fecha, fechaHora, fmt, get, h, msg, puede, size, todasLasAsignaciones } from './base.js';
 import { FILTRO, barraFiltro, pasaFiltro } from './filtro.js';
 import { fichaAsignacion } from './fichas.js';
-import { ASIG, liberarAsignacion, textoVlan } from './asignaciones.js';
+import { ASIG, liberarAsignacion, textoRed } from './asignaciones.js';
 import { RES, accionReserva, restante, tictac } from './reservas.js';
 import { formularioNuevoSegmento } from './nuevo-segmento.js';
+import { columnasAjustables } from './ui.js';
 
 export const POR_PAGINA = 25;
 
@@ -19,8 +20,7 @@ export const COLUMNAS = [
   ['pool', 'Pool'],
   ['proyecto', 'Proyecto'],
   ['vpc', 'VPC'],
-  ['subred', 'Subred'],
-  ['vlan', 'VLAN'],
+  ['red', 'Subred / VLAN'],
   ['dir', 'Direcciones'],
   ['sol', 'Solicitó'],
   ['origen', 'Origen'],
@@ -93,8 +93,7 @@ const clave = {
   pool: (x) => x.pool_id,
   proyecto: (x) => x.proyecto || '',
   vpc: (x) => x.vpc || '',
-  subred: (x) => x.subred || '',
-  vlan: (x) => (x.vlan ? Number(x.vlan) : Infinity),
+  red: (x) => textoRed(x),
   dir: (x) => tamanoCidr(x.cidr),
   sol: (x) => x.solicitante,
   origen: (x) => x.origen,
@@ -152,7 +151,7 @@ const celdaAcciones = (x, puedeOperar) => {
 const fila = (x, puedeOperar) =>
   `<tr class="seg-${x.tipo}"><td><span class="tag ${esc(x.marca)}">${ETIQUETA[x.marca]}</span></td>
   <td>${x.tipo === 'asignado' ? `<button type="button" class="enlace" data-ficha-asig="${esc(x.ref.id)}"><code>${esc(x.id)}</code></button>` : `<code>${esc(x.id)}</code>`}</td>
-  <td><code>${esc(x.cidr)}</code></td><td>${esc(x.pool_id)}</td><td>${esc(x.proyecto || '—')}</td><td>${esc(x.vpc || '—')}</td><td>${esc(x.subred || '—')}</td><td>${esc(textoVlan(x))}</td><td>${fmt(size(x.cidr))}</td><td>${esc(x.solicitante)}</td><td>${esc(x.origen)}</td><td>${esc(x.ticket)}</td><td>${celdaFecha(x)}</td>
+  <td><code>${esc(x.cidr)}</code></td><td>${esc(x.pool_id)}</td><td>${esc(x.proyecto || '—')}</td><td>${esc(x.vpc || '—')}</td><td>${esc(textoRed(x))}</td><td>${fmt(size(x.cidr))}</td><td>${esc(x.solicitante)}</td><td>${esc(x.origen)}</td><td>${esc(x.ticket)}</td><td>${celdaFecha(x)}</td>
   <td>${celdaAcciones(x, puedeOperar)}</td></tr>`;
 
 const textoVacio = (vista, filtrando) =>
@@ -218,6 +217,7 @@ export async function renderSegmentos() {
         : `<div class="card tablewrap" tabindex="0" role="region" aria-label="Segmentos"><table><thead><tr>${encabezado()}</tr></thead><tbody>${pagina.map((x) => fila(x, puedeOperar)).join('')}</tbody></table></div>`
     }${paginacion(total)}`;
     enlazar(raiz, reservaPorId);
+    if (raiz.querySelector('table')) columnasAjustables(raiz.querySelector('table'), 'segmentos');
     montarEncabezados(raiz, pools);
     clearInterval(RES.timer);
     tictac();

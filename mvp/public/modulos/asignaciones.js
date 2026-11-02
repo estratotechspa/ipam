@@ -5,7 +5,9 @@ import { cargarDisponibilidad } from './disponibilidad.js';
 
 export const ASIG = { formAbierto: false, aviso: null };
 
-export const textoVlan = (x) => (x.vlan ? `${x.vlan}${x.vlan_nombre ? ' · ' + x.vlan_nombre : ''}` : x.vlan_nombre || '—');
+// Subred y VLAN comparten columna: se ve el nombre de la subred, la VLAN, o ambos si el segmento tiene los dos.
+export const textoRed = (x) =>
+  [x.subred, x.vlan ? `VLAN ${x.vlan}${x.vlan_nombre ? ` (${x.vlan_nombre})` : ''}` : x.vlan_nombre].filter(Boolean).join(' · ') || '—';
 
 /** Libera una asignación pidiendo el motivo (queda en el historial). Devuelve true si se liberó. */
 export async function liberarAsignacion(id, cidr, despues) {

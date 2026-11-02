@@ -93,8 +93,15 @@ footer{padding:var(--sp-4);text-align:center}
 /* ============ Tablas ============ */
 .tablewrap{overflow-x:auto;position:relative} /* relative: el texto .sr-only de las celdas se recorta con la tabla y no ensancha la página */
 table{width:100%;border-collapse:collapse}
-th{text-align:left;color:var(--mut);font-size:var(--fs-xs);font-weight:600;padding:var(--sp-2);border-bottom:1px solid var(--line);white-space:nowrap}
+th{position:relative;text-align:left;color:var(--mut);font-size:var(--fs-xs);font-weight:600;padding:var(--sp-2);border-bottom:1px solid var(--line);white-space:nowrap}
 td{padding:var(--sp-2);border-bottom:1px solid var(--line2);font-variant-numeric:tabular-nums}
+/* Columnas ajustables: el borde derecho de cada encabezado se arrastra (o se enfoca y se usan las flechas) para ensanchar o achicar la columna. */
+.col-ajuste{position:absolute;top:0;right:0;bottom:0;width:9px;cursor:col-resize;touch-action:none;z-index:2}
+.col-ajuste::after{content:"";position:absolute;top:25%;bottom:25%;right:3px;width:2px;background:var(--line);border-radius:1px}
+.col-ajuste:hover::after,.col-ajuste:focus-visible::after,.col-ajuste.activa::after{background:var(--blue)}
+table.ajustable{table-layout:fixed;min-width:100%}
+table.ajustable td{overflow-wrap:anywhere}
+table.ajustable th{overflow:hidden;text-overflow:ellipsis}
 tbody tr:hover td{background:var(--line2)}
 td:first-child,td code{white-space:nowrap}
 

@@ -149,3 +149,47 @@ test('Segmentos: asignado y reservado en una lista, con las reservas pendientes 
   await request.delete(`/api/v1/asignaciones/${a.id}`, { headers: H });
   expect(r.id).toBeTruthy();
 });
+
+test('Segmentos: Subred y VLAN comparten columna y el ancho de las columnas se ajusta con el ratón y el teclado', async ({ page, request }) => {
+  const marca = `cols-${Date.now()}`;
+  const r = await (
+    await request.post('/api/v1/solicitudes', {
+      headers: H,
+      data: { pool: 'gke-nodos-qa', vpc: marca, proyecto: `${marca}-proyecto-con-un-nombre-largo`, subred: `${marca}-subred`, vlan: 210, mascara: 28 },
+    })
+  ).json();
+  await irA(page, 'Segmentos');
+  const cabeceras = await page.locator('#segmentos thead th').allInnerTexts();
+  expect(cabeceras).toContain('Subred / VLAN');
+  expect(cabeceras).not.toContain('VLAN');
+  expect(cabeceras).not.toContain('Subred');
+  const fila = page.locator('#segmentos tr', { hasText: marca });
+  await expect(fila).toContainText(`${marca}-subred · VLAN 210`);
+
+  const th = page.locator('#segmentos thead th', { hasText: 'Proyecto' });
+  const asa = th.locator('.col-ajuste');
+  const antes = (await th.boundingBox()).width;
+  const caja = await asa.boundingBox();
+  await page.mouse.move(caja.x + caja.width / 2, caja.y + caja.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(caja.x + caja.width / 2 + 120, caja.y + caja.height / 2, { steps: 5 });
+  await page.mouse.up();
+  const despues = (await th.boundingBox()).width;
+  expect(despues).toBeGreaterThan(antes + 100);
+  await expect(page.locator('#segmentos thead [aria-sort="ascending"], #segmentos thead [aria-sort="descending"]')).toHaveCount(1); // arrastrar no cambió el orden
+
+  // Con el teclado: flecha izquierda achica.
+  await asa.focus();
+  await page.keyboard.press('ArrowLeft');
+  expect((await th.boundingBox()).width).toBeLessThan(despues);
+
+  // El ancho se recuerda al volver a cargar; doble clic restablece.
+  await page.reload();
+  await page.locator('#nav').getByRole('button', { name: 'Segmentos', exact: true }).click();
+  await expect(page.locator('#segmentos table.ajustable')).toBeVisible();
+  expect((await th.boundingBox()).width).toBeGreaterThan(antes + 80);
+  await asa.dblclick();
+  await expect(page.locator('#segmentos table.ajustable')).toHaveCount(0);
+
+  await request.delete(`/api/v1/asignaciones/${r.id}`, { headers: H });
+});

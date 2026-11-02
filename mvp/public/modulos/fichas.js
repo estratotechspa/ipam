@@ -5,7 +5,7 @@ import { ESTADO, fechaHora, fmt, get, h, puede, size, todasLasAsignaciones } fro
 import { abrirDialogo, tabla, toast } from './ui.js';
 import { barraUso, pct } from './uso.js';
 import { accionesPool } from './pools.js';
-import { liberarAsignacion, textoVlan } from './asignaciones.js';
+import { liberarAsignacion, textoRed } from './asignaciones.js';
 import { show } from './navegacion.js';
 
 export function rango(cidr) {
@@ -213,7 +213,7 @@ export async function fichaPool(id) {
           if (!filas.length) return h('p', { class: 'muted' }, 'Este pool todavía no tiene segmentos asignados ni reservados.');
           return tabla(
             'Segmentos del pool',
-            ['Segmento', 'Estado', 'Proyecto', 'VPC', 'Subred', 'VLAN', 'Direcciones'],
+            ['Segmento', 'Estado', 'Proyecto', 'VPC', 'Subred / VLAN', 'Direcciones'],
             filas.map((x) =>
               h(
                 'tr',
@@ -239,8 +239,7 @@ export async function fichaPool(id) {
                 h('td', null, h('span', { class: 'tag ' + (x.estado === 'asignada' ? 'confirmada' : 'reservada') }, x.estado)),
                 h('td', null, x.proyecto || '—'),
                 h('td', null, x.vpc || '—'),
-                h('td', null, x.subred || '—'),
-                h('td', null, textoVlan(x)),
+                h('td', null, textoRed(x)),
                 h('td', null, fmt(size(x.cidr))),
               ),
             ),
