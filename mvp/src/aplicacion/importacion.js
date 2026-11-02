@@ -46,6 +46,10 @@ function crearImportacion({ repo, eventos }) {
               subred: f.subred,
               solicitante: actor && actor.nombre ? actor.nombre : 'importado',
               ticket: f.ticket,
+              descripcion: f.descripcion,
+              responsable: f.responsable,
+              uso: f.uso,
+              creado_en: f.creado_en, // conserva la fecha original del segmento
               origen: 'importado',
             });
           }

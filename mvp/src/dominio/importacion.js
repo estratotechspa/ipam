@@ -10,6 +10,7 @@
 const { parse, overlap, contenido, n2ip } = require('./cidr');
 const { validarVlan } = require('./vlan');
 const { validarNombres } = require('./nombres');
+const { validarDetalle } = require('./detalle');
 
 const AMBIENTES = ['dev', 'qa', 'pre', 'prod'];
 const ESTADOS = ['ok', 'ya_existe', 'solapa_otro_pool', 'choca_mismo_pool', 'invalida'];
@@ -34,14 +35,14 @@ const slug = (/** @type {string} */ t) =>
     .slice(0, 24);
 
 /**
- * @typedef {{n: number, cidr: string, vpc?: string, proveedor?: string, ambiente?: string, tipo?: string, ticket?: string, descripcion?: string, vlan?: string, vlan_nombre?: string, proyecto?: string, subred?: string}} FilaEntrada
+ * @typedef {{n: number, cidr: string, vpc?: string, proveedor?: string, ambiente?: string, tipo?: string, ticket?: string, descripcion?: string, vlan?: string, vlan_nombre?: string, proyecto?: string, subred?: string, responsable?: string, uso?: string, fecha?: string}} FilaEntrada
  * @typedef {{id: string, tipo: string, ambiente: string, proveedor: string, cidr: string}} Pool
  * @typedef {{pool_id: string, cidr: string, vpc?: string}} Ocupado
  * @typedef {NonNullable<ReturnType<typeof parse>>} Cidr
  */
 
 /** Valida y normaliza una fila. Devuelve el error (con sugerencia si la hay) o los datos listos. */
-function validarFila(/** @type {FilaEntrada} */ f, /** @type {{proveedor?: string, ambiente?: string, tipo?: string}} */ defectos) {
+function validarFila(/** @type {FilaEntrada} */ f, /** @type {{proveedor?: string, ambiente?: string, tipo?: string}} */ defectos, /** @type {Date} */ ahora) {
   const cidr = String(f.cidr || '').trim();
   const c = parse(cidr);
   if (!c) return { error: 'CIDR inválido: debe verse como 10.20.0.0/24.' };
@@ -72,6 +73,8 @@ function validarFila(/** @type {FilaEntrada} */ f, /** @type {{proveedor?: strin
   if (!v.ok) return { error: v.mensaje };
   const nom = validarNombres(f);
   if (!nom.ok) return { error: nom.mensaje };
+  const det = validarDetalle(f, ahora);
+  if (!det.ok) return { error: det.mensaje };
   return {
     datos: {
       c,
@@ -84,6 +87,10 @@ function validarFila(/** @type {FilaEntrada} */ f, /** @type {{proveedor?: strin
       subred: nom.subred,
       vlan: v.vlan,
       vlan_nombre: v.vlan_nombre,
+      descripcion: det.descripcion,
+      responsable: det.responsable,
+      uso: det.uso,
+      creado_en: det.creado_en, // fecha original de creación (null → la de la importación)
       ticket: String(f.ticket || '').trim() || 'IMPORTADO',
     },
   };
@@ -135,9 +142,9 @@ function clasificar(fila, pool, nuevo, d, existentes, previas) {
 
 /**
  * Analiza las filas contra los pools y lo ocupado. No escribe nada.
- * @param {{filas: FilaEntrada[], pools: Pool[], ocupados: Ocupado[], defectos?: {proveedor?: string, ambiente?: string, tipo?: string}}} e
+ * @param {{filas: FilaEntrada[], pools: Pool[], ocupados: Ocupado[], defectos?: {proveedor?: string, ambiente?: string, tipo?: string}, ahora?: Date}} e
  */
-function analizar({ filas, pools, ocupados, defectos = {} }) {
+function analizar({ filas, pools, ocupados, defectos = {}, ahora = new Date() }) {
   const existentes = ocupados.flatMap((o) => {
     const c = parse(o.cidr);
     return c ? [{ pool_id: o.pool_id, cidr: o.cidr, vpc: o.vpc || '', c }] : [];
@@ -155,7 +162,7 @@ function analizar({ filas, pools, ocupados, defectos = {} }) {
 
   for (const f of filas) {
     const base = { n: f.n, cidr: String(f.cidr || '').trim(), vpc: String(f.vpc || f.proyecto || '').trim(), ticket: String(f.ticket || '').trim() };
-    const v = validarFila(f, defectos);
+    const v = validarFila(f, defectos, ahora);
     if (!v.datos) {
       salida.push({
         ...base,
@@ -183,6 +190,10 @@ function analizar({ filas, pools, ocupados, defectos = {} }) {
       proyecto: d.proyecto,
       subred: d.subred,
       ticket: d.ticket,
+      descripcion: d.descripcion,
+      responsable: d.responsable,
+      uso: d.uso,
+      creado_en: d.creado_en,
       proveedor: d.proveedor,
       ambiente: d.ambiente,
       tipo: d.tipo,
