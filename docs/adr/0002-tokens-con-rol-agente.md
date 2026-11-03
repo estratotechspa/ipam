@@ -12,11 +12,12 @@ exige navegador, redirecciones y cookies.
   Un secreto de 256 bits no necesita un hash «lento»: no se puede adivinar por fuerza bruta.
 - Roles: `lector` < `agente` < `solicitante` < `admin`. Los tokens solo pueden ser `lector` o `agente`. El `agente` reserva, confirma y libera **sus propias reservas**,
   pero no asigna directo ni administra usuarios ni tokens.
+- Cada token lleva un **alcance** (grupos de la API que puede usar: `reservas`, `consulta`, `direcciones`); fuera de ellos responde `403 fuera_de_alcance`. Sin alcance indicado, conserva todo lo de su rol (añadido después de esta decisión).
 - Vigencia de 1 a 365 días (90 por defecto) y revocables al instante.
 - `Authorization: Bearer …` se evalúa **primero**, en cualquier modo de autenticación. Un token inválido es 401 aunque el servicio esté en modo abierto.
 - Sin `X-Requested-With`: la defensa CSRF existe porque el navegador adjunta cookies solas; un token no es una cookie. Las escrituras por cookie o Basic siguen exigiéndola.
 - Cada uso se audita como `svc:<nombre>`; los rechazos como `token_rechazado` (sin el token). `ultimo_uso` se actualiza como máximo una vez por minuto.
-- Se administran solo con un admin (`POST/GET/DELETE /api/tokens`). **Rotar:** crear uno nuevo con otro nombre, actualizar el agente, revocar el viejo.
+- Se administran solo con un admin (`POST/GET/DELETE /api/v1/tokens`). **Rotar:** crear uno nuevo con otro nombre, actualizar el agente, revocar el viejo.
 
 ## Alternativas
 - **Reutilizar el usuario Basic:** un solo secreto compartido, rol admin, sin vencimiento ni revocación individual. Descartado.

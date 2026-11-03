@@ -4,7 +4,7 @@ Un **IPAM** (*IP Address Management*, gestión de direcciones IP) para entregar 
 
 El caso de uso principal: **asignar subredes a un proyecto GCP nuevo a partir de un YAML**, desde un pipeline, con aprobación humana. También sirve para llevar el inventario de rangos de GCP, de otras nubes y on-premise.
 
-> Estado: versión `0.3.0`, en desarrollo. Hay un POC en Render + Supabase. Lo que **no** está verificado (pipelines reales, manifiestos de nube) se declara en [`docs/LIMITACIONES.md`](docs/LIMITACIONES.md).
+> Estado: versión `0.3.0`, en desarrollo (los cambios recientes están en [`CHANGELOG.md`](CHANGELOG.md), sección «Sin publicar»). Hay un POC en Render + Supabase. Lo que **no** está verificado (pipelines reales, manifiestos de nube) se declara en [`docs/LIMITACIONES.md`](docs/LIMITACIONES.md).
 
 ## Los tres conceptos
 
@@ -18,8 +18,8 @@ Flujo normal: **pedir (reserva) → un admin aprueba → asignación**. Un agent
 
 ## Qué incluye
 - **Garantía en la base de datos:** dos segmentos de un pool nunca se solapan (restricción de exclusión de PostgreSQL), ni con concurrencia ni con varias réplicas.
-- **Interfaz web** con pools, asignaciones, reservas, integración con Jira, tokens, usuarios y auditoría; filtro por ambiente y proveedor.
-- **API REST** (`/api/v1`, contrato OpenAPI 3.1) con tokens de servicio de rol `agente`.
+- **Interfaz web** con pools (cada uno despliega sus segmentos), una pestaña única de **segmentos** (asignados y reservados, con proyecto, VPC, subred/VLAN, descripción y responsable), direcciones IP fijas, integración con Jira, tokens, usuarios y auditoría; filtro por ambiente y proveedor; importación y exportación Excel/CSV.
+- **API REST** (`/api/v1`, contrato OpenAPI 3.1) con tokens de servicio de rol `agente` o `lector`, limitados por **alcance** (`reservas`, `consulta`, `direcciones`). `MODULOS_DESACTIVADOS` apaga los módulos que no se usan.
 - **Acceso:** SSO (OIDC), usuario y contraseña para POC, o cuentas locales para pruebas. Roles `lector < agente < solicitante < admin`.
 - **Seguro por defecto:** en producción no arranca sin autenticación; secretos solo por variables de entorno; auditoría de solo inserción; límite de peticiones y cuota por token.
 - **Observabilidad:** `/healthz`, `/readyz`, `/metrics` (Prometheus), logs JSON, trazas OpenTelemetry opcionales, alertas y dashboard.
@@ -43,7 +43,7 @@ Con el compose, el acceso queda abierto como administrador (`ALLOW_ANONYMOUS=tru
 | **Aprender a usar el IPAM** (paso a paso, con capturas) | [`docs/MANUAL-DE-USUARIO.md`](docs/MANUAL-DE-USUARIO.md) |
 | **Consultar cada pestaña** (referencia) | [`docs/MANUAL-DE-USO.md`](docs/MANUAL-DE-USO.md) |
 | Entender los términos | [`docs/GLOSARIO.md`](docs/GLOSARIO.md) |
-| Ver los índices y planes de la base de datos | [`docs/BASE-DE-DATOS.md`](docs/BASE-DE-DATOS.md) |
+| Ver el esquema, los índices y los planes de la base de datos | [`docs/BASE-DE-DATOS.md`](docs/BASE-DE-DATOS.md) |
 | Entender cómo está construido | [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md) y los [ADR](docs/adr/) |
 | Llamar a la API o integrar un agente | [`docs/API-Y-AGENTES.md`](docs/API-Y-AGENTES.md) |
 | El YAML de redes del MVP | [`docs/CONTRATO-YAML-REDES.md`](docs/CONTRATO-YAML-REDES.md) |
@@ -51,11 +51,11 @@ Con el compose, el acceso queda abierto como administrador (`ALLOW_ANONYMOUS=tru
 | Todas las variables de entorno | [`docs/CONFIGURACION.md`](docs/CONFIGURACION.md) |
 | Desplegarlo (Docker, Kubernetes, nubes) | [`docs/ops/DESPLIEGUE.md`](docs/ops/DESPLIEGUE.md) y [`docs/PORTABILIDAD.md`](docs/PORTABILIDAD.md) |
 | El POC en Render + Supabase | [`docs/ops/POC-RENDER-SUPABASE.md`](docs/ops/POC-RENDER-SUPABASE.md) |
-| Operarlo y resolver fallas | [`docs/ops/RUNBOOK.md`](docs/ops/RUNBOOK.md) y [`docs/ops/OBSERVABILIDAD.md`](docs/ops/OBSERVABILIDAD.md) |
+| Operarlo y resolver fallas | [`docs/ops/RUNBOOK.md`](docs/ops/RUNBOOK.md), [`docs/ops/OBSERVABILIDAD.md`](docs/ops/OBSERVABILIDAD.md) y [`docs/OPERACION.md`](docs/OPERACION.md) (respaldos con pgBackRest, URL interna) |
 | Respaldar, recuperar o migrar | [`docs/ops/RESPALDO-Y-RECUPERACION.md`](docs/ops/RESPALDO-Y-RECUPERACION.md) y [`docs/ops/MIGRACION.md`](docs/ops/MIGRACION.md) |
 | Pipelines y paso de GitHub a GitLab | [`docs/ops/gitlab/`](docs/ops/gitlab/README.md) y [`docs/ops/MIGRAR-A-GITLAB.md`](docs/ops/MIGRAR-A-GITLAB.md) |
 | Buenas prácticas (*human-in-the-loop*) | [`docs/BUENAS-PRACTICAS.md`](docs/BUENAS-PRACTICAS.md) |
-| Saber qué no hace, y qué se podría copiar de un IPAM comercial | [`docs/LIMITACIONES.md`](docs/LIMITACIONES.md) y [`docs/ANALISIS-IPAM-COMERCIAL.md`](docs/ANALISIS-IPAM-COMERCIAL.md) |
+| Saber qué no hace, qué deuda técnica se aceptó y qué se podría copiar de un IPAM comercial | [`docs/LIMITACIONES.md`](docs/LIMITACIONES.md), [`docs/DEUDA-TECNICA.md`](docs/DEUDA-TECNICA.md) y [`docs/ANALISIS-IPAM-COMERCIAL.md`](docs/ANALISIS-IPAM-COMERCIAL.md) |
 | Revisar la seguridad del código | [`docs/MODELO-DE-AMENAZAS.md`](docs/MODELO-DE-AMENAZAS.md) y [`docs/CALIDAD-Y-SEGURIDAD-DEL-CODIGO.md`](docs/CALIDAD-Y-SEGURIDAD-DEL-CODIGO.md) |
 | Contribuir | [`docs/CONTRIBUIR.md`](docs/CONTRIBUIR.md) |
 | Ver los cambios por versión | [`CHANGELOG.md`](CHANGELOG.md) |
@@ -63,9 +63,10 @@ Con el compose, el acceso queda abierto como administrador (`ALLOW_ANONYMOUS=tru
 ## Estructura del repositorio
 ```
 mvp/            la aplicación (Node 22 + Express 5), su esquema SQL, chart de Helm, pruebas y e2e
-  src/dominio/      reglas puras (CIDR, roles, reservas, tokens)
+  src/dominio/      reglas puras (CIDR, roles, reservas, tokens, alcance, módulos)
   src/aplicacion/   casos de uso sobre puertos
   src/adaptadores/  HTTP, PostgreSQL, autenticación, límite, eventos, métricas, trazas, Jira
+  public/           interfaz web sin framework (app.js + módulos ES en public/modulos/)
   db/               esquema (idempotente), roles y semillas (FICTICIAS)
   chart/ipam/       chart de Helm
 despliegue/     manifiestos por plataforma: docker-compose, kubernetes (GKE/EKS/AKS), cloud-run, render, ejemplos IaC
@@ -78,6 +79,7 @@ scripts/        lógica de CI (la usan GitHub y GitLab), guardia de portabilidad
 Requisitos: Node 22, Docker y `make`. Los comandos más usados:
 ```bash
 make lint          # ESLint, Prettier y tipos
+make docs          # enlaces relativos y diagramas Mermaid de la documentación
 make test          # pruebas contra un PostgreSQL real
 make matriz-pg     # pruebas en PostgreSQL 14, 15, 16 y 17
 make test-e2e      # navegador (Playwright) y accesibilidad

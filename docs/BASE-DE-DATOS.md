@@ -1,4 +1,18 @@
-# Base de datos: índices y planes de ejecución
+# Base de datos: esquema, índices y planes de ejecución
+
+## Versiones del esquema
+`mvp/db/schema.sql` es idempotente (se puede aplicar las veces que haga falta) y registra cada paso en la tabla `esquema_version`; `/readyz` compara la versión aplicada con la mínima que exige el código. Se aplica con `npm run migrar` **antes** de desplegar una versión nueva. Los cambios recientes son columnas opcionales (los datos anteriores quedan en blanco):
+
+| Versión | Qué agrega |
+|---|---|
+| 10 | tabla `direcciones_ip` (IPs fijas dentro de un segmento) |
+| 11 | `proyecto` y `subred` en `asignaciones` y `reservas` (la VLAN y su nombre ya existían) |
+| 12 | `alcance` en `tokens_servicio` (grupos de la API que puede usar el token) |
+| 13 | `descripcion`, `responsable` y `uso` en `asignaciones` |
+
+`mvp/db/schema.sql` y `mvp/chart/ipam/files/schema.sql` deben ser idénticos (lo exige una prueba). En Supabase, si una versión agrega tablas, vuelve a ejecutar `mvp/db/supabase/01-rls.sql` ([POC](ops/POC-RENDER-SUPABASE.md)).
+
+# Índices y planes de ejecución
 
 Revisión del rendimiento de PostgreSQL con **volumen sintético** y los planes reales (`EXPLAIN (ANALYZE, BUFFERS)`) de las consultas de la aplicación. Sirve para saber qué se midió, qué se cambió y qué se dejó a propósito.
 

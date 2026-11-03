@@ -6,6 +6,7 @@ Términos en orden alfabético, explicados sin jerga. El término en inglés va 
 |---|---|
 | **Adaptador** (*adapter*) | Pieza que conecta el núcleo del IPAM con algo externo: la base de datos, el login, el límite de peticiones. Se puede cambiar sin tocar las reglas de negocio. |
 | **Agente** | Programa o pipeline que usa la API con un token. Puede reservar, pero no asignar directo ni administrar. También es un rol. |
+| **Alcance** (de un token) | Lista de grupos de la API que un token puede usar (`reservas`, `consulta`, `direcciones`). Fuera de ellos responde 403 `fuera_de_alcance`. Se elige al crear el token. |
 | **Ambiente** | `dev`, `qa`, `pre` o `prod`: la etapa de un proyecto. Cada pool pertenece a uno. |
 | **Asignación** | Segmento entregado de forma definitiva a un proyecto. Nadie más puede tomarlo hasta que se libere. |
 | **Auditoría** | Bitácora de solo inserción: quién hizo qué y cuándo. No se puede editar ni borrar. |
@@ -35,7 +36,9 @@ Términos en orden alfabético, explicados sin jerga. El término en inglés va 
 | **RLS** | *Row Level Security*: seguridad por filas de PostgreSQL. Se usa como defensa extra en Supabase. |
 | **Rol** | Nivel de permisos: `lector < agente < solicitante < admin`. |
 | **Secondary ranges** (rangos secundarios) | En GCP, rangos adicionales de una subred que usan los Pods y Servicios de GKE. Ver [CONTRATO-YAML-REDES](CONTRATO-YAML-REDES.md). |
-| **Segmento** | Un CIDR concreto dentro de un pool. |
+| **Módulo desactivado** | Parte de la API apagada por configuración (`MODULOS_DESACTIVADOS`: `jira`, `importacion`, `direcciones`, `respaldo`, `excel`); responde 404 `modulo_desactivado`. |
+| **Segmento** | Un CIDR concreto dentro de un pool: una asignación (definitiva) o una reserva (tentativa). En la interfaz ambos conviven en la pestaña **Segmentos**. Puede llevar proyecto, VPC, subred o VLAN, descripción, responsable y uso, todos opcionales. |
+| **Subred / VLAN** | Datos opcionales de un segmento. En el formulario comparten una casilla: un número de 1 a 4094 se guarda como VLAN y cualquier otro texto como nombre de subred. |
 | **Solicitante** | Rol que puede pedir segmentos directamente. |
 | **SBOM** | Lista de ingredientes (dependencias) del software. |
 | **SSRF** | Ataque que hace que el servidor llame a direcciones internas. El webhook saliente está protegido. |
