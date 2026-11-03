@@ -9,7 +9,16 @@ const { SOLICITANTE_JIRA } = require('../../../dominio/reserva');
 
 /** @param {{reloj?: {ahora: () => Date}, pools?: any[]}} [o] */
 function crearRepositorioMemoria({ reloj = { ahora: () => new Date() }, pools = [] } = {}) {
-  const datos = { pools: new Map(pools.map((p) => [p.id, p])), asignaciones: [], reservas: [], tokens: [], ticket: 142, idAsignacion: 0, barredor: null };
+  const datos = {
+    pools: new Map(pools.map((p) => [p.id, p])),
+    asignaciones: [],
+    reservas: [],
+    tokens: [],
+    poolUso: new Map(),
+    ticket: 142,
+    idAsignacion: 0,
+    barredor: null,
+  };
   const ahora = () => reloj.ahora();
   const efectivo = (r) => (r.estado === 'reservada' && r.expira_en.getTime() <= ahora().getTime() ? 'expirada' : r.estado);
   const vigente = (r) => r.estado === 'reservada' && r.expira_en.getTime() > ahora().getTime();
@@ -47,7 +56,20 @@ function crearRepositorioMemoria({ reloj = { ahora: () => new Date() }, pools = 
       datos.ticket += 1;
       return `NET-${datos.ticket}`;
     },
-    async insertarAsignacion({ pool, cidr, vpc, solicitante, ticket, origen, vlan = null, vlan_nombre = null, proyecto = null, subred = null }) {
+    async insertarAsignacion({
+      pool,
+      cidr,
+      vpc,
+      solicitante,
+      ticket,
+      origen,
+      vlan = null,
+      vlan_nombre = null,
+      proyecto = null,
+      subred = null,
+      grupo = null,
+      rango = null,
+    }) {
       if (datos.asignaciones.some((x) => x.pool_id === pool && cruza(x.cidr, cidr))) throw new ConflictoDeDatos('solapamiento', '23P01');
       const id = ++datos.idAsignacion;
       const a = {
@@ -60,6 +82,8 @@ function crearRepositorioMemoria({ reloj = { ahora: () => new Date() }, pools = 
         vlan_nombre,
         proyecto,
         subred,
+        grupo,
+        rango,
         solicitante,
         ticket,
         origen,
@@ -87,7 +111,21 @@ function crearRepositorioMemoria({ reloj = { ahora: () => new Date() }, pools = 
     async contarVigentesDe(solicitante) {
       return datos.reservas.filter((r) => r.solicitante === solicitante && vigente(r)).length;
     },
-    async insertarReserva({ pool, cidr, vpc, solicitante, ticket, ttlHoras, clave, vlan = null, vlan_nombre = null, proyecto = null, subred = null }) {
+    async insertarReserva({
+      pool,
+      cidr,
+      vpc,
+      solicitante,
+      ticket,
+      ttlHoras,
+      clave,
+      vlan = null,
+      vlan_nombre = null,
+      proyecto = null,
+      subred = null,
+      grupo = null,
+      rango = null,
+    }) {
       if (clave && datos.reservas.some((r) => r.solicitante === solicitante && r.clave_idem === clave)) throw new ConflictoDeDatos('clave repetida', '23505');
       if (
         datos.reservas.some((r) => r.pool_id === pool && vigente(r) && cruza(r.cidr, cidr)) ||
@@ -103,6 +141,8 @@ function crearRepositorioMemoria({ reloj = { ahora: () => new Date() }, pools = 
         vlan_nombre,
         proyecto,
         subred,
+        grupo,
+        rango,
         solicitante,
         ticket,
         estado: 'reservada',
@@ -114,6 +154,26 @@ function crearRepositorioMemoria({ reloj = { ahora: () => new Date() }, pools = 
       };
       datos.reservas.push(r);
       return vista(r);
+    },
+    async reservasDeGrupo(grupo) {
+      return datos.reservas.filter((r) => r.grupo === grupo).map(vista);
+    },
+    async nuevoGrupo() {
+      return crypto.randomUUID();
+    },
+    async listarPoolUso() {
+      return [...datos.poolUso.values()].sort((a, b) => (a.ambiente + a.uso).localeCompare(b.ambiente + b.uso));
+    },
+    async obtenerPoolUso(ambiente, uso) {
+      return datos.poolUso.get(`${ambiente}/${uso}`) || null;
+    },
+    async guardarPoolUso(ambiente, uso, poolId) {
+      const fila = { ambiente, uso, pool_id: poolId };
+      datos.poolUso.set(`${ambiente}/${uso}`, fila);
+      return fila;
+    },
+    async borrarPoolUso(ambiente, uso) {
+      return datos.poolUso.delete(`${ambiente}/${uso}`);
     },
     async expirarVencidas(poolId) {
       const out = [];
@@ -160,6 +220,8 @@ function crearRepositorioMemoria({ reloj = { ahora: () => new Date() }, pools = 
         vlan_nombre: r.vlan_nombre ?? null,
         proyecto: r.proyecto ?? null,
         subred: r.subred ?? null,
+        grupo: r.grupo ?? null,
+        rango: r.rango ?? null,
       });
     },
     async purgarLimite() {

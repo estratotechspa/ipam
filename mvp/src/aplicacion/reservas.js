@@ -20,6 +20,8 @@ const presentar = (r) => ({
   vlan_nombre: r.vlan_nombre ?? null,
   proyecto: r.proyecto ?? null,
   subred: r.subred ?? null,
+  grupo: r.grupo ?? null,
+  rango: r.rango ?? null,
   solicitante: r.solicitante,
   ticket: r.ticket,
   estado: r.estado,

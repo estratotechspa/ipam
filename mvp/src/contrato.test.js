@@ -188,3 +188,63 @@ test('tokens, usuarios, auditoría, respaldo y Jira cumplen el contrato', opts, 
   assert.equal(x.status, 200);
   await verificar(x, 'GET', '/api/v1/exportar.xlsx');
 });
+
+test('reserva en grupo y tabla ambiente + uso → pool: las respuestas reales cumplen el contrato y las reglas de rol', opts, async () => {
+  const G = '/api/v1/reservas/grupo';
+  const tg = await (await llamar('POST', '/api/v1/tokens', { nombre: 'agente-grupo', rol: 'agente', cuota_reservas: 5 })).json();
+  const comoAgente = (extra = {}) => ({ Authorization: `Bearer ${tg.token}`, 'Content-Type': 'application/json', ...extra }); // un clúster pide 3 reservas
+  for (const [id, cidr] of [
+    ['ct-lab-nodos', '10.160.0.0/16'],
+    ['ct-lab-pods', '10.164.0.0/14'],
+    ['ct-lab-svc', '10.168.0.0/16'],
+  ])
+    assert.equal((await llamar('POST', '/api/v1/pools', { id, tipo: 'x', ambiente: 'lab', proveedor: 'GCP', cidr })).status, 201);
+  for (const [uso, pool] of [
+    ['nodos', 'ct-lab-nodos'],
+    ['pods', 'ct-lab-pods'],
+    ['servicios', 'ct-lab-svc'],
+  ]) {
+    const put = await llamar('PUT', `/api/v1/pool-uso/lab/${uso}`, { pool });
+    assert.equal(put.status, 200);
+    await verificar(put, 'PUT', '/api/v1/pool-uso/{ambiente}/{uso}');
+  }
+  assert.equal((await llamar('PUT', '/api/v1/pool-uso/lab/pods', { pool: 'ct-lab-pods' }, comoAgente())).status, 403, 'solo un admin cambia la tabla');
+  const tabla = await verificar(await llamar('GET', '/api/v1/pool-uso', undefined, comoAgente()), 'GET', '/api/v1/pool-uso');
+  assert.equal(tabla.filter((f) => f.ambiente === 'lab').length, 3);
+
+  const pedido = { ambiente: 'lab', proyecto: 'proy-ct', subred: 'gke-ct', rangos: [{ uso: 'nodos', mascara: 24 }, { uso: 'pods' }, { uso: 'servicios' }] };
+  const sim = await llamar('POST', '/api/v1/reservas/lote?simular=true', pedido, comoAgente());
+  assert.equal(sim.status, 200);
+  assert.equal((await verificar(sim, 'POST', '/api/v1/reservas/lote')).simulacion, true);
+  const r = await llamar('POST', '/api/v1/reservas/lote', pedido, comoAgente({ 'Idempotency-Key': 'ct-grupo-1' }));
+  assert.equal(r.status, 201);
+  const g = (await verificar(r, 'POST', '/api/v1/reservas/lote')).grupo;
+  assert.deepEqual(
+    g.rangos.map((x) => [x.rango, x.cidr]),
+    [
+      ['principal', '10.160.0.0/24'],
+      ['pods', '10.164.0.0/14'],
+      ['servicios', '10.168.0.0/20'],
+    ],
+  );
+  const otra = await llamar('POST', '/api/v1/reservas/lote', pedido, comoAgente({ 'Idempotency-Key': 'ct-grupo-1' }));
+  assert.equal((await verificar(otra, 'POST', '/api/v1/reservas/lote')).repetida, true);
+  await verificar(await llamar('GET', `${G}/${g.grupo}`), 'GET', `${G}/{id}`);
+  await verificar(await llamar('GET', `${G}/no-es-uuid`), 'GET', `${G}/{id}`); // 404
+
+  // Un token no confirma; un admin sí, y los tres rangos pasan juntos.
+  assert.equal((await llamar('POST', `${G}/${g.grupo}/confirmar`, {}, comoAgente())).status, 403);
+  const conf = await llamar('POST', `${G}/${g.grupo}/confirmar`, { aprobado_por: 'ana@empresa.example', referencia: 'MR-1' });
+  assert.equal(conf.status, 200);
+  assert.equal((await verificar(conf, 'POST', `${G}/{id}/confirmar`)).grupo.estado, 'confirmada');
+  const asigs = await (await llamar('GET', '/api/v1/asignaciones?pool=ct-lab-pods')).json();
+  assert.deepEqual([asigs[0].grupo, asigs[0].rango], [g.grupo, 'pods']);
+
+  // Ya confirmado, un agente no lo libera; un admin sí y se borran las tres asignaciones.
+  assert.equal((await llamar('DELETE', `${G}/${g.grupo}`, undefined, comoAgente())).status, 403);
+  const lib = await llamar('DELETE', `${G}/${g.grupo}`);
+  assert.equal((await verificar(lib, 'DELETE', `${G}/{id}`)).asignaciones_borradas, 3);
+  const sinPool = await llamar('POST', '/api/v1/reservas/lote', { ambiente: 'pre', rangos: [{ uso: 'pods' }] }, comoAgente());
+  assert.equal(sinPool.status, 422);
+  assert.equal((await llamar('DELETE', '/api/v1/pool-uso/lab/servicios')).status, 200);
+});

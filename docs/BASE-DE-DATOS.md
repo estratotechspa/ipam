@@ -10,6 +10,7 @@
 | 12 | `alcance` en `tokens_servicio` (grupos de la API que puede usar el token) |
 | 13 | `descripcion`, `responsable` y `uso` en `asignaciones` |
 | 14 | ambiente `lab` en `pools` (reemplaza la restricción `pools_ambiente_check`) |
+| 15 | `grupo` y `rango` en `reservas` y `asignaciones` (reserva en grupo) y la tabla `pool_uso` (ambiente + uso → pool) |
 
 `mvp/db/schema.sql` y `mvp/chart/ipam/files/schema.sql` deben ser idénticos (lo exige una prueba). En Supabase, si una versión agrega tablas, vuelve a ejecutar `mvp/db/supabase/01-rls.sql` ([POC](ops/POC-RENDER-SUPABASE.md)).
 

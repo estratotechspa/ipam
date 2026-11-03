@@ -65,6 +65,22 @@ curl -s -X DELETE -H "Authorization: Bearer $IPAM_TOKEN" "$IPAM_URL/api/v1/reser
 ```
 Si nadie confirma ni libera, la reserva **expira sola** (72 h por defecto, 168 h como máximo).
 
+**Reservar los rangos de un clúster GKE (en grupo, todo o nada)**
+Un proyecto con clúster necesita tres rangos: la subred de nodos y sus rangos secundarios de Pods y Servicios. Se piden juntos; si uno no cabe, no se reserva ninguno. Cada rango sale del pool que la tabla **ambiente + uso → pool** indica (`GET /api/v1/pool-uso`; un admin la define con `PUT /api/v1/pool-uso/{ambiente}/{uso}`). Pods `/14` y Servicios `/20` por defecto (los de GKE); los nodos exigen `mascara`. Un proyecto **sin** clúster usa la reserva suelta de más arriba.
+```bash
+# ¿Qué reservaría? (no reserva nada)
+curl -s -H "Authorization: Bearer $IPAM_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"ambiente":"dev","proyecto":"proy-pagos","subred":"gke-principal","rangos":[{"uso":"nodos","mascara":24},{"uso":"pods"},{"uso":"servicios"}]}' \
+  "$IPAM_URL/api/v1/reservas/lote?simular=true"
+# Reservar (igual, sin ?simular): 201 con el grupo y sus tres rangos
+curl -s -H "Authorization: Bearer $IPAM_TOKEN" -H 'Content-Type: application/json' -H "Idempotency-Key: mr-1234-gke" -d '{…el mismo cuerpo…}' "$IPAM_URL/api/v1/reservas/lote"
+# Consultar el grupo y esperar a que un admin lo apruebe: estado reservada → confirmada
+curl -s -H "Authorization: Bearer $IPAM_TOKEN" "$IPAM_URL/api/v1/reservas/grupo/<grupo>"
+# Liberar el grupo entero (si falla o se rechaza)
+curl -s -X DELETE -H "Authorization: Bearer $IPAM_TOKEN" "$IPAM_URL/api/v1/reservas/grupo/<grupo>"
+```
+El grupo lo **confirma solo un admin** (`POST /api/v1/reservas/grupo/{id}/confirmar`): los tres rangos pasan juntos a asignación. La cuota del token cuenta cada rango como una reserva (un clúster consume 3). Errores nuevos: `422 uso_sin_pool` (falta configurar el pool de ese uso), `409 sin_espacio` (qué uso no cupo; no se reservó nada).
+
 **Direcciones IP fijas** (interfaces de router, switch, firewall…): el agente registra la IP y el IPAM la ubica sola en su segmento.
 ```bash
 curl -s -H "Authorization: Bearer $IPAM_TOKEN" -H 'Content-Type: application/json' \

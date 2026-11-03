@@ -46,6 +46,8 @@ Fuentes: [VPC-native clusters](https://cloud.google.com/kubernetes-engine/docs/c
 
 Ojo: el **pool** de Pods puede ser un `/14` (un bloque grande del que salen los rangos), pero el rango de **Servicios de cada clúster** es mucho más chico (`/20` por defecto); un pool de Servicios de `/14` alcanza para muchos clústeres.
 
+> **Con clúster GKE, en grupo:** si la subred lleva rangos secundarios de Pods y Servicios, el agente los pide **juntos** en una sola llamada `POST /api/v1/reservas/lote` (todo o nada, una sola `Idempotency-Key`), en vez de una reserva por rango. Los pools los resuelve la tabla ambiente + uso → pool ([API-Y-AGENTES](API-Y-AGENTES.md)). Un proyecto sin clúster usa una reserva suelta por subred.
+
 ## Cómo lo traduce el agente a llamadas al IPAM
 Una entrada de `ipam_reservations` con *n* rangos produce *n* reservas. La clave de idempotencia hace que **reintentar no duplique nada**.
 
