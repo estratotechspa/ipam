@@ -25,7 +25,7 @@ RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 
 # hadolint ignore=DL3006
 FROM ${BASE_IMAGE}
-ARG VERSION=0.3.0
+ARG VERSION=0.4.0
 ARG REVISION=desconocida
 LABEL org.opencontainers.image.title="ipam" \
       org.opencontainers.image.description="IPAM: gestión de segmentos de red con reservas tentativas para agentes" \

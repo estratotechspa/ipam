@@ -4,7 +4,7 @@ Un **IPAM** (*IP Address Management*, gestión de direcciones IP) para entregar 
 
 El caso de uso principal: **asignar subredes a un proyecto GCP nuevo a partir de un YAML**, desde un pipeline, con aprobación humana. También sirve para llevar el inventario de rangos de GCP, de otras nubes y on-premise.
 
-> Estado: versión `0.3.0`, en desarrollo (los cambios recientes están en [`CHANGELOG.md`](CHANGELOG.md), sección «Sin publicar»). Hay un POC en Render + Supabase. Lo que **no** está verificado (pipelines reales, manifiestos de nube) se declara en [`docs/LIMITACIONES.md`](docs/LIMITACIONES.md).
+> Estado: versión `0.4.0`, en desarrollo (los cambios recientes están en [`CHANGELOG.md`](CHANGELOG.md), sección «Sin publicar»). Hay un POC en Render + Supabase. Lo que **no** está verificado (pipelines reales, manifiestos de nube) se declara en [`docs/LIMITACIONES.md`](docs/LIMITACIONES.md).
 
 ## Los tres conceptos
 

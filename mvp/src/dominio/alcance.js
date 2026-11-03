@@ -7,13 +7,15 @@
 /** @type {Record<string, {descripcion: string, rutas: string[]}>} */
 const GRUPOS = {
   reservas: {
-    descripcion: 'Reservar, consultar y liberar reservas propias (confirmar es solo de admin)',
+    descripcion: 'Reservar, consultar, renovar y liberar reservas propias (confirmar es solo de admin)',
     rutas: [
       'POST /reservas',
       'GET /reservas',
       'GET /reservas/:id',
       'DELETE /reservas/:id',
       'POST /reservas/lote',
+      'GET /reservas/grupo',
+      'POST /reservas/grupo/:id/renovar',
       'GET /reservas/grupo/:id',
       'DELETE /reservas/grupo/:id',
     ],

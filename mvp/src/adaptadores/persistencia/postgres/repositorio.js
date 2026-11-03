@@ -83,16 +83,21 @@ function traducir(e) {
   return e;
 }
 
+const COLUMNAS_POOL = 'id, tipo, ambiente, proveedor, cidr::text, mascara_defecto, mascara_minima, mascara_maxima';
+const SQL_POOL_POR_ID = `select ${COLUMNAS_POOL} from pools where id=$1`;
+const SQL_POOLS = `select ${COLUMNAS_POOL} from pools order by id`;
+const SQL_POOLS_POR_TIPO = `select ${COLUMNAS_POOL} from pools where ambiente=$1 and tipo=$2 order by id`;
+
 /** Consultas compartidas por el repositorio y por las transacciones (`x` = pool o cliente). */
 function consultas(x) {
   const q = (texto, params) => x.query(texto, params);
   return {
     async obtenerPool(id) {
-      return (await q('select id, tipo, ambiente, proveedor, cidr::text from pools where id=$1', [id])).rows[0];
+      return (await q(SQL_POOL_POR_ID, [id])).rows[0];
     },
     /** Todos los pools (para analizar una importación). */
     async todosLosPools() {
-      return (await q('select id, tipo, ambiente, proveedor, cidr::text from pools order by id')).rows;
+      return (await q(SQL_POOLS)).rows;
     },
     /** Todo lo ocupado en cualquier pool: asignaciones y reservas vigentes. */
     async todosOcupados() {
@@ -104,7 +109,7 @@ function consultas(x) {
       ).rows;
     },
     async buscarPools({ ambiente, tipo }) {
-      return (await q('select id, tipo, ambiente, proveedor, cidr::text from pools where ambiente=$1 and tipo=$2 order by id', [ambiente, tipo])).rows;
+      return (await q(SQL_POOLS_POR_TIPO, [ambiente, tipo])).rows;
     },
     /** Rangos ocupados de un pool: asignaciones + reservas vigentes. */
     async ocupados(poolId) {
@@ -184,14 +189,15 @@ function consultas(x) {
       grupo = null,
       rango = null,
       nombre = null,
+      expiraEn = null,
     }) {
       return (
         await q(
           `with nueva as (
            insert into reservas (pool_id, cidr, vpc, solicitante, ticket, clave_idem, expira_en, vlan, vlan_nombre, proyecto, subred, grupo, rango, nombre)
-           values ($1,$2,$3,$4,$5,$6, now() + make_interval(hours => $7::int), $8, $9, $10, $11, $12, $13, $14) returning *)
+           values ($1,$2,$3,$4,$5,$6, coalesce($15::timestamptz, now() + make_interval(hours => $7::int)), $8, $9, $10, $11, $12, $13, $14) returning *)
          select ${COLUMNAS_RESERVA} from nueva`,
-          [pool, cidr, vpc, solicitante, ticket, clave, ttlHoras, vlan, vlan_nombre, proyecto, subred, grupo, rango, nombre],
+          [pool, cidr, vpc, solicitante, ticket, clave, ttlHoras, vlan, vlan_nombre, proyecto, subred, grupo, rango, nombre, expiraEn],
         )
       ).rows[0];
     },
@@ -250,6 +256,11 @@ function consultas(x) {
 /** Qué pool corresponde a cada (ambiente, uso) y el id de un grupo de reservas nuevo. `q` = pool o cliente de una transacción. */
 function consultasDePoolUso(q) {
   return {
+    /** Huella de la tabla ambiente + uso → pool: cambia cuando alguien la modifica. */
+    async versionPoolUso() {
+      return (await q("select md5(coalesce(string_agg(ambiente || '/' || uso || '=' || pool_id, ',' order by ambiente, uso), '')) as v from pool_uso")).rows[0]
+        .v;
+    },
     async nuevoGrupo() {
       return (await q('select gen_random_uuid()::text as id')).rows[0].id;
     },
@@ -270,6 +281,47 @@ function consultasDePoolUso(q) {
     },
     async borrarPoolUso(ambiente, uso) {
       return (await q('delete from pool_uso where ambiente=$1 and uso=$2', [ambiente, uso])).rowCount > 0;
+    },
+  };
+}
+
+/** Renovación y búsqueda de grupos de reservas. `q` = pool o cliente de una transacción. */
+function consultasDeGrupos(q) {
+  return {
+    /** Tope de vigencia de un grupo: desde su creación más `maxHoras`; y la hora de la base y la nueva expiración pedida. */
+    async datosRenovacionGrupo(grupo, horas, maxHoras) {
+      return (
+        await q(
+          `select min(creado_en) as creado_en, now() as ahora, now() + make_interval(hours => $2::int) as nueva,
+                  min(creado_en) + make_interval(hours => $3::int) as tope
+           from reservas where grupo = $1::uuid`,
+          [grupo, horas, maxHoras],
+        )
+      ).rows[0];
+    },
+    /** Extiende la vigencia de las reservas vigentes del grupo (nunca la acorta). Devuelve cuántas cambió. */
+    async extenderGrupo(grupo, nueva) {
+      return (
+        await q(
+          `update reservas set expira_en = greatest(expira_en, $2::timestamptz)
+           where grupo = $1::uuid and estado = 'reservada' and expira_en > now()`,
+          [grupo, nueva],
+        )
+      ).rowCount;
+    },
+    /** Ids de los grupos de un solicitante o con un ticket; con `clave`, los creados con esa Idempotency-Key (solo del solicitante). */
+    async gruposDe({ clave = null, ticket = null, solicitante = null, limite = 100 }) {
+      return (
+        await q(
+          `select grupo::text as grupo from reservas
+           where grupo is not null
+             and ($1::text is null or (solicitante = $2 and starts_with(clave_idem, $1 || ':')))
+             and ($2::text is null or solicitante = $2)
+             and ($3::text is null or ticket = $3)
+           group by grupo order by min(creado_en) desc, grupo limit $4`,
+          [clave, solicitante, ticket, limite],
+        )
+      ).rows.map((f) => f.grupo);
     },
   };
 }
@@ -360,7 +412,8 @@ function consultasDeDirecciones(q) {
 
 /** Todo lo que va en el respaldo lógico (pools, asignaciones, roles e IPs fijas). */
 async function exportarDatos(db) {
-  const pools = (await db.query('select id, tipo, ambiente, proveedor, cidr::text from pools order by id')).rows;
+  const pools = (await db.query('select id, tipo, ambiente, proveedor, cidr::text, mascara_defecto, mascara_minima, mascara_maxima from pools order by id'))
+    .rows;
   const asignaciones = (
     await db.query(
       'select pool_id, cidr::text, vpc, proyecto, subred, vlan, vlan_nombre, solicitante, ticket, origen, creado_en, descripcion, responsable, uso from asignaciones order by pool_id, cidr',
@@ -380,8 +433,13 @@ async function exportarDatos(db) {
 /** Edición y baja de pools (dentro de una transacción). */
 function consultasDePools(q) {
   return {
-    async actualizarPool(id, { tipo, proveedor }) {
-      return (await q('update pools set tipo=$2, proveedor=$3 where id=$1 returning id, tipo, ambiente, proveedor, cidr::text', [id, tipo, proveedor])).rows[0];
+    async actualizarPool(id, { tipo, proveedor, mascara_defecto = null, mascara_minima = null, mascara_maxima = null }) {
+      return (
+        await q(
+          'update pools set tipo=$2, proveedor=$3, mascara_defecto=$4, mascara_minima=$5, mascara_maxima=$6 where id=$1 returning id, tipo, ambiente, proveedor, cidr::text, mascara_defecto, mascara_minima, mascara_maxima',
+          [id, tipo, proveedor, mascara_defecto, mascara_minima, mascara_maxima],
+        )
+      ).rows[0];
     },
     /** Qué impide borrar un pool. */
     async usoDePool(id) {
@@ -595,15 +653,13 @@ function crearRepositorio(db) {
       ...consultasDePools(q),
       ...consultasDeDirecciones(q),
       ...consultasDePoolUso(q),
+      ...consultasDeGrupos(q),
       async insertarPoolSiNoExiste(p) {
         return (
-          await q('insert into pools (id,tipo,ambiente,proveedor,cidr) values ($1,$2,$3,$4,$5) on conflict (id) do nothing', [
-            p.id,
-            p.tipo,
-            p.ambiente,
-            p.proveedor,
-            p.cidr,
-          ])
+          await q(
+            'insert into pools (id,tipo,ambiente,proveedor,cidr,mascara_defecto,mascara_minima,mascara_maxima) values ($1,$2,$3,$4,$5,$6,$7,$8) on conflict (id) do nothing',
+            [p.id, p.tipo, p.ambiente, p.proveedor, p.cidr, p.mascara_defecto ?? null, p.mascara_minima ?? null, p.mascara_maxima ?? null],
+          )
         ).rowCount;
       },
       async insertarAsignacionImportada(a) {
@@ -666,6 +722,7 @@ function crearRepositorio(db) {
     ...base,
     ...consultasDeDirecciones((texto, params) => db.query(texto, params)),
     ...consultasDePoolUso((texto, params) => db.query(texto, params)),
+    ...consultasDeGrupos((texto, params) => db.query(texto, params)),
     transaccion,
     conBarredor,
     async actualizarTicketAsignacion(id, ticket) {
@@ -677,7 +734,7 @@ function crearRepositorio(db) {
     async poolsConUso({ ambiente, tipo } = {}) {
       return (
         await db.query(
-          `select p.id, p.tipo, p.ambiente, p.proveedor, p.cidr::text, a.n::int as asignaciones, a.tam / (2^(32-masklen(p.cidr)))::float8 as uso,
+          `select p.id, p.tipo, p.ambiente, p.proveedor, p.cidr::text, p.mascara_defecto, p.mascara_minima, p.mascara_maxima, a.n::int as asignaciones, a.tam / (2^(32-masklen(p.cidr)))::float8 as uso,
                 r.n::int as reservas_vigentes, r.tam / (2^(32-masklen(p.cidr)))::float8 as uso_reservado
            from pools p
            left join lateral (select count(*) as n, coalesce(sum(2^(32-masklen(cidr))),0)::float8 as tam from asignaciones where pool_id = p.id) a on true

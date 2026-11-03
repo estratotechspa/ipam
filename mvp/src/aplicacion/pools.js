@@ -1,6 +1,7 @@
 // @ts-check
 'use strict';
-const { validarPoolNuevo, validarTexto, chocaConPool } = require('../dominio/pool');
+const { validarPoolNuevo, validarTexto, validarLimitesMascara, chocaConPool } = require('../dominio/pool');
+const { parse } = require('../dominio/cidr');
 const { ok, fallo } = require('./resultado');
 
 /**
@@ -41,7 +42,23 @@ function crearPools({ repo, eventos }) {
       if (!p) return fallo('no_encontrado', 'pool_no_existe', { mensaje: `El pool ${id} no existe.` });
       const choca = chocaConPool({ ...p, proveedor: t.proveedor }, await tx.todosLosPools());
       if (choca) return solapado(choca);
-      return ok({ antes: p, pool: await tx.actualizarPool(id, { tipo: t.tipo, proveedor: t.proveedor }) });
+      // Los límites de máscara solo cambian si el pedido los trae (nulo los quita); si no, se conservan.
+      const trae = ['mascara_defecto', 'mascara_minima', 'mascara_maxima'].some((k) => Object.hasOwn(entrada || {}, k));
+      /** @type {any} */
+      const lim = trae
+        ? validarLimitesMascara(entrada, parse(p.cidr)?.len ?? 8)
+        : { ok: true, mascara_defecto: p.mascara_defecto ?? null, mascara_minima: p.mascara_minima ?? null, mascara_maxima: p.mascara_maxima ?? null };
+      if (!lim.ok) return fallo('validacion', lim.error, { mensaje: lim.mensaje });
+      return ok({
+        antes: p,
+        pool: await tx.actualizarPool(id, {
+          tipo: t.tipo,
+          proveedor: t.proveedor,
+          mascara_defecto: lim.mascara_defecto,
+          mascara_minima: lim.mascara_minima,
+          mascara_maxima: lim.mascara_maxima,
+        }),
+      });
     });
     if (r.ok) await eventos.publicar('pool_editado', r.pool);
     return r;

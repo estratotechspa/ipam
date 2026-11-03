@@ -6,7 +6,7 @@ const base = { id: 'lan-sucursal', tipo: 'LAN', ambiente: 'prod', proveedor: 'On
 
 test('pool: un pool válido se normaliza', () => {
   const r = validarPoolNuevo({ ...base, id: ' LAN-Sucursal ', ambiente: 'PROD' });
-  assert.deepEqual(r, { ok: true, datos: { ...base } });
+  assert.deepEqual(r, { ok: true, datos: { ...base, mascara_defecto: null, mascara_minima: null, mascara_maxima: null } });
 });
 
 test('pool: rechaza nombre, ambiente, CIDR desalineado y máscaras fuera de /8–/30', () => {

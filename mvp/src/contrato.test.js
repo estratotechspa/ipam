@@ -193,12 +193,27 @@ test('reserva en grupo y tabla ambiente + uso → pool: las respuestas reales cu
   const G = '/api/v1/reservas/grupo';
   const tg = await (await llamar('POST', '/api/v1/tokens', { nombre: 'agente-grupo', rol: 'agente', cuota_reservas: 5 })).json();
   const comoAgente = (extra = {}) => ({ Authorization: `Bearer ${tg.token}`, 'Content-Type': 'application/json', ...extra }); // un clúster pide 3 reservas
-  for (const [id, cidr] of [
-    ['ct-lab-nodos', '10.160.0.0/16'],
-    ['ct-lab-pods', '10.168.0.0/13'],
-    ['ct-lab-svc', '10.180.0.0/16'],
+  for (const [id, cidr, limites] of [
+    ['ct-lab-nodos', '10.160.0.0/16', { mascara_maxima: 29 }],
+    ['ct-lab-pods', '10.168.0.0/13', { mascara_defecto: 14, mascara_minima: 13, mascara_maxima: 24 }],
+    ['ct-lab-svc', '10.180.0.0/16', { mascara_defecto: 20 }],
   ])
-    assert.equal((await llamar('POST', '/api/v1/pools', { id, tipo: 'x', ambiente: 'lab', proveedor: 'GCP', cidr })).status, 201);
+    assert.equal((await llamar('POST', '/api/v1/pools', { id, tipo: 'x', ambiente: 'lab', proveedor: 'GCP', cidr, ...limites })).status, 201);
+  // Los límites de máscara se ven en el pool y se editan (nulo los quita).
+  const lp = (await (await llamar('GET', '/api/v1/pools?ambiente=lab')).json()).find((x) => x.id === 'ct-lab-pods');
+  assert.deepEqual([lp.mascara_defecto, lp.mascara_minima, lp.mascara_maxima], [14, 13, 24]);
+  assert.equal(
+    (await llamar('PATCH', '/api/v1/pools/ct-lab-pods', { tipo: 'x', proveedor: 'GCP', mascara_minima: 20, mascara_maxima: 16 })).status,
+    400,
+    'mínima > máxima',
+  );
+  assert.equal(
+    (await llamar('PATCH', '/api/v1/pools/ct-lab-pods', { tipo: 'x', proveedor: 'GCP', mascara_defecto: 12 })).status,
+    400,
+    'más grande que el pool',
+  );
+  const ed = await llamar('PATCH', '/api/v1/pools/ct-lab-pods', { tipo: 'Pods', proveedor: 'GCP' });
+  assert.equal((await ed.json()).mascara_defecto, 14, 'sin límites en el pedido, se conservan');
   for (const [uso, pool] of [
     ['nodos', 'ct-lab-nodos'],
     ['pods', 'ct-lab-pods'],
@@ -255,6 +270,51 @@ test('reserva en grupo y tabla ambiente + uso → pool: las respuestas reales cu
   assert.equal(mas.status, 201);
   const gm = (await verificar(mas, 'POST', '/api/v1/reservas/lote')).grupo;
   assert.deepEqual([gm.grupo, gm.rangos.length, gm.rangos.filter((x) => x.nombre === 'pods-b').length], [g.grupo, 4, 1]);
+
+  // Renovar: mismos CIDR, nunca acorta, tope acumulado; solo el dueño o un admin; no renueva lo que no está vigente.
+  const antes = gm.rangos.map((x) => x.cidr);
+  const ren = await llamar('POST', `${G}/${g.grupo}/renovar`, { ttl_horas: 120 }, comoAgente());
+  assert.equal(ren.status, 200);
+  const renovado = await verificar(ren, 'POST', `${G}/{id}/renovar`);
+  assert.deepEqual(
+    renovado.rangos.map((x) => x.cidr),
+    antes,
+  );
+  assert.ok(renovado.segundos_restantes > 119 * 3600);
+  const tope = await llamar('POST', `${G}/${g.grupo}/renovar`, { ttl_horas: 170 }, comoAgente());
+  assert.equal(tope.status, 400);
+  assert.equal((await verificar(tope, 'POST', `${G}/{id}/renovar`)).error, 'ttl_excede_maximo');
+  await verificar(await llamar('POST', `${G}/11111111-1111-4111-8111-111111111111/renovar`, {}, comoAgente()), 'POST', `${G}/{id}/renovar`); // 404
+
+  // Buscar: por Idempotency-Key (los del que llama), por ticket y por vencer.
+  const porClave = await verificar(await llamar('GET', `${G}?clave=ct-grupo-1`, undefined, comoAgente()), 'GET', G);
+  assert.deepEqual(
+    porClave.map((x) => x.grupo),
+    [g.grupo],
+  );
+  const porTicket = await verificar(await llamar('GET', `${G}?ticket=${encodeURIComponent(g.ticket)}`), 'GET', G);
+  assert.ok(porTicket.some((x) => x.grupo === g.grupo));
+  assert.deepEqual(await verificar(await llamar('GET', `${G}?clave=no-existe`, undefined, comoAgente()), 'GET', G), []);
+  assert.equal((await llamar('GET', `${G}?estado=rara`)).status, 400);
+  assert.equal((await llamar('GET', `${G}?por_expirar_horas=1`, undefined, comoAgente())).status, 200);
+
+  // Límites de máscara por pool: Pods entre /13 y /24; fuera de eso, 400. Sin máscara y sin default (nodos), falta_tamano.
+  const mal = await llamar('POST', '/api/v1/reservas/lote', { ambiente: 'lab', rangos: [{ uso: 'pods', mascara: 26 }] }, comoAgente());
+  assert.equal(mal.status, 400);
+  assert.equal((await verificar(mal, 'POST', '/api/v1/reservas/lote')).error, 'mascara_invalida');
+  const sinTamano = await llamar('POST', '/api/v1/reservas/lote', { ambiente: 'lab', rangos: [{ uso: 'nodos' }] }, comoAgente());
+  assert.equal((await verificar(sinTamano, 'POST', '/api/v1/reservas/lote')).error, 'falta_tamano');
+  // Simulación con contexto y version_tabla.
+  const pedidoChico = { ambiente: 'lab', rangos: [{ uso: 'nodos', mascara: 24 }, { uso: 'servicios' }] }; // el pool de Pods ya no tiene otro /14 libre
+  const sim2 = await llamar('POST', '/api/v1/reservas/lote?simular=true', pedidoChico, comoAgente());
+  const ctx = await verificar(sim2, 'POST', '/api/v1/reservas/lote');
+  assert.equal(ctx.cuota.necesaria, 2);
+  assert.ok(ctx.pools.length === 2 && typeof ctx.version_tabla === 'string');
+  const cab = (await llamar('GET', '/api/v1/pool-uso', undefined, comoAgente())).headers.get('x-version-tabla');
+  assert.equal(cab, ctx.version_tabla, 'la cabecera y la simulación dan la misma versión');
+  const vieja = await llamar('POST', '/api/v1/reservas/lote?simular=true', { ...pedidoChico, version_tabla: 'otra' }, comoAgente());
+  assert.equal(vieja.status, 409);
+  assert.equal((await vieja.json()).error, 'version_tabla_cambiada');
 
   // Un token no confirma; un admin sí, y los tres rangos pasan juntos.
   assert.equal((await llamar('POST', `${G}/${g.grupo}/confirmar`, {}, comoAgente())).status, 403);

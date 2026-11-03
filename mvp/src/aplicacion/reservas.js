@@ -137,6 +137,9 @@ async function resolverDestino(repo, d) {
   } else if (d.mascara < base.len) {
     return fallo('validacion', 'mascara_invalida', { mensaje: `La máscara /${d.mascara} es más grande que el pool ${p.id} (${p.cidr}).` });
   }
+  const largo = d.cidr ? /** @type {NonNullable<ReturnType<typeof parse>>} */ (parse(d.cidr)).len : d.mascara;
+  const limite = R.limiteDeMascara(p, largo);
+  if (limite) return fallo('validacion', 'mascara_invalida', { mensaje: `La máscara /${largo} no está permitida en ${p.id}: ${limite}` });
   return ok({ pool: p });
 }
 

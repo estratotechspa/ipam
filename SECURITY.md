@@ -13,7 +13,7 @@ Qué puedes esperar: acuse de recibo en **3 días hábiles**, una primera evalua
 divulgación pública con nosotros hasta que haya un arreglo disponible. Agradecemos el reporte de buena fe.
 
 ## Versiones con soporte
-Solo la última versión publicada recibe correcciones de seguridad (hoy: **0.3.x**).
+Solo la última versión publicada recibe correcciones de seguridad (hoy: **0.4.x**).
 
 ## Qué consideramos en alcance
 Autenticación y autorización (tokens, sesiones, roles), inyección (SQL, cabeceras, XSS), SSRF en el webhook saliente, filtración de secretos (logs, errores, métricas),
