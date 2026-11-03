@@ -32,6 +32,8 @@ const MATRIZ = {
   'DELETE /api/v1/reservas/{id}': 'agente',
   'POST /api/v1/reservas/{id}/confirmar': 'admin',
   'POST /api/v1/reservas/lote': 'agente',
+  'GET /api/v1/reservas/grupo': 'lector',
+  'POST /api/v1/reservas/grupo/{id}/renovar': 'agente',
   'GET /api/v1/reservas/grupo/{id}': 'lector',
   'DELETE /api/v1/reservas/grupo/{id}': 'agente',
   'POST /api/v1/reservas/grupo/{id}/confirmar': 'admin',

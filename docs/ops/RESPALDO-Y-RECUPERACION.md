@@ -25,6 +25,21 @@ pg_restore --clean --if-exists --no-owner -d "<otra base>" ipam.dump
 ```
 Después ejecuta `roles.sql` (o el de Supabase) y `npm run migrar` para reponer permisos.
 
+## Antes de migrar el esquema: respaldo y reversión
+Cada versión del esquema es **aditiva e idempotente** (solo agrega columnas, índices o tablas; no borra ni cambia datos) y se aplica dentro de una transacción: si falla, la base **queda en la versión anterior** y `/readyz` sigue informando esa versión (responde 503 si el código nuevo exige una mayor).
+1. **Respaldo previo:** un `pg_dump` del esquema (capa 3) y el respaldo lógico (capa 2) justo antes de migrar. En Supabase, un punto de restauración o `pg_dump`.
+2. **Migrar antes de desplegar el código** que exige la versión nueva; el código anterior sigue funcionando con un esquema más nuevo (las columnas nuevas son opcionales).
+3. **Reversión.** Como lo nuevo es aditivo, lo más seguro es **volver al código anterior** y dejar el esquema como está. Si de verdad hay que deshacer una versión, esto la revierte (en una ventana, con respaldo; se pierden los datos que se hayan guardado en esas columnas o tablas):
+
+| Versión | Reversión (como dueño de las tablas, en el esquema de la aplicación) |
+|---|---|
+| 17 | `alter table pools drop column mascara_defecto, drop column mascara_minima, drop column mascara_maxima; delete from esquema_version where version = 17;` |
+| 16 | `alter table reservas drop column nombre; alter table asignaciones drop column nombre; delete from esquema_version where version = 16;` |
+| 15 | `drop table pool_uso; alter table reservas drop column grupo, drop column rango; alter table asignaciones drop column grupo, drop column rango; delete from esquema_version where version = 15;` |
+| 14 | `alter table pools drop constraint pools_ambiente_check; alter table pools add constraint pools_ambiente_check check (ambiente in ('dev','qa','pre','prod')); delete from esquema_version where version = 14;` (falla si ya hay pools `lab`) |
+
+Después de revertir, vuelve a desplegar una versión del código que no exija las versiones quitadas.
+
 ## Qué recuperar primero
 1. Base de datos (capa 1 o 3). 2. Migración (repone permisos). 3. Despliegue del servicio. 4. Tokens: los de los agentes se recrean si no se restauraron. 5. Reservas vigentes: expiran solas; revisa las que quedaron pendientes.
 

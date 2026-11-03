@@ -34,7 +34,35 @@ function validarPoolNuevo(e) {
   if (!c) return malo('cidr_invalido', 'CIDR inválido. Formato: 10.30.0.0/16.');
   if (!c.aligned) return malo('cidr_desalineado', `${e.cidr} no está alineado: la dirección de red debe ser múltiplo de su tamaño.`);
   if (c.len < 8 || c.len > 30) return malo('mascara_invalida', 'El bloque base debe ir de /8 a /30.');
-  return { ok: /** @type {true} */ (true), datos: { id, tipo: t.tipo, ambiente, proveedor: t.proveedor, cidr: String(e.cidr).trim() } };
+  const lim = validarLimitesMascara(e, c.len);
+  if (!lim.ok) return lim;
+  const { ok: _ok, ...limites } = lim;
+  return { ok: /** @type {true} */ (true), datos: { id, tipo: t.tipo, ambiente, proveedor: t.proveedor, cidr: String(e.cidr).trim(), ...limites } };
+}
+
+/**
+ * Límites de máscara de un pool: por defecto, mínima (bloque más grande) y máxima (bloque más chico). Todos opcionales; nulo los quita.
+ * Cada uno debe caber en el pool (no ser más grande que él) y cumplir mínima <= defecto <= máxima.
+ * @param {Record<string, unknown>} e @param {number} largoPool máscara del pool (p. ej. 14 para un /14)
+ * @returns {{ok: true, mascara_defecto: number|null, mascara_minima: number|null, mascara_maxima: number|null} | {ok: false, error: string, mensaje: string}}
+ */
+function validarLimitesMascara(e, largoPool) {
+  const salida = { mascara_defecto: null, mascara_minima: null, mascara_maxima: null };
+  for (const campo of Object.keys(salida)) {
+    const v = e[campo];
+    if (v === undefined || v === null || v === '') continue;
+    const n = Number(v);
+    if (!Number.isInteger(n) || n < Math.max(8, largoPool) || n > 32)
+      return malo(`${campo}_invalida`, `${campo} debe ser un entero entre /${Math.max(8, largoPool)} (el tamaño del pool) y /32.`);
+    salida[campo] = n;
+  }
+  const { mascara_defecto: d, mascara_minima: mi, mascara_maxima: ma } = salida;
+  if (mi !== null && ma !== null && mi > ma)
+    return malo('limites_incoherentes', 'mascara_minima no puede ser mayor que mascara_maxima (la mínima es el bloque más grande).');
+  if (d !== null && mi !== null && d < mi)
+    return malo('limites_incoherentes', 'mascara_defecto no puede ser más grande que el bloque mínimo (mascara_minima).');
+  if (d !== null && ma !== null && d > ma) return malo('limites_incoherentes', 'mascara_defecto no puede ser más chica que el bloque máximo (mascara_maxima).');
+  return { ok: /** @type {true} */ (true), ...salida };
 }
 
 /**
@@ -53,4 +81,4 @@ function chocaConPool(nuevo, pools) {
   );
 }
 
-module.exports = { validarPoolNuevo, validarTexto, chocaConPool };
+module.exports = { validarPoolNuevo, validarTexto, validarLimitesMascara, chocaConPool };

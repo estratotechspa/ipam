@@ -8,6 +8,16 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y 
 - **Segmentos:** nueva columna **Rango** (Nodos, Pods, Servicios y su nombre), también buscable. Un rango de un grupo muestra **Ver el clúster** en lugar de Confirmar y Liberar sueltos (la API los rechaza con `reserva_de_grupo`).
 - **Ficha del pool para gerencia:** lo primero es una frase con semáforo («Se usó el 74 % de esta red»), una barra partida por proyecto y la tabla **«¿Qué cabe todavía en esta red?»** (subred pequeña, normal y grande, y los Pods y Servicios de un clúster GKE). El mapa de cuadros queda como detalle plegado.
 - La etiqueta del ambiente **`lab`** ahora tiene color (antes salía blanco sobre blanco).
+### Fase 1 del agente de redes (versión 0.4.0, esquema 17)
+- **Límites de máscara por pool** (`mascara_defecto`, `mascara_minima`, `mascara_maxima`; al crear el pool o con `PATCH /pools/{id}`; nulo los quita; `GET /pools` los devuelve). El tamaño por defecto de GKE que traía el lote (Pods `/14`, Servicios `/20`) **se retira**: sin `mascara` se usa la del pool y, si no tiene, `400 falta_tamano`. Una máscara fuera de lo permitido por el pool, o fuera de `/8` a `/29` en el lote, responde `400 mascara_invalida`. **Cambio incompatible** para pedidos que dependían de esos tamaños. Esquema versión 17: **migrar antes de desplegar**.
+- **Renovar un grupo** (`POST /reservas/grupo/{id}/renovar`): extiende la vigencia sin cambiar los CIDR; tope acumulado de 168 h desde la creación; `409 grupo_no_vigente` si no está vigente.
+- **Una sola caducidad por grupo:** un rango agregado caduca con el grupo.
+- **Buscar grupos** (`GET /reservas/grupo` con `clave`, `ticket`, `estado` y `por_expirar_horas`): recupera el estado tras una caída y sirve para avisar de lo que va a vencer sin webhook.
+- **Simulación con contexto:** cuota (`usada`, `limite`, `necesaria`, `alcanza`), libre de cada pool y `version_tabla`; la reserva acepta `version_tabla` y responde `409 version_tabla_cambiada` si la tabla cambió. `GET /pool-uso` trae la cabecera `X-Version-Tabla`.
+- **Datos de prueba ficticios** (`mvp/db/seed-pruebas-agente.sql`): pools y `pool-uso` de lab, qa, pre y prod con límites de máscara.
+- **Respaldo previo y reversión de cada versión del esquema documentados** ([RESPALDO-Y-RECUPERACION](docs/ops/RESPALDO-Y-RECUPERACION.md)).
+- Versión del servicio `0.4.0` (API, chart e imagen).
+
 ### Cambios para el agente de redes
 - **Grupo flexible.** Un pedido de `POST /reservas/lote` es **un solo grupo** de 1 a 20 rangos: varias subredes (`subred` por rango), varios rangos del mismo uso, `nombre` opcional por rango (el del rango secundario), Nodos y Servicios opcionales, y `grupo` para **agregar rangos a un grupo existente** (mismo dueño y ambiente, vigente). La misma `Idempotency-Key` con otros parámetros responde `409 idempotencia_conflicto`. Una reserva que pertenece a un grupo no se confirma ni se libera suelta (`409 reserva_de_grupo`). El orden de los rangos de un grupo ahora es estable (nodos, pods, servicios). Esquema versión 16 (`nombre`): **migrar antes de desplegar**.
 - **`prd` es alias de `prod`** en las reservas, el lote y `/pool-uso` (el nombre canónico es `prod`).

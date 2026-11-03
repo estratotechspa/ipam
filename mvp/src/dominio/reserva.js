@@ -102,6 +102,19 @@ const mismaPeticion = (existente, peticion) =>
   (!peticion.subred || existente.subred === peticion.subred) &&
   (!peticion.ticket || existente.ticket === peticion.ticket);
 
+/**
+ * ¿La máscara pedida respeta los límites del pool (mascara_minima = bloque más grande, mascara_maxima = bloque más chico)?
+ * Devuelve el motivo si no, o null si está bien.
+ * @param {{mascara_minima?: number|null, mascara_maxima?: number|null}} pool @param {number} mascara
+ */
+function limiteDeMascara(pool, mascara) {
+  const mi = pool.mascara_minima ?? null;
+  const ma = pool.mascara_maxima ?? null;
+  if (mi !== null && mascara < mi) return `el bloque es más grande que el permitido (mínimo /${mi}).`;
+  if (ma !== null && mascara > ma) return `el bloque es más chico que el permitido (máximo /${ma}).`;
+  return null;
+}
+
 /** Qué hacer al confirmar. @param {string} efectivo @returns {{accion: 'confirmar'|'repetida'|'rechazar', estado?: string}} */
 function decidirConfirmacion(efectivo) {
   if (efectivo === 'reservada') return { accion: 'confirmar' };
@@ -139,6 +152,7 @@ function validarAprobacion(cuerpo, exigir) {
 
 module.exports = {
   ESTADOS,
+  limiteDeMascara,
   estadoEfectivo,
   puedeOperar,
   SOLICITANTE_JIRA,

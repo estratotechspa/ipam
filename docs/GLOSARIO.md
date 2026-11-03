@@ -31,6 +31,7 @@ Términos en orden alfabético, explicados sin jerga. El término en inglés va 
 | **OpenAPI** | Descripción formal de la API (`/api/v1/openapi.json`). Sirve para generar clientes y probar. |
 | **OpenTofu** (`tofu`) | Herramienta de infraestructura como código, compatible con Terraform. Los ejemplos usan `tofu`; `terraform` también sirve. |
 | **Pool** | **Bloque grande** (p. ej. `10.210.0.0/20`) definido para un tipo de uso en un ambiente; de él se cortan las asignaciones. «Pool» es el término habitual en IPAM: una reserva común de la que se van sacando rangos. No es lo mismo que una asignación (un pedazo ya entregado). |
+| **Límites de máscara** (de un pool) | `mascara_defecto` (tamaño si el pedido no dice), `mascara_minima` (bloque más grande permitido) y `mascara_maxima` (más chico, p. ej. /29 en GCP) que un admin fija por pool. |
 | **Pool de un uso** | La tabla «ambiente + uso → pool»: qué pool corresponde a nodos, pods y servicios en cada ambiente. Un admin la define; el agente reserva por uso y nunca adivina por el texto del tipo. |
 | **Pooler** | Intermediario de conexiones delante de PostgreSQL (el de Supabase). El IPAM necesita el modo **sesión**. |
 | **Prometheus / `/metrics`** | Sistema de métricas y la ruta que las publica. Nace cerrada. |

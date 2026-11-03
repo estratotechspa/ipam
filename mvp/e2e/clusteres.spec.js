@@ -10,10 +10,11 @@ test('Clústeres: un grupo del agente se ve entero, se aprueba junto y sus rango
   const svc = 80 + Math.floor(Math.random() * 15);
   const pods = 200 + 4 * Math.floor(Math.random() * 10);
   const pools = { nodos: `e2e-cl-nodos-${s}`, pods: `e2e-cl-pods-${s}`, servicios: `e2e-cl-svc-${s}` };
-  const alta = (id, cidr) => page.request.post('/api/v1/pools', { headers: H, data: { id, tipo: 'Prueba', ambiente: 'lab', proveedor: 'GCP', cidr } });
+  const alta = (id, cidr, limites = {}) =>
+    page.request.post('/api/v1/pools', { headers: H, data: { id, tipo: 'Prueba', ambiente: 'lab', proveedor: 'GCP', cidr, ...limites } });
   expect((await alta(pools.nodos, `10.${nodos}.0.0/16`)).status()).toBe(201);
-  expect((await alta(pools.pods, `10.${pods}.0.0/14`)).status()).toBe(201);
-  expect((await alta(pools.servicios, `10.${svc}.0.0/16`)).status()).toBe(201);
+  expect((await alta(pools.pods, `10.${pods}.0.0/14`, { mascara_defecto: 14 })).status()).toBe(201);
+  expect((await alta(pools.servicios, `10.${svc}.0.0/16`, { mascara_defecto: 20 })).status()).toBe(201);
   for (const [uso, pool] of Object.entries(pools))
     expect((await page.request.put(`/api/v1/pool-uso/lab/${uso}`, { headers: H, data: { pool } })).status()).toBe(200);
 

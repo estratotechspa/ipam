@@ -128,6 +128,7 @@ function crearRepositorioMemoria({ reloj = { ahora: () => new Date() }, pools = 
       grupo = null,
       rango = null,
       nombre = null,
+      expiraEn = null,
     }) {
       if (clave && datos.reservas.some((r) => r.solicitante === solicitante && r.clave_idem === clave)) throw new ConflictoDeDatos('clave repetida', '23505');
       if (
@@ -152,7 +153,7 @@ function crearRepositorioMemoria({ reloj = { ahora: () => new Date() }, pools = 
         estado: 'reservada',
         clave_idem: clave,
         creado_en: ahora(),
-        expira_en: new Date(ahora().getTime() + ttlHoras * 3600_000),
+        expira_en: expiraEn ? new Date(expiraEn) : new Date(ahora().getTime() + ttlHoras * 3600_000),
         resuelto_en: null,
         asignacion_id: null,
       };
@@ -165,6 +166,44 @@ function crearRepositorioMemoria({ reloj = { ahora: () => new Date() }, pools = 
         .filter((r) => r.grupo === grupo)
         .sort((a, b) => peso(a) - peso(b) || a.cidr.localeCompare(b.cidr))
         .map(vista);
+    },
+    async versionPoolUso() {
+      return [...datos.poolUso.values()]
+        .sort((a, b) => (a.ambiente + a.uso).localeCompare(b.ambiente + b.uso))
+        .map((f) => `${f.ambiente}/${f.uso}=${f.pool_id}`)
+        .join(',');
+    },
+    async datosRenovacionGrupo(grupo, horas, maxHoras) {
+      const filas = datos.reservas.filter((r) => r.grupo === grupo);
+      const creado = new Date(Math.min(...filas.map((r) => r.creado_en.getTime())));
+      return {
+        creado_en: creado,
+        ahora: ahora(),
+        nueva: new Date(ahora().getTime() + horas * 3600_000),
+        tope: new Date(creado.getTime() + maxHoras * 3600_000),
+      };
+    },
+    async extenderGrupo(grupo, nueva) {
+      let n = 0;
+      for (const r of datos.reservas.filter((x) => x.grupo === grupo && vigente(x))) {
+        if (new Date(nueva) > r.expira_en) r.expira_en = new Date(nueva);
+        n += 1;
+      }
+      return n;
+    },
+    async gruposDe({ clave = null, ticket = null, solicitante = null, limite = 100 }) {
+      const ids = new Map();
+      for (const r of datos.reservas) {
+        if (!r.grupo) continue;
+        if (clave && !(r.solicitante === solicitante && String(r.clave_idem || '').startsWith(clave + ':'))) continue;
+        if (solicitante && r.solicitante !== solicitante) continue;
+        if (ticket && r.ticket !== ticket) continue;
+        ids.set(r.grupo, Math.min(ids.get(r.grupo) ?? Infinity, r.creado_en.getTime()));
+      }
+      return [...ids.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, limite)
+        .map(([g]) => g);
     },
     async nuevoGrupo() {
       return crypto.randomUUID();

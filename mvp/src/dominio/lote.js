@@ -8,8 +8,9 @@ const { AMBIENTES, normalizarAmbiente } = require('./ambiente');
 
 const USOS = ['nodos', 'pods', 'servicios'];
 const RANGO_DE = { nodos: 'principal', pods: 'pods', servicios: 'servicios' };
-// Tamaños por defecto de GKE (documentación oficial): Pods /14, Servicios /20. Los nodos no tienen un valor por defecto.
-const MASCARA_DEFECTO = { pods: 14, servicios: 20 };
+// Una subred de GCP no admite más chico que /29. El tamaño por defecto, el mínimo y el máximo de cada pool los define el admin (pool).
+const MASCARA_MIN = 8;
+const MASCARA_MAX = 29;
 const MAX_RANGOS = 20;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SIN_CONTROL = /^[^\p{Cc}]+$/u;
@@ -28,9 +29,9 @@ function textoOpcional(v, max, etiqueta) {
 function validarRango(r) {
   const uso = r && typeof r === 'object' ? String(r.uso) : '';
   if (!USOS.includes(uso)) return malo('uso_invalido', `El uso debe ser uno de: ${USOS.join(', ')}.`);
-  const pedida = vacio(r.mascara) ? MASCARA_DEFECTO[uso] : Number(r.mascara);
-  if (pedida === undefined) return malo('falta_tamano', `Indica la máscara de «${uso}» (no tiene tamaño por defecto).`);
-  if (!Number.isInteger(pedida) || pedida < 8 || pedida > 32) return malo('mascara_invalida', `La máscara de «${uso}» debe ser un entero entre 8 y 32.`);
+  const pedida = vacio(r.mascara) ? null : Number(r.mascara); // sin máscara: la del pool (mascara_defecto); si no tiene, falta_tamano
+  if (pedida !== null && (!Number.isInteger(pedida) || pedida < MASCARA_MIN || pedida > MASCARA_MAX))
+    return malo('mascara_invalida', `La máscara de «${uso}» debe ser un entero entre ${MASCARA_MIN} y ${MASCARA_MAX}.`);
   const nombre = textoOpcional(r.nombre, 80, 'nombre');
   if (!nombre.ok) return nombre;
   const subred = textoOpcional(r.subred, 80, 'subred');
@@ -80,12 +81,12 @@ function normalizarLote(e, claveHeader, config) {
       ttlHoras: ttl.horas,
       clave: k.clave,
       grupo: vacio(e.grupo) ? null : String(e.grupo),
+      versionTabla: vacio(e.version_tabla) ? null : String(e.version_tabla).slice(0, 64),
     },
   };
 }
 
 const largoDe = (/** @type {string} */ cidr) => Number(String(cidr).split('/')[1]);
-const sig = (rango, nombre, subred, mascara) => [rango, nombre ?? '', subred ?? '', mascara].join('|');
 
 /**
  * ¿El pedido repetido es «el mismo» que el grupo ya creado? Compara los rangos (tipo, nombre, subred y tamaño, sin importar el orden)
@@ -93,11 +94,24 @@ const sig = (rango, nombre, subred, mascara) => [rango, nombre ?? '', subred ?? 
  * @param {Array<{rango: string|null, nombre?: string|null, subred?: string|null, cidr: string, proyecto?: string|null, vpc?: string, ticket?: string}>} filas
  */
 function mismoLote(filas, d) {
-  const pedidos = d.rangos.map((r) => sig(RANGO_DE[r.uso], r.nombre, r.subred, r.mascara)).sort();
-  const existentes = filas.map((f) => sig(f.rango, f.nombre, f.subred, largoDe(f.cidr))).sort();
-  if (pedidos.length !== existentes.length || pedidos.some((x, i) => x !== existentes[i])) return false;
+  const pedidos = d.rangos;
+  const existentes = filas.map((f) => ({ rango: f.rango, nombre: f.nombre, subred: f.subred, largo: largoDe(f.cidr) }));
+  if (pedidos.length !== existentes.length) return false;
+  // Se empareja cada rango pedido con uno existente (el comodín «*» acepta cualquier tamaño).
+  const libres = [...existentes];
+  for (const r of d.rangos) {
+    const i = libres.findIndex(
+      (f) =>
+        f.rango === RANGO_DE[r.uso] &&
+        (f.nombre ?? '') === (r.nombre ?? '') &&
+        (f.subred ?? '') === (r.subred ?? '') &&
+        (r.mascara === null || f.largo === r.mascara),
+    );
+    if (i < 0) return false;
+    libres.splice(i, 1);
+  }
   const f0 = filas[0];
   return (!d.proyecto || f0.proyecto === d.proyecto) && (!d.vpc || f0.vpc === d.vpc) && (!d.ticket || f0.ticket === d.ticket);
 }
 
-module.exports = { USOS, RANGO_DE, MASCARA_DEFECTO, MAX_RANGOS, UUID, normalizarLote, validarRangos, mismoLote };
+module.exports = { USOS, RANGO_DE, MASCARA_MIN, MASCARA_MAX, MAX_RANGOS, UUID, normalizarLote, validarRangos, mismoLote };

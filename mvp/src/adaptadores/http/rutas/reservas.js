@@ -28,6 +28,18 @@ function montar(app, { casos, audita, validacion }) {
     return r.ok ? res.json(r.reservas) : enviarFallo(res, r);
   });
 
+  // Antes de `/reservas/:id`: si no, «grupo» se leería como el id de una reserva.
+  const { reservasGrupo, poolUso } = casos;
+  api(app, 'get', '/reservas/grupo', requiere('lector'), async (req, res) => {
+    const r = await reservasGrupo.buscarGrupos(req.actor, {
+      clave: texto(req.query.clave),
+      ticket: texto(req.query.ticket),
+      estado: texto(req.query.estado),
+      por_expirar_horas: texto(req.query.por_expirar_horas),
+    });
+    return r.ok ? res.json(r.grupos) : enviarFallo(res, r);
+  });
+
   api(app, 'get', '/reservas/:id', requiere('lector'), async (req, res) => {
     const r = await reservas.obtener(req.params.id);
     return r.ok ? res.json(r.reserva) : enviarFallo(res, r);
@@ -48,19 +60,25 @@ function montar(app, { casos, audita, validacion }) {
   });
 
   // ---------- Reserva en grupo (clúster GKE): todo o nada ----------
-  const { reservasGrupo, poolUso } = casos;
   api(app, 'post', '/reservas/lote', requiere('agente'), validacion.cuerpo('LoteCrear'), async (req, res) => {
     const simular = req.query.simular === 'true';
     const r = await reservasGrupo.reservarLote(req.actor, req.body || {}, req.get('idempotency-key'), { simular });
     if (!r.ok) return enviarFallo(res, r);
-    if (r.simulacion) return res.json({ simulacion: true, rangos: r.rangos });
+    if (r.simulacion) return res.json({ simulacion: true, cuota: r.cuota, pools: r.pools, version_tabla: r.version_tabla, rangos: r.rangos });
     if (!r.repetida)
       await audita(req, 'reservar_grupo', {
         grupo: r.grupo.grupo,
         ticket: r.grupo.ticket,
         rangos: r.grupo.rangos.map((x) => ({ cidr: x.cidr, pool: x.pool_id, rango: x.rango })),
       });
-    return res.status(r.repetida ? 200 : 201).json({ grupo: r.grupo, repetida: r.repetida });
+    return res.status(r.repetida ? 200 : 201).json({ grupo: r.grupo, repetida: r.repetida, version_tabla: r.version_tabla });
+  });
+
+  api(app, 'post', '/reservas/grupo/:id/renovar', requiere('agente'), validacion.cuerpo('GrupoRenovar'), async (req, res) => {
+    const r = await reservasGrupo.renovarGrupo(req.actor, req.params.id, req.body || {});
+    if (!r.ok) return enviarFallo(res, r);
+    await audita(req, 'renovar_grupo', { grupo: req.params.id, ticket: r.grupo.ticket, expira_en: r.grupo.expira_en });
+    return res.json(r.grupo);
   });
 
   api(app, 'get', '/reservas/grupo/:id', requiere('lector'), async (req, res) => {
@@ -84,7 +102,10 @@ function montar(app, { casos, audita, validacion }) {
   });
 
   // ---------- Qué pool corresponde a cada ambiente y uso ----------
-  api(app, 'get', '/pool-uso', requiere('lector'), async (_req, res) => res.json((await poolUso.listar()).filas));
+  api(app, 'get', '/pool-uso', requiere('lector'), async (_req, res) => {
+    res.set('X-Version-Tabla', await casos.reservasGrupo.versionTabla());
+    return res.json((await poolUso.listar()).filas);
+  });
   api(app, 'put', '/pool-uso/:ambiente/:uso', requiere('admin'), validacion.cuerpo('PoolUsoGuardar'), async (req, res) => {
     const r = await poolUso.guardar(req.params.ambiente, req.params.uso, req.body.pool);
     if (!r.ok) return enviarFallo(res, r);

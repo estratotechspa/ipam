@@ -405,3 +405,12 @@ alter table asignaciones add column if not exists nombre text check (char_length
 
 insert into esquema_version (version, descripcion) values (16, 'nombre opcional por rango')
   on conflict (version) do nothing;
+
+-- Límites de máscara por pool: tamaño por defecto, mínimo (bloque más grande) y máximo (bloque más chico) que se pueden pedir. Opcionales.
+-- Nulo = sin límite propio (el pedido solo debe caber en el pool).
+alter table pools add column if not exists mascara_defecto int check (mascara_defecto between 8 and 32);
+alter table pools add column if not exists mascara_minima int check (mascara_minima between 8 and 32);
+alter table pools add column if not exists mascara_maxima int check (mascara_maxima between 8 and 32);
+
+insert into esquema_version (version, descripcion) values (17, 'limites de mascara por pool')
+  on conflict (version) do nothing;

@@ -8,6 +8,7 @@ const { crearAdministracion } = require('./administracion');
 const { crearBarrido } = require('./barrido');
 const { crearReservas } = require('./reservas');
 const { crearReservasGrupo } = require('./reservas-grupo');
+const { crearGestionGrupo } = require('./gestion-grupo');
 const { crearPoolUso } = require('./pool-uso');
 const { crearTokens } = require('./tokens');
 const { crearImportacion } = require('./importacion');
@@ -19,7 +20,7 @@ function crearCasos({ repo, eventos, auditor, tickets, reloj, config, instancia,
   const asignaciones = crearAsignaciones({ repo, eventos, tickets, tareas, config });
   // Jira reserva y la aprobación (confirmar la reserva) lo avisa de vuelta: los dos casos de uso se conocen por este gancho.
   const reservas = crearReservas({ repo, eventos, config, alConfirmar: (...args) => jira.alAprobar(...args) });
-  const reservasGrupo = crearReservasGrupo({ repo, eventos, config });
+  const reservasGrupo = { ...crearReservasGrupo({ repo, eventos, config }), ...crearGestionGrupo({ repo, eventos, config }) };
   const jira = crearJira({ repo, eventos, auditor, tickets, asignaciones, reservas });
   return {
     asignaciones,

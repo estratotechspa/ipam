@@ -183,6 +183,9 @@ const schemas = {
       asignaciones: { type: 'integer', description: 'Cantidad de rangos asignados (definitivos).' },
       uso: { type: 'number', minimum: 0, maximum: 1, description: 'Fracción del pool ya asignada (0 a 1).' },
       reservas_vigentes: { type: 'integer', description: 'Reservas tentativas que siguen vigentes.' },
+      mascara_defecto: { type: ['integer', 'null'], description: 'Tamaño por defecto de lo que se pide en el pool (nulo: el pedido debe indicarlo).' },
+      mascara_minima: { type: ['integer', 'null'], description: 'Bloque más grande que se puede pedir.' },
+      mascara_maxima: { type: ['integer', 'null'], description: 'Bloque más chico que se puede pedir.' },
       uso_reservado: { type: 'number', minimum: 0, maximum: 1, description: 'Fracción del pool apartada por reservas vigentes.' },
     },
     example: {
@@ -269,13 +272,17 @@ const schemas = {
     type: 'object',
     required: ['id', 'tipo', 'ambiente', 'proveedor', 'cidr'],
     additionalProperties: false,
-    description: 'Bloque base nuevo. No puede solaparse con otro pool del MISMO proveedor y ambiente (entre ambientes o proveedores distintos sí).',
+    description:
+      'Bloque base nuevo. No puede solaparse con **ningún** otro pool (los rangos no se repiten entre ambientes ni proveedores). Opcionalmente fija los límites de máscara de lo que se pide en él.',
     properties: {
       id: { type: 'string', maxLength: 63, description: 'Nombre: minúsculas, números y guiones (p. ej. lan-sucursal-prod).' },
       tipo: { type: 'string', maxLength: 40, description: 'Nodos, Pods, Servicios, LAN, Gestión…' },
       ambiente: { $ref: '#/components/schemas/Ambiente' },
       proveedor: { type: 'string', maxLength: 40, description: 'GCP, On-prem, AWS…' },
       cidr: { $ref: '#/components/schemas/Cidr' },
+      mascara_defecto: { type: ['integer', 'null'], description: 'Tamaño que se usa si el pedido no indica máscara (p. ej. 20 para un rango de Pods de /20).' },
+      mascara_minima: { type: ['integer', 'null'], description: 'Bloque más grande que se puede pedir (máscara mínima).' },
+      mascara_maxima: { type: ['integer', 'null'], description: 'Bloque más chico que se puede pedir (máscara máxima; p. ej. 29 en una subred de GCP).' },
     },
     example: { id: 'lan-sucursal-prod', tipo: 'LAN', ambiente: 'prod', proveedor: 'On-prem', cidr: '10.40.0.0/16' },
   },
@@ -283,8 +290,15 @@ const schemas = {
     type: 'object',
     required: ['tipo', 'proveedor'],
     additionalProperties: false,
-    description: 'Solo se editan tipo y proveedor: cambiar el CIDR o el ambiente dejaría segmentos fuera de su pool.',
-    properties: { tipo: { type: 'string', maxLength: 40 }, proveedor: { type: 'string', maxLength: 40 } },
+    description:
+      'Se editan tipo, proveedor y los límites de máscara: cambiar el CIDR o el ambiente dejaría segmentos fuera de su pool. Los límites solo cambian si vienen en el pedido (nulo los quita).',
+    properties: {
+      tipo: { type: 'string', maxLength: 40 },
+      proveedor: { type: 'string', maxLength: 40 },
+      mascara_defecto: { type: ['integer', 'null'] },
+      mascara_minima: { type: ['integer', 'null'] },
+      mascara_maxima: { type: ['integer', 'null'] },
+    },
     example: { tipo: 'LAN', proveedor: 'On-prem' },
   },
   Resumen: {
@@ -438,7 +452,11 @@ const schemas = {
     required: ['uso'],
     properties: {
       uso: { enum: ['nodos', 'pods', 'servicios'], description: 'Para qué es el rango; el pool sale de la tabla ambiente + uso.' },
-      mascara: { type: 'integer', description: 'Tamaño (24 = /24), de 8 a 32. Pods /14 y Servicios /20 por defecto (los de GKE); los nodos la exigen.' },
+      mascara: {
+        type: 'integer',
+        description:
+          'Tamaño (24 = /24), de 8 a 29. Si falta, se usa `mascara_defecto` del pool; si el pool no la tiene, 400 `falta_tamano`. Debe respetar `mascara_minima` y `mascara_maxima` del pool.',
+      },
       nombre: { type: 'string', maxLength: 80, description: 'Nombre del rango (p. ej. el del rango secundario: «pods-a»).' },
       subred: {
         type: 'string',
@@ -456,6 +474,12 @@ const schemas = {
     properties: {
       ambiente: { $ref: '#/components/schemas/AmbienteEntrada' },
       rangos: { type: 'array', minItems: 1, maxItems: 20, items: { $ref: '#/components/schemas/RangoPedido' } },
+      version_tabla: {
+        type: 'string',
+        maxLength: 64,
+        description:
+          'Opcional: la versión de la tabla ambiente + uso → pool que viste al simular (cabecera X-Version-Tabla). Si cambió, 409 `version_tabla_cambiada`.',
+      },
       grupo: {
         type: 'string',
         format: 'uuid',
@@ -495,7 +519,11 @@ const schemas = {
   GrupoRespuesta: {
     type: 'object',
     required: ['grupo', 'repetida'],
-    properties: { grupo: { $ref: '#/components/schemas/Grupo' }, repetida: { type: 'boolean' } },
+    properties: {
+      grupo: { $ref: '#/components/schemas/Grupo' },
+      repetida: { type: 'boolean' },
+      version_tabla: { type: 'string', description: 'Versión de la tabla ambiente + uso → pool con la que se reservó.' },
+    },
   },
   GrupoConfirmado: {
     type: 'object',
@@ -510,9 +538,12 @@ const schemas = {
   Simulacion: {
     type: 'object',
     required: ['simulacion', 'rangos'],
-    description: 'Lo que se reservaría. No se reserva nada.',
+    description: 'Lo que se reservaría. No se reserva nada ni se gasta cuota; trae la cuota del token, lo libre de cada pool y la versión de la tabla.',
     properties: {
       simulacion: { const: true },
+      cuota: { type: ['object', 'null'], description: 'Solo para tokens: `usada`, `limite`, `necesaria` y `alcanza`.' },
+      pools: { type: 'array', items: { type: 'object', properties: { pool: { type: 'string' }, direcciones_libres: { type: 'integer' } } } },
+      version_tabla: { type: 'string' },
       rangos: {
         type: 'array',
         items: {
@@ -528,6 +559,17 @@ const schemas = {
         },
       },
     },
+  },
+  GrupoRenovar: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      ttl_horas: {
+        type: 'integer',
+        description: 'Horas de vigencia desde ahora (por defecto 72). Nunca acorta; el acumulado desde la creación del grupo no pasa de 168 h.',
+      },
+    },
+    example: { ttl_horas: 72 },
   },
   PoolUso: {
     type: 'object',
@@ -1424,7 +1466,7 @@ function rutasDeGrupos(p) {
       id: 'reservarLote',
       summary: 'Reserva en grupo los rangos de un clúster (todo o nada)',
       description:
-        'Rol `agente` o superior. Pide de 1 a 20 rangos (`nodos`, `pods`, `servicios`, en cualquier cantidad y combinación; cada uno con `nombre` y `subred` opcionales); cada uno sale del pool que la tabla ambiente + uso → pool indica (`GET /pool-uso`). Pods `/14` y Servicios `/20` por defecto (tamaños de GKE). **Todo o nada:** si uno no cabe, no se reserva ninguno (409 `sin_espacio`). Con `?simular=true` solo dice qué reservaría. Idempotente con `Idempotency-Key`. Un pedido es **un solo grupo** (una sola caducidad), aunque sea de varias subredes. Con `grupo` agrega rangos a uno existente. El grupo se aprueba entero (solo admin) o se libera entero; sus rangos no se confirman ni liberan sueltos (409 `reserva_de_grupo`).',
+        'Rol `agente` o superior. Pide de 1 a 20 rangos (`nodos`, `pods`, `servicios`, en cualquier cantidad y combinación; cada uno con `nombre` y `subred` opcionales); cada uno sale del pool que la tabla ambiente + uso → pool indica (`GET /pool-uso`). El tamaño por defecto lo define cada pool (`mascara_defecto`). **Todo o nada:** si uno no cabe, no se reserva ninguno (409 `sin_espacio`). Con `?simular=true` solo dice qué reservaría. Idempotente con `Idempotency-Key`. Un pedido es **un solo grupo** (una sola caducidad), aunque sea de varias subredes. Con `grupo` agrega rangos a uno existente. El grupo se aprueba entero (solo admin) o se libera entero; sus rangos no se confirman ni liberan sueltos (409 `reserva_de_grupo`).',
       params: [CLAVE_IDEM, param('simular', 'query', 'true: devuelve lo que se reservaría, sin reservar.', { type: 'boolean' }, false)],
       body: cuerpo('LoteCrear', schemas.LoteCrear.example),
       ok: {
@@ -1444,6 +1486,35 @@ function rutasDeGrupos(p) {
         422: respuesta('Un uso no tiene pool configurado para ese ambiente.', 'Error'),
         429: respuesta('Cuota de reservas excedida o demasiadas peticiones.', 'Error'),
       },
+    }),
+  };
+  p['/api/v1/reservas/grupo'] = {
+    get: op({
+      tag: 'Reservas',
+      summary: 'Busca grupos por Idempotency-Key, ticket, estado o por vencer',
+      description:
+        'Un token ve solo sus grupos; una persona, todos. `clave` busca los grupos creados con esa `Idempotency-Key` (siempre los del que llama): sirve para recuperar el estado tras una caída sin guardar el id. `por_expirar_horas` lista los grupos reservados que vencen dentro de ese plazo.',
+      params: [
+        param('clave', 'query', 'Idempotency-Key con la que se reservó.', { type: 'string' }, false),
+        param('ticket', 'query', 'Ticket del grupo.', { type: 'string' }, false),
+        param('estado', 'query', 'Estado del grupo.', { enum: ['reservada', 'confirmada', 'liberada', 'expirada', 'mixto'] }, false),
+        param('por_expirar_horas', 'query', 'Solo los reservados que vencen en esas horas o menos.', { type: 'integer' }, false),
+      ],
+      ok: { 200: respuesta('Grupos, los más nuevos primero (hasta 100).', { type: 'array', items: { $ref: '#/components/schemas/Grupo' } }) },
+      extra: e400,
+    }),
+  };
+  p['/api/v1/reservas/grupo/{id}/renovar'] = {
+    post: op({
+      tag: 'Reservas',
+      id: 'renovarGrupo',
+      summary: 'Extiende la vigencia de un grupo sin cambiar sus CIDR',
+      description:
+        'Dueño o admin. Solo un grupo **vigente**: uno expirado, liberado o confirmado responde 409 `grupo_no_vigente`. Nunca acorta la vigencia; el acumulado desde la creación no pasa de 168 h (400 `ttl_excede_maximo`).',
+      params: [ID_GRUPO],
+      body: { required: false, content: json('GrupoRenovar', schemas.GrupoRenovar.example) },
+      ok: { 200: respuesta('Renovado.', 'Grupo') },
+      extra: { ...e400, ...e403, ...e404, 409: respuesta('El grupo ya no está vigente.', 'Error') },
     }),
   };
   p['/api/v1/reservas/grupo/{id}'] = {
@@ -1475,7 +1546,12 @@ function rutasDeGrupos(p) {
       tag: 'Pools',
       summary: 'Qué pool corresponde a cada ambiente y uso',
       description: 'La tabla que usa la reserva en grupo: (ambiente, uso) → pool. Cualquier rol puede verla.',
-      ok: { 200: respuesta('Filas configuradas.', { type: 'array', items: { $ref: '#/components/schemas/PoolUso' } }) },
+      ok: {
+        200: respuesta('Filas configuradas. La cabecera `X-Version-Tabla` trae la versión de la tabla.', {
+          type: 'array',
+          items: { $ref: '#/components/schemas/PoolUso' },
+        }),
+      },
     }),
   };
   p['/api/v1/pool-uso/{ambiente}/{uso}'] = {

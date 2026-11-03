@@ -15,7 +15,7 @@ spec:
           serviceAccountName: ipam-migrar@PROYECTO.iam.gserviceaccount.com
           maxRetries: 1
           containers:
-            - image: REGION-docker.pkg.dev/PROYECTO/REPO/ipam:0.3.0
+            - image: REGION-docker.pkg.dev/PROYECTO/REPO/ipam:0.4.0
               command: ["node", "src/cli/migrar.js"]
               env:
                 - {name: DATABASE_SCHEMA, value: public}

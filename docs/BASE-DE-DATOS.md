@@ -10,6 +10,7 @@
 | 12 | `alcance` en `tokens_servicio` (grupos de la API que puede usar el token) |
 | 13 | `descripcion`, `responsable` y `uso` en `asignaciones` |
 | 14 | ambiente `lab` en `pools` (reemplaza la restricción `pools_ambiente_check`) |
+| 17 | límites de máscara por pool: `mascara_defecto`, `mascara_minima`, `mascara_maxima` en `pools` |
 | 16 | `nombre` opcional por rango en `reservas` y `asignaciones` |
 | 15 | `grupo` y `rango` en `reservas` y `asignaciones` (reserva en grupo) y la tabla `pool_uso` (ambiente + uso → pool) |
 
