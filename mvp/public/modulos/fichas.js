@@ -158,17 +158,17 @@ export function mapaDelPool(p, ocupantes) {
 
 /**
  * Segmentos (asignados y reservados) de un pool, en una tabla. Los usan la ficha del pool y la fila desplegable de la pestaña Pools.
- * `alElegir(id)` se llama al elegir un segmento asignado (la ficha lo abre en el panel lateral).
+ * `alElegir(id)` se llama al elegir un segmento asignado (la ficha lo abre en el panel lateral). Con `filtro(segmento)` solo se muestran
+ * los que lo cumplen (la búsqueda de la pestaña Pools).
  */
-export async function segmentosDePool(id, alElegir) {
+export async function segmentosDePool(id, alElegir, filtro = () => true) {
   const [asig, reservas] = await Promise.all([
     get('/api/v1/asignaciones?' + new URLSearchParams({ pool: id, limit: '1000' })),
     get('/api/v1/reservas?' + new URLSearchParams({ pool: id, estado: 'reservada' })),
   ]);
-  const filas = [
-    ...asig.filter((a) => a.pool_id === id).map((a) => ({ ...a, estado: 'asignada' })),
-    ...reservas.map((x) => ({ ...x, estado: 'reservada' })),
-  ].sort((a, b) => ip2n(a.cidr.split('/')[0]) - ip2n(b.cidr.split('/')[0]));
+  const filas = [...asig.filter((a) => a.pool_id === id).map((a) => ({ ...a, estado: 'asignada' })), ...reservas.map((x) => ({ ...x, estado: 'reservada' }))]
+    .filter(filtro)
+    .sort((a, b) => ip2n(a.cidr.split('/')[0]) - ip2n(b.cidr.split('/')[0]));
   if (!filas.length) return h('p', { class: 'muted' }, 'Este pool todavía no tiene segmentos asignados ni reservados.');
   return tabla(
     'Segmentos del pool',
