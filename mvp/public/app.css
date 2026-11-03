@@ -13,7 +13,7 @@
   --aviso-bg:#fff7e6;--aviso-fg:#5c3b00;--aviso-borde:#e0b25a;
   --aviso:#b45309;--exito:#1d7a46;--peligro:#a33a3a;
   /* ambientes (texto sobre fondo ≥ 4,5:1) */
-  --dev-bg:#1f7a45;--dev-fg:#fff;--qa-bg:#f2b705;--qa-fg:#1f1700;--pre-bg:#7c4dcc;--pre-fg:#fff;--prod-bg:#c23030;--prod-fg:#fff;
+  --dev-bg:#1f7a45;--dev-fg:#fff;--qa-bg:#f2b705;--qa-fg:#1f1700;--pre-bg:#7c4dcc;--pre-fg:#fff;--prod-bg:#c23030;--prod-fg:#fff;--lab-bg:#0e7490;--lab-fg:#fff;
   /* umbrales de uso */
   --uso-bajo:#1f7a45;--uso-medio:#b45309;--uso-alto:#c23030;--uso-reservado:#8a6100;
   /* tipografía */
@@ -107,7 +107,7 @@ td:first-child,td code{white-space:nowrap}
 
 /* Etiquetas */
 .tag{display:inline-block;padding:2px var(--sp-2);border-radius:var(--r-pill);font-size:var(--fs-xs);font-weight:600;line-height:1.4;color:#fff}
-.dev{background:var(--dev-bg);color:var(--dev-fg)}.qa{background:var(--qa-bg);color:var(--qa-fg)}.pre{background:var(--pre-bg);color:var(--pre-fg)}.prod{background:var(--prod-bg);color:var(--prod-fg)}
+.dev{background:var(--dev-bg);color:var(--dev-fg)}.qa{background:var(--qa-bg);color:var(--qa-fg)}.pre{background:var(--pre-bg);color:var(--pre-fg)}.prod{background:var(--prod-bg);color:var(--prod-fg)}.lab{background:var(--lab-bg);color:var(--lab-fg)}
 .tag.reservada{background:#0b5cad}.tag.asignado{background:#1d4ed8}.tag.reservado{background:#8a4b00}.tag.confirmada{background:#1d7a46}.tag.liberada{background:#5b6577}.tag.expirada{background:#a33a3a}
 .tag.activo{background:#1d7a46}.tag.vencido{background:#a33a3a}.tag.revocado{background:#5b6577}.tag.pronto{background:#8a4b00}
 .tag.imp-ok{background:#1d7a46}.tag.imp-omitida{background:#5b6577}.tag.imp-aviso{background:#8a4b00}.tag.imp-error{background:#a33a3a}
@@ -281,3 +281,22 @@ tr.seg-reservado td:first-child{box-shadow:inset 3px 0 0 #8a4b00}
 tbody tr.detalle-pool:hover td{background:transparent}
 tr.detalle-pool>td{background:var(--line2);padding:var(--sp-3) var(--sp-4)}
 tr.detalle-pool .tablewrap{margin:0}
+
+/* Clústeres (grupos de rangos) y resumen de un pool para gerencia */
+.chip-rango{display:inline-block;padding:1px 7px;border-radius:var(--r-sm);font-size:var(--fs-xs);font-weight:600;background:#e3ecff;color:#17408f}
+.rango-pods{background:#efe6ff;color:#4b2a8a}.rango-servicios{background:#e0f5f0;color:#0d5b4b}
+table.clusteres td{vertical-align:top}table.rangos{width:100%;margin:var(--sp-2) 0}
+tr.detalle-cluster>td{background:var(--line2)}
+.semaforo{display:inline-block;padding:4px 12px;border-radius:var(--r-pill);font-weight:700;font-size:var(--fs-sm);border:1px solid}
+.sem-ok{background:var(--exito-bg);color:var(--exito-fg);border-color:var(--exito-borde)}
+.sem-atencion{background:var(--aviso-bg);color:var(--aviso-fg);border-color:var(--aviso-borde)}
+.sem-critico{background:var(--alerta-bg);color:var(--alerta-fg);border-color:var(--alerta-borde)}
+.resumen-titulo{font-size:var(--fs-xl);font-weight:700;line-height:1.2;margin:var(--sp-3) 0 var(--sp-1)}
+.reparto{display:flex;height:30px;border-radius:var(--r-md);overflow:hidden;border:1px solid var(--line);background:var(--pista);margin:var(--sp-3) 0 var(--sp-2)}
+.reparto span{display:block;height:100%}
+.seg-0{background:#2d6cdf}.seg-1{background:#7c4dcc}.seg-2{background:#1f7a45}.seg-3{background:#0e7490}.seg-4{background:#b4437a}
+.seg-otros{background:#5b6577}.seg-res{background:var(--uso-reservado);background-image:repeating-linear-gradient(45deg,#ffffff88 0 2px,transparent 2px 5px)}.seg-libre{background:var(--pista);border:1px solid var(--line)}
+.leyenda-reparto{display:flex;flex-wrap:wrap;gap:var(--sp-1) var(--sp-4);list-style:none;padding:0;font-size:var(--fs-sm)}
+.muestra-reparto{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:var(--sp-2);vertical-align:-1px}
+table.cabe{width:100%;border-collapse:collapse}table.cabe th,table.cabe td{padding:var(--sp-2);border-bottom:1px solid var(--line);text-align:left}
+.cabe-si{color:var(--exito);font-weight:700}.cabe-poco{color:var(--aviso);font-weight:700}.cabe-sin_espacio,.cabe-no_cabe{color:var(--peligro);font-weight:700}

@@ -57,9 +57,17 @@ Debajo, una fila por pool: su **tipo** (Nodos, Pods, Servicios), **ambiente**, *
 
 **Filtro por ambiente y proveedor:** arriba de la tabla hay dos listas, **Ambiente** (`dev`, `qa`, `lab`, `pre`, `prod`) y **Proveedor** (p. ej. GCP). Al elegir una, los números y la tabla muestran solo esos pools. El filtro **se conserva** al pasar a Segmentos, que también queda acotada; **Limpiar filtro** lo quita.
 
+### Clústeres — «los rangos de un clúster GKE, juntos»
+Cada fila es un **grupo** de rangos que el agente de redes reservó **a la vez**: los **nodos** de la subred y sus rangos secundarios de **Pods** y **Servicios** (la API los pide con `POST /api/v1/reservas/lote`; ver [API-Y-AGENTES](API-Y-AGENTES.md)). Un proyecto **sin** clúster no aparece aquí: sus segmentos están en *Segmentos*.
+- **Columnas:** proyecto y subred, ambiente, los CIDR de Nodos, Pods y Servicios, **estado** (*Reservado*, *Aprobado*, *A medias*, *Liberado*, *Expirado*) y cuánto falta para que venza. El grupo tiene **una sola caducidad**.
+- **Filtros:** por estado y búsqueda por proyecto, subred, CIDR, nombre de rango o ticket.
+- **Desplegar** una fila (flecha) muestra cada rango con su tipo (*Nodos*, *Pods*, *Servicios*), su **nombre** (p. ej. el del rango secundario), su subred, su pool y su estado.
+- **Aprobar los N rangos** (solo admin): pasan **juntos** a asignación definitiva, todo o nada. **Rechazar y liberar** (el dueño o un admin) devuelve todos a sus pools; si el grupo ya está aprobado, solo un admin puede liberarlo y se borran las asignaciones. El agente **no** puede aprobar.
+- Un rango de un grupo no se aprueba ni se libera suelto: en *Segmentos* su fila ofrece **Ver el clúster**.
+
 ### Ficha de detalle — «todo sobre un pool o un segmento»
 Al hacer clic en un **pool** (pestaña Pools) o en el **ID** de una asignación (`ASG-000123`, pestaña Segmentos) se abre un panel a la derecha, como en NetBox. Se cierra con **Cerrar** o la tecla Esc.
-- **Ficha de un pool:** *Detalle* (CIDR, primera y última dirección, direcciones y utilizables, libres, **bloque libre más grande**, uso asignado y reservado; el admin puede editarlo o eliminarlo), *Segmentos* (todo lo asignado y reservado dentro del pool, ordenado; un clic en un segmento abre su ficha), *Direcciones IP* (todas las IPs fijas del pool, incluidas las excepciones) e *Historial*.
+- **Ficha de un pool:** *Detalle* (primero un **resumen en lenguaje sencillo**: semáforo, barra por proyecto y «qué cabe todavía»; luego CIDR, primera y última dirección, direcciones y utilizables, libres, **bloque libre más grande**, uso asignado y reservado; el admin puede editarlo o eliminarlo), *Segmentos* (todo lo asignado y reservado dentro del pool, ordenado; un clic en un segmento abre su ficha), *Direcciones IP* (todas las IPs fijas del pool, incluidas las excepciones) e *Historial*.
 - **Ficha de un segmento:** ID, CIDR, primera y última dirección, máscara, direcciones y utilizables, pool (con enlace a su ficha), ambiente, proveedor, proyecto/VPC, **VLAN**, ticket, origen, quién lo pidió y cuándo; *Direcciones IP* (las IPs fijas del segmento, cuántas de las utilizables están registradas y el formulario para agregar otra); *Historial*; y **Liberar segmento** (solo admin; no se puede si tiene IPs registradas).
 - **Historial** (solo admin): quién asignó, reservó, aprobó o liberó ese pool o segmento, cuándo y con qué motivo. Sale de la bitácora de auditoría, que se sigue registrando aunque ya no tenga pestaña propia. Los segmentos importados o de la semilla muestran su origen y fecha en *Detalle*.
 
@@ -75,8 +83,9 @@ IPs fijas de **interfaces de routers, switches y firewalls**, gateways, VIP/HSRP
 
 ### Segmentos — «lo entregado y lo apartado, en una lista»
 Una sola pestaña reúne las **asignaciones** (definitivas) y las **reservas** (apartadas, pendientes de aprobación). Cada fila dice su **estado con texto y color**: **Asignado** (azul), **Reservado** (ámbar, con cuenta regresiva y un código `RES-…`), y en *Historial*, **Liberada** y **Expirada**. Las reservas pendientes salen primero. Una reserva *confirmada* no se repite: ya es la asignación.
+- **Columna «Rango»:** para los segmentos de un clúster dice si es de *Nodos*, *Pods* o *Servicios* y su nombre. El buscador también lo encuentra.
 - **Botones por estado:** `Todos · Asignados · Reservados · Historial`. El número de *Reservados* es lo pendiente de aprobar.
-- **Acciones por fila:** un *Reservado* muestra **Confirmar** (pasa a Asignado, con su ID `ASG-…`) y **Liberar**; un *Asignado* muestra **Liberar** (solo admin, con doble confirmación). El historial no se opera.
+- **Acciones por fila:** un *Reservado* de un clúster muestra **Ver el clúster** (se aprueba con el grupo entero); uno suelto muestra **Confirmar** (pasa a Asignado, con su ID `ASG-…`) y **Liberar**; un *Asignado* muestra **Liberar** (solo admin, con doble confirmación). El historial no se opera.
 - **Formulario plegado arriba:** **Nuevo segmento**. Con **Es una reserva** marcada (por defecto) pide aprobación; solo un admin puede desmarcarla para **asignar de inmediato**. Se describe abajo.
 - Ordenar por columna, buscar y filtrar por ambiente y proveedor funcionan sobre toda la lista; se pagina de 25 en 25.
 

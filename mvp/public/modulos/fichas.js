@@ -4,6 +4,7 @@ import { ip2n, n2ip, panelDirecciones } from './ips.js';
 import { ESTADO, fechaHora, fmt, get, h, puede, size, todasLasAsignaciones } from './base.js';
 import { abrirDialogo, tabla, toast } from './ui.js';
 import { barraUso, pct } from './uso.js';
+import { resumenPool } from './resumen-pool.js';
 import { accionesPool } from './pools.js';
 import { liberarAsignacion, textoRed } from './asignaciones.js';
 import { show } from './navegacion.js';
@@ -218,7 +219,13 @@ export async function fichaPool(id) {
             'div',
             null,
             h('p', { class: 'ficha-uso' }, barraUso(p.uso, res), ` ocupado (asignado ${pct(p.uso)} · reservado ${pct(res)})`),
-            mapaDelPool(p, [...asig.filter((a) => a.pool_id === id), ...reservas.map((x) => ({ ...x, reserva: true }))]),
+            resumenPool(p, d, p.uso + res, [...asig.filter((a) => a.pool_id === id), ...reservas.map((x) => ({ ...x, reserva: true }))]),
+            h(
+              'details',
+              { class: 'plegable' },
+              h('summary', null, 'Ver el mapa detallado'),
+              mapaDelPool(p, [...asig.filter((a) => a.pool_id === id), ...reservas.map((x) => ({ ...x, reserva: true }))]),
+            ),
             datos([
               ['Pool', p.id],
               ['CIDR base', h('code', null, p.cidr)],

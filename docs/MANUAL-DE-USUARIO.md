@@ -74,7 +74,12 @@ Es la pantalla de inicio.
 
 Un panel a la derecha, que se cierra con **Cerrar** o la tecla **Esc**. Tiene cuatro pestañas: **Detalle**, **Segmentos**, **Direcciones IP** e **Historial** (este último, solo para administradores).
 
-En *Detalle* está el **mapa del espacio**: cada cuadro es un bloque `/24` (256 direcciones). Los cuadros **azules** están asignados, los **ámbar** reservados y los **blancos** libres. Pasa el cursor por un cuadro para ver quién lo usa. Es la forma más rápida de ver si el espacio está **fragmentado** o concentrado.
+En *Detalle* lo primero es un **resumen en lenguaje sencillo**:
+- Una **etiqueta de color** (*Hay espacio*, *Atención: queda poco*, *Crítico: casi lleno*) y una frase: «Se usó el 74 % de esta red. Quedan 4.288 direcciones de 16.384».
+- Una **barra partida por proyecto**, con el nombre y el porcentaje de cada uno; lo reservado esperando aprobación va aparte y lo libre en gris.
+- **«¿Qué cabe todavía en esta red?»**: una tabla con tamaños habituales (subred pequeña, normal y grande, y los Pods y Servicios de un clúster GKE) que dice si caben, cuántas más caben o si ya no queda espacio.
+
+Más abajo, **«Ver el mapa detallado»** (plegado) muestra el mapa del espacio: el pool dividido en hasta **256 cuadros iguales**. El tamaño de cada cuadro **depende del pool** (un pool `/18` de 16.384 direcciones da cuadros de 64) y la propia pantalla lo indica. Los cuadros **azules** están asignados, los **ámbar** reservados y los **blancos** libres; pasa el cursor para ver quién lo usa. Sirve para ver si el espacio está **fragmentado** o concentrado.
 
 ### Segmentos: «todo lo entregado y lo apartado, en una lista»
 ![Lista de segmentos con asignados y reservados](img/03-segmentos.png)
@@ -139,7 +144,7 @@ Las IPs fijas de routers, switches, firewalls, gateways y servidores. Escribe el
 
 ### Saber cuánto espacio queda
 - **Rápido:** pestaña **Pools** → barra de uso y el número de *Espacio libre*.
-- **Detallado:** clic en el pool → *Detalle*: **bloque libre más grande** y mapa del espacio.
+- **Detallado:** clic en el pool → *Detalle*: semáforo, barra por proyecto, «qué cabe todavía», **bloque libre más grande** y, plegado, el mapa del espacio.
 - **Por tamaño:** al elegir un pool en cualquier formulario, la tabla muestra cuántos bloques libres hay de cada máscara.
 
 ### Registrar la IP de un equipo

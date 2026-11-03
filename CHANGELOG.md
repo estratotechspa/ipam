@@ -3,6 +3,11 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y versionado semántico.
 
 ## [Sin publicar]
+### Interfaz de clústeres
+- **Pestaña «Clústeres».** Cada fila es un grupo de rangos reservados juntos (nodos, pods y servicios), con proyecto, subred, ambiente, los CIDR, el estado y cuánto falta para que venza. Se despliega para ver cada rango con su nombre, subred y pool. **Aprobar los N rangos** (solo admin) y **Rechazar y liberar** operan sobre el grupo entero. Filtro por estado y búsqueda.
+- **Segmentos:** nueva columna **Rango** (Nodos, Pods, Servicios y su nombre), también buscable. Un rango de un grupo muestra **Ver el clúster** en lugar de Confirmar y Liberar sueltos (la API los rechaza con `reserva_de_grupo`).
+- **Ficha del pool para gerencia:** lo primero es una frase con semáforo («Se usó el 74 % de esta red»), una barra partida por proyecto y la tabla **«¿Qué cabe todavía en esta red?»** (subred pequeña, normal y grande, y los Pods y Servicios de un clúster GKE). El mapa de cuadros queda como detalle plegado.
+- La etiqueta del ambiente **`lab`** ahora tiene color (antes salía blanco sobre blanco).
 ### Cambios para el agente de redes
 - **Grupo flexible.** Un pedido de `POST /reservas/lote` es **un solo grupo** de 1 a 20 rangos: varias subredes (`subred` por rango), varios rangos del mismo uso, `nombre` opcional por rango (el del rango secundario), Nodos y Servicios opcionales, y `grupo` para **agregar rangos a un grupo existente** (mismo dueño y ambiente, vigente). La misma `Idempotency-Key` con otros parámetros responde `409 idempotencia_conflicto`. Una reserva que pertenece a un grupo no se confirma ni se libera suelta (`409 reserva_de_grupo`). El orden de los rangos de un grupo ahora es estable (nodos, pods, servicios). Esquema versión 16 (`nombre`): **migrar antes de desplegar**.
 - **`prd` es alias de `prod`** en las reservas, el lote y `/pool-uso` (el nombre canónico es `prod`).
