@@ -19,7 +19,7 @@ Cómo se controla quién entra y qué puede hacer. El análisis de amenazas est�
 |---|:-:|:-:|:-:|:-:|
 | Ver pools, asignaciones, reservas | ✔ | ✔ | ✔ | ✔ |
 | Reservar (en la interfaz, «Nuevo segmento» con «Es una reserva» marcada) y liberar **sus** reservas vigentes | | ✔ | ✔ | ✔ |
-| **Aprobar** (confirmar) reservas | | solo las suyas, con `aprobado_por` | | ✔ (todas) |
+| **Aprobar** (confirmar) reservas | | | | ✔ (todas). Un token de servicio **nunca** confirma |
 | Asignar ahora (directo, sin reserva: «Nuevo segmento» con «Es una reserva» desmarcada) | | | | ✔ |
 | Liberar asignaciones (también una reserva ya confirmada), confirmar/liberar reservas ajenas | | | | ✔ |
 | Ver los eventos recientes (`/api/v1/eventos`) | | | | ✔ |

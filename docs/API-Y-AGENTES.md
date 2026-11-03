@@ -23,11 +23,11 @@ curl -s -u admin:"$CLAVE" -H 'X-Requested-With: ipam' -H 'Content-Type: applicat
   -d '{"nombre":"agente-redes","rol":"agente","expira_dias":30,"cuota_reservas":10,"alcance":["reservas","consulta"]}' \
   "$IPAM_URL/api/v1/tokens"
 ```
-`alcance` limita el token a grupos de la API: `reservas` (reservar, consultar, confirmar, liberar), `consulta` (pools, disponibilidad y asignaciones, para comprobar que no haya solapamientos) y `direcciones` (IP fijas). Fuera de ellos responde `403 fuera_de_alcance`. Si lo omites, el token usa todo lo que permita su rol.
+`alcance` limita el token a grupos de la API: `reservas` (reservar, consultar, liberar las propias), `consulta` (pools, disponibilidad y asignaciones, para comprobar que no haya solapamientos) y `direcciones` (IP fijas). Fuera de ellos responde `403 fuera_de_alcance`. Si lo omites, el token usa todo lo que permita su rol.
 
 La respuesta trae el token **una sola vez** (`ipam_` + 43 caracteres). Guárdalo en el gestor de secretos del pipeline. En la base solo queda su hash SHA-256.
 
-## 3 · Flujo del agente: reservar → aprobar → confirmar (o liberar)
+## 3 · Flujo del agente: reservar → un admin aprueba → el agente ve «confirmada» (o libera)
 **Ver qué pools hay y cuánto espacio libre**
 ```bash
 curl -s -H "Authorization: Bearer $IPAM_TOKEN" "$IPAM_URL/api/v1/pools"
@@ -53,12 +53,12 @@ También puedes indicar `ambiente` y `tipo` en vez de `pool` para que el IPAM el
 curl -s -H "Authorization: Bearer $IPAM_TOKEN" "$IPAM_URL/api/v1/reservas?estado=reservada"
 curl -s -H "Authorization: Bearer $IPAM_TOKEN" "$IPAM_URL/api/v1/reservas/<id>"
 ```
-**Confirmar** (solo después de que una persona aprobó; `aprobado_por` y `referencia` son obligatorios para un token)
+**Confirmar es solo de un admin.** Un token de servicio no puede confirmar (`403`), aunque declare quién aprobó: la aprobación humana no depende de lo que el agente diga. El admin aprueba en la interfaz (pestaña Segmentos, vista «Reservados») o con una sesión de admin: `POST /api/v1/reservas/<id>/confirmar` con `aprobado_por` y `referencia` opcionales. El agente **espera** la aprobación consultando la reserva:
 ```bash
-curl -s -X POST -H "Authorization: Bearer $IPAM_TOKEN" -H 'Content-Type: application/json' \
-  -d '{"aprobado_por":"ana@empresa.example","referencia":"https://gitlab.example/redes/-/merge_requests/12"}' \
-  "$IPAM_URL/api/v1/reservas/<id>/confirmar"
+# estado: reservada (falta aprobación) → confirmada (aprobada) | liberada | expirada
+curl -s -H "Authorization: Bearer $IPAM_TOKEN" "$IPAM_URL/api/v1/reservas/<id>"
 ```
+El pipeline debe avanzar solo cuando `estado` sea `confirmada`.
 **Liberar** (si falla o se rechaza)
 ```bash
 curl -s -X DELETE -H "Authorization: Bearer $IPAM_TOKEN" "$IPAM_URL/api/v1/reservas/<id>"

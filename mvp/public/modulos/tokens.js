@@ -5,7 +5,7 @@ import { confirmar, tabla } from './ui.js';
 
 // Grupos de la API que se pueden dar a un token (los mismos de dominio/alcance.js).
 const GRUPOS = [
-  ['reservas', 'Reservas', 'reservar, consultar, confirmar y liberar reservas', true],
+  ['reservas', 'Reservas', 'reservar, consultar y liberar las propias (confirmar es solo de admin)', true],
   ['consulta', 'Consulta', 'ver pools, disponibilidad y asignaciones (para comprobar solapamientos)', true],
   ['direcciones', 'Direcciones IP', 'consultar y registrar IP fijas', false],
 ];

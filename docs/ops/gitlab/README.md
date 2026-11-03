@@ -31,7 +31,7 @@ flowchart LR
 | `plan` | Genera el plan y lo guarda como artefacto |
 | `aprobacion-manual` | **Una persona** lo ejecuta en un ambiente protegido (`allow_failure: false`: sin esto no avanza) |
 | `apply` | Aplica el plan aprobado |
-| `confirmar-ipam` | Confirma las reservas en el IPAM con `aprobado_por` (quien ejecutó el paso manual) y `referencia` (la URL del pipeline); recién ahí son asignaciones definitivas |
+| `esperar-aprobacion-ipam` | Un **admin aprueba** las reservas en el IPAM (el token del pipeline no puede confirmar). El pipeline consulta `GET /api/v1/reservas/{id}` hasta que `estado` sea `confirmada`; si pasa el plazo o la reserva queda `liberada`/`expirada`, falla. Va **antes** de `apply` |
 | `liberar-ipam` | Si algo falla o se rechaza, libera las reservas. Si nadie hace nada, **expiran solas** (72 h por defecto, máximo 168) |
 
 ## Reglas importantes

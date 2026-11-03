@@ -539,7 +539,7 @@ const schemas = {
         uniqueItems: true,
         items: { enum: ['reservas', 'consulta', 'direcciones'] },
         description:
-          'Grupos de la API que puede usar: `reservas` (reservar, consultar, confirmar, liberar), `consulta` (pools, disponibilidad, asignaciones) y `direcciones` (IP fijas). Fuera de ellos responde 403 `fuera_de_alcance`. Si se omite, el token usa todo lo que permita su rol.',
+          'Grupos de la API que puede usar: `reservas` (reservar, consultar, liberar las propias), `consulta` (pools, disponibilidad, asignaciones) y `direcciones` (IP fijas). Fuera de ellos responde 403 `fuera_de_alcance`. Si se omite, el token usa todo lo que permita su rol.',
       },
     },
     example: { nombre: 'agente-redes', rol: 'agente', expira_dias: 90, cuota_reservas: 20, alcance: ['reservas', 'consulta'] },
@@ -1288,7 +1288,7 @@ function rutasDeReservas(p) {
       id: 'confirmarReserva',
       summary: 'Confirma la reserva: pasa a asignación definitiva (origen `agente`)',
       description:
-        'Solo el dueño o un admin. **Regla human-in-the-loop:** un agente debe indicar `aprobado_por` y `referencia` (quién aprobó y dónde consta). Idempotente. Una reserva liberada o expirada no se puede confirmar (409).',
+        '**Solo un admin** (un token de servicio no puede confirmar: la aprobación humana no depende de lo que el agente declare). Puede indicar `aprobado_por` y `referencia` (quién aprobó y dónde consta). Idempotente. Una reserva liberada o expirada no se puede confirmar (409).',
       params: [ID_RESERVA],
       body: { required: false, content: json('ReservaConfirmar', schemas.ReservaConfirmar.example) },
       ok: { 200: respuesta('Confirmada (o ya lo estaba).', 'ReservaConfirmada') },
@@ -1597,7 +1597,7 @@ function construirOpenApi({ servidor = '/' } = {}) {
         '',
         '**Cómo se autentica un agente:** `Authorization: Bearer ipam_…` (token de servicio creado por un admin). No necesita `X-Requested-With` (no hay cookie). Las personas usan cookie de sesión (OIDC) o Basic y deben enviar `X-Requested-With: ipam` en los cambios.',
         '',
-        '**Flujo recomendado:** reservar (con `Idempotency-Key`) → una persona aprueba el cambio en tu pipeline → confirmar con `aprobado_por` y `referencia` → o liberar si algo falla. Una reserva sin confirmar **expira sola**.',
+        '**Flujo recomendado:** reservar (con `Idempotency-Key`) → un admin aprueba la reserva en el IPAM (pestaña Segmentos) → o el agente la libera si algo falla. Una reserva sin confirmar **expira sola**.',
         '',
         '**Versionado:** las rutas `/api/v1/…` son las principales; `/api/…` sigue funcionando como alias compatible.',
         '',

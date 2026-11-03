@@ -164,7 +164,7 @@ test('el servicio funciona de punta a punta usando SOLO el rol ipam_app (y /read
       (
         await fetch(`${s.url}/api/v1/reservas/${rr.id}/confirmar`, {
           method: 'POST',
-          headers: { Authorization: `Bearer ${t.token}`, 'Content-Type': 'application/json' },
+          headers: ADM, // solo un admin confirma
           body: JSON.stringify({ aprobado_por: 'ana', referencia: 'mr' }),
         })
       ).status,

@@ -71,18 +71,16 @@ sequenceDiagram
   I-->>Ag: CIDR reservados (vencen en 72 h por defecto)
   Ag->>GL: MR con los CIDR en variables de OpenTofu
   GL->>GL: validate → scan → plan
-  P->>GL: aprueba el MR / el paso manual
+  P->>I: un admin confirma las reservas (solo un admin puede)
+  GL->>I: consulta hasta ver «confirmada»
   GL->>GL: apply
-  alt apply correcto
-    GL->>I: confirmar (aprobado_por + referencia al MR)
-    I-->>GL: asignación definitiva
-  else falla o se rechaza
+  alt se rechaza o falla antes
     GL->>I: liberar
   end
   Note over I: Sin confirmar, la reserva expira sola
 ```
 
-El pipeline de ejemplo con las etapas `validate → scan → plan → aprobación manual → apply → confirmar-ipam` (y `liberar-ipam` si algo falla)
+El pipeline de ejemplo con las etapas `validate → scan → plan → aprobación en el IPAM → apply` (y `liberar-ipam` si algo falla)
 está en [`ops/gitlab/`](ops/gitlab/).
 
 ## Ejemplos completos y válidos

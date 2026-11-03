@@ -71,7 +71,7 @@ Tres modos, según la configuración: **OIDC** (`OIDC_ISSUER`), **Basic Auth** d
 | Rol | Puede |
 |---|---|
 | `lector` | ver pools, segmentos, direcciones IP y exportar a Excel |
-| `agente` | + reservar segmentos, confirmar y liberar **sus** reservas, registrar IP (es el rol de los tokens de servicio) |
+| `agente` | + reservar segmentos y liberar **sus** reservas, registrar IP (es el rol de los tokens de servicio; **no confirma**) |
 | `solicitante` | + lo del agente; simular tickets de Jira |
 | `admin` | + asignar y liberar segmentos, administrar pools, tokens y usuarios, ver auditoría y eventos, respaldo JSON |
 
@@ -117,7 +117,8 @@ Nada de «EstratoTech» está escrito en el código ni en la imagen: nombre, col
 | GET | `/api/v1/me` | sesión actual |
 | POST · PATCH · DELETE | `/api/v1/pools` · `/api/v1/pools/:id` | crear, editar y eliminar pools (admin; solo se elimina uno sin segmentos ni IPs) |
 | POST · GET · DELETE | `/api/v1/tokens` | tokens de servicio con su `alcance` (admin) |
-| POST · GET · DELETE | `/api/v1/reservas` · `/api/v1/reservas/:id[/confirmar]` | reservas tentativas (agente) |
+| POST · GET · DELETE | `/api/v1/reservas` · `/api/v1/reservas/:id` | reservas tentativas (agente) |
+| POST | `/api/v1/reservas/:id/confirmar` | aprobar una reserva: **solo admin** |
 | GET · POST · PATCH · DELETE | `/api/v1/direcciones` | IPs fijas dentro de un segmento |
 | GET · POST | `/api/v1/exportar.json` · `/api/v1/importar` | respaldo lógico completo · restauración (admin) |
 | GET | `/api/config` · `/brand.css` · `/brand/logo` | marca (abiertos) |
