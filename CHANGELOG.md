@@ -7,6 +7,7 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y 
 - **Reservas de 72 horas por defecto y hasta una semana.** `RESERVA_TTL_HORAS` pasa de 24 a **72** y `RESERVA_TTL_MAX_HORAS` de 72 a **168**. Cambia el valor por defecto de `ttl_horas` en la API, el formulario «Nuevo segmento», el chart y los valores de despliegue.
 - **Ambiente `lab`** además de `dev`, `qa`, `pre` y `prod` (pools, importación, reservas, API e interfaz). Esquema versión 14: reemplaza la restricción `pools_ambiente_check`. **Migrar antes de desplegar** (`/readyz` exige la versión 14).
 - **Los rangos de los pools no se repiten entre ambientes.** Un pool nuevo (o editado) no puede solaparse con ningún otro, aunque sea de otro ambiente o proveedor (`409 pool_solapado`). **Cambio incompatible** para quien creaba el mismo rango en dos ambientes. Los pools que ya existían no se tocan.
+- **La importación ya no crea pools automáticos que pisen a otros.** El pool «familia» (`imp-<proveedor>-<ambiente>-10`, un `10.0.0.0/8`) se solaparía con los demás pools; si un segmento no cabe en un pool existente del mismo proveedor y ambiente, la fila queda inválida con el motivo ("crea antes un pool para ese rango").
 - Documentados los tamaños oficiales de GKE para los rangos de Pods (`/14` por defecto) y Servicios (`/20` por defecto; `/16` como máximo) en [CONTRATO-YAML-REDES](docs/CONTRATO-YAML-REDES.md).
 
 ### Funciones

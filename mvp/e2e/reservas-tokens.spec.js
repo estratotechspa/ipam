@@ -96,7 +96,7 @@ test('reservas: listar, filtrar, confirmar y liberar con confirmación y cuenta 
   await expect(fila).toContainText(r.cidr);
   await expect(fila).toContainText('svc:' + t.nombre);
   await expect(fila).toContainText('Reservado');
-  await expect(fila.locator('time.restante')).toContainText(/^23 h \d+ min$|^1 d 0 h$|^24 h$/); // cuenta regresiva del TTL (24 h)
+  await expect(fila.locator('time.restante')).toContainText(/^2 d 23 h$|^3 d 0 h$/); // cuenta regresiva del TTL (72 h)
 
   // Filtros por estado (botones), búsqueda por solicitante y ambiente/proveedor.
   await page.getByRole('button', { name: /^Asignados/ }).click();
