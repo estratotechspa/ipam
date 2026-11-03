@@ -8,6 +8,7 @@ Lo que el IPAM **no** hace o hace con salvedades. Se mantiene honesto a propósi
 - **El IPAM no crea redes.** Asigna y registra rangos. Crear VPC, subredes y firewall lo hacen los pipelines de infraestructura (OpenTofu).
 - **Solo IPv4.** IPv6 no está implementado (hay una propuesta aparte, sin construir).
 - **No descubre redes existentes.** Solo conoce lo que se le asignó por él; no escanea la nube para detectar rangos ya en uso fuera de él.
+- **Sin «cerrar sesión en todos los dispositivos».** Una baja o un cambio de rol rige en hasta 5 minutos (`SESSION_REVALIDAR_SEG`), no al instante en todas las réplicas.
 - **Un solo escritor lógico por pool.** La consistencia se garantiza en PostgreSQL; no hay multi-región activa-activa.
 
 ## Sobre la aprobación humana
@@ -24,8 +25,9 @@ El IPAM exige `aprobado_por` y `referencia` para que un agente confirme, y los g
 - Las pruebas automáticas corren contra PostgreSQL 14, 15, 16 y 17 reales.
 - Los pipelines de GitHub y GitLab, los manifiestos de GKE/EKS/AKS/Cloud Run y los ejemplos de OpenTofu **no se ejecutaron contra cuentas reales**; se validaron sintácticamente y, donde fue posible, en contenedores locales.
 - `exceljs` arrastra una dependencia con un aviso de severidad moderada en `npm audit` (aceptado; la severidad alta bloquea el CI).
+- La integración saliente con Jira (crear y actualizar tickets) **no se probó contra un Jira real**; el webhook de entrada sí se prueba con firma y timestamp. En el POC el módulo `jira` está apagado.
 - El contrato YAML de redes es una **propuesta pendiente de validar** con el equipo dueño de `cd-agents`.
 - La herramienta de escaneo mencionada como «Whisky» está **por confirmar**; hoy se usan Trivy y Checkov.
 
 ## Rendimiento
-Pensado para decenas de pools y miles de asignaciones, no para millones. El límite de peticiones y la cuota por token evitan que un agente descontrolado sature el servicio.
+Pensado para decenas de pools y miles de asignaciones, no para millones; las consultas se midieron con 100.000 segmentos y 1.000.000 de filas de auditoría ([BASE-DE-DATOS](BASE-DE-DATOS.md)). La búsqueda de texto sobre decenas de miles de segmentos es el primer punto a optimizar. El límite de peticiones y la cuota por token evitan que un agente descontrolado sature el servicio.

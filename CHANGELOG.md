@@ -56,6 +56,7 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y 
 - Reservas: si se cambiaba un filtro y enseguida se escribía en otro (o dos cargas se cruzaban), una respuesta vieja podía redibujar la pantalla y hacer perder lo escrito. Ahora solo la carga más reciente redibuja. Detectado por una prueba intermitente (≈ 1 de cada 60 ejecuciones).
 
 ### Documentación
+- **Documentación al día con el código:** README raíz y de `mvp/` (roles, tabla de API bajo `/api/v1`, sesión de 4 h con revalidación, pestaña Segmentos), versiones 10 a 13 del esquema en BASE-DE-DATOS, modelo de amenazas (alcance, matriz de roles, webhook, `TRUST_PROXY`), calidad, runbook, POC (`TRUST_PROXY=3`, `MODULOS_DESACTIVADOS`), PORTABILIDAD, glosario, limitaciones, deuda técnica cerrada y ADR 0002 (alcance por token).
 - Nuevo [Manual de usuario](docs/MANUAL-DE-USUARIO.md) (guía paso a paso, con capturas en `docs/img/`); el [Manual de uso](docs/MANUAL-DE-USO.md) queda como referencia pantalla por pantalla y se corrigió: los cinco indicadores de Pools y los umbrales de las barras.
 - `main` pasa a ser la línea hexagonal (reservas, tokens, pools, cuentas locales); el monolito anterior queda en la etiqueta `main-monolito-antes-de-unificar`.
 

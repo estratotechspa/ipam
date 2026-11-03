@@ -20,7 +20,8 @@ npm run cobertura                                               # ≥ 80 % en do
 ## Definición de terminado
 - [ ] Pruebas nuevas o actualizadas y `npm test` en verde.
 - [ ] Lint, formato y tipos en verde; escaneos (`make scan`) en verde.
-- [ ] Documentación y contrato OpenAPI actualizados (hay una prueba que compara rutas y contrato).
+- [ ] Documentación y contrato OpenAPI actualizados (hay una prueba que compara rutas y contrato). Si cambias variables de entorno: `npm run doc:config` (y `npm run doc:config:verificar` en el CI). Si cambia algo visible: una entrada en [`CHANGELOG.md`](../CHANGELOG.md) bajo «Sin publicar» y, si afecta a la interfaz, los manuales.
+- [ ] Rutas nuevas de `/api/v1` con su rol mínimo y, si son de lector o agente, su grupo de alcance (lo exige `matriz-roles.test.js`).
 - [ ] Sin secretos (ni en ejemplos, ni en logs, ni en mensajes de error).
 - [ ] Si toca el esquema SQL: **idempotente** (se aplica dos veces), migra desde el esquema viejo, y `mvp/db/schema.sql` = `mvp/chart/ipam/files/schema.sql`.
 - [ ] Nada específico de un proveedor de nube o de CI en `mvp/src/` (`scripts/verificar-portabilidad.sh`).
@@ -36,6 +37,7 @@ npm run cobertura                                               # ≥ 80 % en do
 | `make test-e2e` | Pruebas de navegador (Playwright) y accesibilidad (axe) |
 | `make scan` | gitleaks, Semgrep, Trivy y Checkov |
 | `make helm-check` | `helm lint/template` en todos los escenarios y kube-linter |
+| `make docs` | Enlaces relativos y diagramas Mermaid de la documentación |
 | `make portabilidad` | Guardia contra acoplamiento a un proveedor |
 | `make ci` | Todo lo anterior, igual que el CI |
 | `npm run doc:config` | Regenera [CONFIGURACION](CONFIGURACION.md) desde `src/config.js` |

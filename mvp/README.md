@@ -23,7 +23,7 @@
 | Contribuir (incluye «cómo agregar un adaptador») | [CONTRIBUIR](../docs/CONTRIBUIR.md) |
 | Ver los cambios por versión | [CHANGELOG](../CHANGELOG.md) |
 
-Gestión de segmentos de red (IPv4): pools, asignaciones sin solapamiento, sugerencia de segmentos libres e integración con Jira por webhook firmado.
+Gestión de segmentos de red (IPv4): pools, segmentos (reservas y asignaciones) sin solapamiento, sugerencia de segmentos libres, direcciones IP fijas, tokens para agentes e integración con Jira por webhook firmado.
 
 **Stack:** Node 22 + Express 5 · PostgreSQL 14–17 · Docker.
 
@@ -70,11 +70,14 @@ Tres modos, según la configuración: **OIDC** (`OIDC_ISSUER`), **Basic Auth** d
 
 | Rol | Puede |
 |---|---|
-| `lector` | ver pools, asignaciones, eventos, exportar a Excel |
-| `solicitante` | + solicitar segmentos |
-| `admin` | + liberar, simular tickets de Jira, ver auditoría, asignar roles a otras personas |
+| `lector` | ver pools, segmentos, direcciones IP y exportar a Excel |
+| `agente` | + reservar segmentos, confirmar y liberar **sus** reservas, registrar IP (es el rol de los tokens de servicio) |
+| `solicitante` | + lo del agente; simular tickets de Jira |
+| `admin` | + asignar y liberar segmentos, administrar pools, tokens y usuarios, ver auditoría y eventos, respaldo JSON |
 
-El rol sale de: correos admin de la configuración (siempre) → rol asignado en la pestaña *Usuarios* → grupos del proveedor → `defaultRole` (`lector`; `ninguno` = solo entran los mapeados). Un cambio de rol rige en el próximo inicio de sesión. La sesión es una cookie firmada de 8 h (`SESSION_HORAS`) sin estado en el servidor (sirve con varias réplicas); cerrar sesión borra la cookie local, no cierra la sesión en Google. Los cambios desde el navegador exigen la cabecera `X-Requested-With: ipam` (defensa CSRF). Todo inicio/cierre de sesión, asignación, liberación, exportación y cambio de rol queda en la tabla `auditoria` (pestaña *Auditoría*).
+Detalle por operación en [ACCESO-Y-SEGURIDAD](../docs/ACCESO-Y-SEGURIDAD.md).
+
+El rol sale de: correos admin de la configuración (siempre) → rol asignado en la pestaña *Usuarios* → grupos del proveedor → `defaultRole` (`lector`; `ninguno` = solo entran los mapeados). La sesión es una cookie firmada de 4 h (`SESSION_HORAS`) sin estado en el servidor (sirve con varias réplicas); el rol y la existencia de la persona se revalidan en la base cada 5 min (`SESSION_REVALIDAR_SEG`), así que una baja o un cambio de rol rige en ese tiempo; cerrar sesión borra la cookie local, no cierra la sesión en Google. Los cambios desde el navegador exigen la cabecera `X-Requested-With: ipam` (defensa CSRF). Todo inicio/cierre de sesión, asignación, liberación, exportación y cambio de rol queda en la tabla `auditoria` (pestaña *Auditoría*).
 
 ## Respaldos y exposición
 - **Respaldos incrementales a GCS** (`postgres.backup.*`): completo semanal + incremental diario + WAL continuo (recuperación a cualquier instante), retención de 4 completos y prueba de restauración mensual. Imagen `mvp/postgres` (PostgreSQL + pgBackRest). Pasos, restauración y qué vigilar: **`docs/OPERACION.md`**.
@@ -108,36 +111,45 @@ Nada de «EstratoTech» está escrito en el código ni en la imagen: nombre, col
 ## API
 | Método | Ruta | |
 |---|---|---|
-| GET | `/api/health` | salud (abierta) |
-| GET | `/api/v1/pools`, `/api/v1/resumen`, `/api/v1/asignaciones`, `/api/v1/eventos` | lecturas |
-| GET | `/api/v1/me` · `/api/v1/usuarios` · `/api/v1/auditoria` | sesión actual · usuarios y roles (admin) · bitácora (admin) |
+| GET | `/healthz` · `/readyz` · `/api/health` | vivo · listo (base y versión de esquema) · salud (abiertas) |
+| GET | `/api/v1/pools`, `/api/v1/resumen`, `/api/v1/asignaciones` | lecturas (`asignaciones` pagina: `limit`, `offset`, `X-Total-Count`) |
+| GET | `/api/v1/eventos` · `/api/v1/auditoria` · `/api/v1/usuarios` | eventos · bitácora · usuarios y roles (**solo admin**) |
+| GET | `/api/v1/me` | sesión actual |
+| POST · PATCH · DELETE | `/api/v1/pools` · `/api/v1/pools/:id` | crear, editar y eliminar pools (admin; solo se elimina uno sin segmentos ni IPs) |
+| POST · GET · DELETE | `/api/v1/tokens` | tokens de servicio con su `alcance` (admin) |
+| POST · GET · DELETE | `/api/v1/reservas` · `/api/v1/reservas/:id[/confirmar]` | reservas tentativas (agente) |
+| GET · POST · PATCH · DELETE | `/api/v1/direcciones` | IPs fijas dentro de un segmento |
 | GET · POST | `/api/v1/exportar.json` · `/api/v1/importar` | respaldo lógico completo · restauración (admin) |
 | GET | `/api/config` · `/brand.css` · `/brand/logo` | marca (abiertos) |
 | GET | `/api/v1/exportar.xlsx` | Excel con todos los segmentos (hoja «Segmentos») y los pools (hoja «Pools») |
 | GET | `/api/v1/jira/estado` | si la integración saliente con Jira está activa |
 | GET | `/api/v1/pools/:id/libres?mascara=22` | 3 segmentos libres |
-| POST | `/api/v1/solicitudes` `{pool, vpc, cidr?, mascara?}` | 201 · 400 inválido · 409 solapamiento (con conflicto y sugeridos) |
+| POST | `/api/v1/solicitudes` `{pool, vpc?, cidr?, mascara?, proyecto?, subred?, vlan?, …}` | asigna de inmediato (admin): 201 · 400 inválido · 409 solapamiento (con conflicto y sugeridos) |
 | DELETE | `/api/v1/asignaciones/:id` | liberar |
 | POST | `/webhook/jira` | entrada desde Jira (firmada) |
 | POST | `/api/v1/jira/simular` | simula un ticket para la demo. Solo fuera de producción o con `ENABLE_SIMULADOR=true`; si no, 404 |
 
+Todo lo anterior vive solo bajo `/api/v1` (los alias sin versión se retiraron). Referencia completa: `/api/v1/openapi.json` y [API-Y-AGENTES](../docs/API-Y-AGENTES.md). Con `MODULOS_DESACTIVADOS` se apagan módulos enteros (`jira`, `importacion`, `direcciones`, `respaldo`, `excel`): responden 404 `modulo_desactivado`.
+
 ## Integración saliente con Jira (desactivada por defecto)
-Código en `src/jira.js`. Se activa con `JIRA_ENABLED=true` más `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_PROJECT` (opcionales: `JIRA_ISSUE_TYPE`=Task, `JIRA_DONE_TRANSITION`=Done).
+Código en `src/aplicacion/jira.js` y `src/adaptadores/tickets/jira.js`. Se activa con `JIRA_ENABLED=true` más `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_PROJECT` (opcionales: `JIRA_ISSUE_TYPE`=Task, `JIRA_DONE_TRANSITION`=Done).
 - Solicitud desde el panel → crea el ticket en Jira y guarda su clave real en la asignación.
 - Ticket que llega por webhook → comenta el rango en el ticket y lo pasa a la transición final.
 - Si Jira falla, la asignación se mantiene y queda un evento `jira_error`. Sin activar, todo funciona como antes (tickets `NET-xxx` simulados).
+- La sincronización corre en segundo plano con reintentos (`JIRA_REINTENTOS`, `JIRA_REINTENTO_MS`); el resultado queda en `eventos`.
 - Aún no probada contra un Jira real. Pendiente para Helm: pasar estas variables al Secret/values del chart.
 
 ## Alcance del MVP (lo que NO está)
 - Con la integración desactivada, los números de ticket (`NET-xxx`) los genera el IPAM.
 - Solo IPv4. Las sesiones OIDC se revalidan cada 5 min (`SESSION_REVALIDAR_SEG`): una baja o un cambio de rol rige en ese tiempo, no al instante en todas las réplicas; no hay «cerrar sesión en todos los dispositivos». El rol que dan los grupos del proveedor se fija al iniciar sesión.
+- No descubre redes existentes: solo conoce lo que se registra en él (ver [LIMITACIONES](../docs/LIMITACIONES.md)).
 - Los 6 pools y 12 asignaciones son datos de ejemplo.
 
 ## Guion de demo (5 min)
 1. **Pools:** estado y uso de cada pool.
-2. **Segmentos → Asignar ahora (admin):** `gke-pods-prod` + `10.64.8.0/22` → solapamiento con NET-142, y sugeridos; «Usar» → asignado con ticket.
-3. **Asignar ahora sin CIDR** (solo máscara, con VLAN opcional) → asigna el primer libre; clic en su ID → ficha con detalle e historial.
+2. **Segmentos → Nuevo segmento** (admin, casilla «Es una reserva» desmarcada → «Asignar ahora»): `gke-pods-prod` + `10.64.8.0/22` → solapamiento con NET-142, y sugeridos; «Usar» → asignado con ticket.
+3. **Nuevo segmento sin CIDR** (solo máscara; proyecto, VPC, subred/VLAN opcionales) → asigna el primer libre; clic en su ID → ficha con detalle e historial.
 3b. **Direcciones IP:** en la ficha del segmento → «Registrar IP fija» (`rtr-core-01` · `Gi0/1` · gateway); en la pestaña Direcciones IP, buscar por el equipo.
 3c. **API:** enlace «API» → `/api.html`, «Try it out» en `GET /api/v1/pools`.
 4. **Jira:** «Enviar webhook» → se ve el evento recibido, la asignación y la actualización del ticket.
-5. **Asignaciones:** aparecen con origen `panel` / `jira`; «Liberar» devuelve el espacio.
+5. **Segmentos:** aparecen con origen `panel` / `jira`; «Liberar» (pide escribir el CIDR) devuelve el espacio. Las reservas pendientes están en la vista «Reservados».

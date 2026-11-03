@@ -10,12 +10,16 @@ curl -s $IPAM_URL/healthz ; curl -s $IPAM_URL/readyz
 
 | Síntoma | Causa probable | Acción |
 |---|---|---|
-| `/readyz` responde 503 | Base inaccesible o esquema sin migrar | Revisa `DATABASE_URL`, red y que `npm run migrar` corrió; mira `esquema.version` vs `minima` |
+| `/readyz` responde 503 | Base inaccesible o esquema sin migrar (tras actualizar la imagen, falta `npm run migrar`) | Revisa `DATABASE_URL`, red y que `npm run migrar` corrió; mira `esquema.version` vs `minima` |
 | El servicio **no arranca** en producción | Sin autenticación configurada, o variable inválida | Lee el mensaje de arranque (dice qué falta); configura OIDC, Basic o un token ([ACCESO-Y-SEGURIDAD](../ACCESO-Y-SEGURIDAD.md)) |
 | Muchos 401 | Token vencido/revocado, o credenciales erróneas | Crea otro token; revisa que el pipeline envía `Authorization: Bearer` |
+| 403 `fuera_de_alcance` | El token no tiene el grupo de la API que usa (`reservas`, `consulta`, `direcciones`) | Crea un token con ese alcance en la pestaña Tokens |
+| 404 `modulo_desactivado` | El módulo está en `MODULOS_DESACTIVADOS` (en el POC, `jira`) | Quítalo de la lista y reinicia, si se quiere usar |
+| 404 en `/api/pools`, `/api/solicitudes`… | Las rutas sin versión se retiraron | Usa `/api/v1/...` |
 | 429 | Límite de peticiones o cuota de reservas | Espera `Retry-After`; baja la frecuencia del agente; libera reservas viejas; sube los límites solo si es legítimo |
 | 409 al reservar | Rango ocupado, o clave ya usada y liberada/expirada | Pide otro rango o una `Idempotency-Key` nueva |
 | Reservas «colgadas» | El pipeline murió sin liberar | Esperan su expiración (≤ 72 h) o libéralas en la pestaña Segmentos (botón «Reservados») |
+| Todas las personas figuran con la misma IP (`::1`) en auditoría y el límite por IP es global | `TRUST_PROXY` menor que los saltos de proxy reales | Ajusta `TRUST_PROXY` (3 en el POC de Render) |
 | El barredor no corre (alerta) | Réplica `worker` caída o base sin conexión | Revisa que haya una réplica con `ROL=todos` o `worker`; el estado está en `barredor_estado` |
 | Un pool lleno (≥ 90 %) | Crecimiento | Agrega otro pool/rango ([MIGRACION](MIGRACION.md) para cargar pools) o libera lo que ya no se use |
 | POC lento la primera vez | Plan gratuito dormido | Espera ~90 s; opcional: keepalive ([POC](POC-RENDER-SUPABASE.md)) |

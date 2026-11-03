@@ -1,7 +1,7 @@
 # Arquitectura
 
 ## 1 · Vista general
-El IPAM es un servicio web (Node 22 + Express 5) con PostgreSQL 16 como única dependencia obligatoria. Se entrega como **imagen Docker más variables de entorno**; no usa SDK ni servicios propios de ningún proveedor ([PORTABILIDAD](PORTABILIDAD.md), [ADR 0008](adr/0008-portabilidad-entre-nubes.md)).
+El IPAM es un servicio web (Node 22 + Express 5) con PostgreSQL (14 a 17) como única dependencia obligatoria. Se entrega como **imagen Docker más variables de entorno**; no usa SDK ni servicios propios de ningún proveedor ([PORTABILIDAD](PORTABILIDAD.md), [ADR 0008](adr/0008-portabilidad-entre-nubes.md)).
 
 ```mermaid
 flowchart LR
@@ -36,7 +36,7 @@ flowchart TB
     cu["asignaciones · reservas · tokens · límite · barrido · respaldo · administración"]
   end
   subgraph dominio
-    dom["cidr · roles · reserva · token"]
+    dom["cidr · roles · reserva · token · alcance · módulos · vlan · dirección"]
   end
   adaptadores --> aplicacion --> dominio
 ```
@@ -48,7 +48,7 @@ flowchart TB
 
 ### La interfaz web (`mvp/public/`)
 Sin framework ni paso de compilación: se sirve tal cual. Principios que conviene no romper:
-- `app.js` es solo el **punto de entrada** (navegación y arranque). El resto vive en `public/modulos/`, un módulo ES por pestaña o responsabilidad: `base.js` (DOM, `h()`, cliente de la API, sesión), `ui.js` (diálogos accesibles, avisos, validación de CIDR en vivo), `pools.js`, `segmentos.js` (lista unificada de asignaciones y reservas), `asignaciones.js` y `reservas.js` (sus formularios y acciones), `ips.js`, `jira.js`, `tokens.js`, `usuarios.js`, `importar.js`, `fichas.js` (panel lateral y mapa de bloques), `filtro.js`, `uso.js`, `disponibilidad.js` y `navegacion.js`. Importan `iconos.js` (iconos SVG) y `calculos.js` (cálculos de CIDR, uso y validación, que también ejecutan las pruebas unitarias).
+- `app.js` es solo el **punto de entrada** (navegación y arranque). El resto vive en `public/modulos/`, un módulo ES por pestaña o responsabilidad: `base.js` (DOM, `h()`, cliente de la API, sesión), `ui.js` (diálogos accesibles, avisos, validación de CIDR en vivo), `pools.js`, `segmentos.js` (lista unificada de asignaciones y reservas), `nuevo-segmento.js` (el formulario único «Nuevo segmento»), `asignaciones.js` y `reservas.js` (sus acciones), `ips.js`, `jira.js`, `tokens.js`, `usuarios.js`, `importar.js`, `fichas.js` (panel lateral y mapa de bloques), `filtro.js`, `uso.js`, `disponibilidad.js` y `navegacion.js`. Importan `iconos.js` (iconos SVG) y `calculos.js` (cálculos de CIDR, uso y validación, que también ejecutan las pruebas unitarias).
 - El estado que cambia (pestaña actual, búsqueda, avisos) vive en el objeto `ESTADO` de `base.js`: un módulo ES no puede reasignar una variable que importó. Los módulos se importan entre sí (hay ciclos entre vistas y fichas) y es seguro porque ningún módulo ejecuta código de otro al cargarse: solo lo llama cuando el usuario actúa. `ui.test.js` impide pasar de 400 líneas por módulo.
 - **Sin scripts en línea:** la política de seguridad de contenido (CSP) los prohíbe; todo script va en su archivo. El texto de usuarios se inserta siempre como texto, nunca como HTML.
 - `app.css` define los **tokens de diseño** (colores, tipografía, espaciado, modo oscuro) en `:root`; los contrastes cumplen AA y una prueba (`ui.test.js`) lo mide.
@@ -84,7 +84,7 @@ sequenceDiagram
     I-->>I: expira sola (TTL)
   end
 ```
-**Tickets de Jira: el mismo principio.** El webhook **no asigna**: crea una reserva (solicitante `jira-webhook`, idempotente por ticket) y un **admin** la aprueba en la pestaña Reservas. Solo entonces se asigna el CIDR (origen `jira`) y se actualiza el ticket.
+**Tickets de Jira: el mismo principio.** El webhook **no asigna**: crea una reserva (solicitante `jira-webhook`, idempotente por ticket) y un **admin** la aprueba en la pestaña Segmentos (vista «Reservados»). Solo entonces se asigna el CIDR (origen `jira`) y se actualiza el ticket.
 ```mermaid
 sequenceDiagram
   autonumber
@@ -119,6 +119,7 @@ Pipeline de redes (OpenTofu): `validate → scan (Trivy y Checkov) → plan → 
 - `ROL=api|worker|todos` permite separar réplicas HTTP de la que barre.
 - `/healthz` (vivo) y `/readyz` (listo: base alcanzable y versión de esquema mínima).
 - Apagado ordenado con SIGTERM: termina las peticiones en curso (`APAGADO_TIMEOUT_MS`).
+- Las rutas de la API viven solo bajo `/api/v1`; cada una declara su rol mínimo y las de lector o agente, además, su grupo de **alcance** (`reservas`, `consulta`, `direcciones`); `matriz-roles.test.js` y la prueba de grupos de `matriz-roles.test.js` rompe si una ruta nueva no lo declara. `MODULOS_DESACTIVADOS` responde 404 `modulo_desactivado` por módulo.
 - La migración del esquema es un paso aparte (`npm run migrar`); la app no modifica el esquema al arrancar salvo `MIGRAR_AL_ARRANCAR=true`.
 
 ## 7 · Decisiones

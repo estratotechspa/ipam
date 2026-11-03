@@ -10,7 +10,12 @@ Referencias: OWASP ASVS nivel 2 y OWASP API Security Top 10.
 | **Prettier + `.editorconfig`** | Formato único; se discute lo que importa, no las comas | `npm run formato` (arregla) · `npm run formato:verificar` |
 | **Tipos graduales** | JSDoc con `// @ts-check` y `tsc --checkJs` en `dominio/` y `aplicacion/` (sin migrar a TypeScript) | `npm run tipos` |
 | **Validación de entrada con esquema** | Los cuerpos se validan con Ajv usando los **mismos esquemas del contrato OpenAPI**: lo documentado y lo aceptado no pueden divergir | pruebas `openapi.test.js` y `contrato.test.js` |
-| **Cobertura ≥ 80 %** en `dominio/` y `aplicacion/` (hoy ~97 %) | Falla si baja | `npm run cobertura` |
+| **Cobertura ≥ 80 %** en `dominio/` y `aplicacion/` | Falla si baja | `npm run cobertura` |
+| **Matriz de roles y alcance** | Cada ruta de `/api/v1` declara su rol mínimo (un token de rol menor recibe 403) y las de lector o agente, su grupo de alcance; una ruta nueva sin declararlos rompe la prueba | `matriz-roles.test.js` |
+| **Índices que se usan** | Toma el SQL real del repositorio y exige que su plan use cada índice de apoyo | `indices.test.js` |
+| **Arquitectura y dependencias** | Capas sin saltos; las dependencias de producción deben ser JavaScript puro (el build multiarquitectura lo necesita); ningún módulo de la interfaz pasa de 400 líneas | `arquitectura.test.js`, `ui.test.js` |
+| **Documentación generada** | La referencia de variables de entorno sale de `src/config.js` y el CI falla si quedó desactualizada | `npm run doc:config:verificar` |
+| **Enlaces y diagramas** | Enlaces relativos y sintaxis Mermaid de toda la documentación | `make docs` |
 | **Pruebas de propiedades** (fast-check) | Genera cientos de casos al azar para el invariante «nunca se solapan dos rangos» y para el cálculo de CIDR (se compara con una versión de fuerza bruta) | `npm test` |
 | **Conventional Commits y ramas** | `tipo(ámbito): descripción`; ramas `tipo/descripcion` | hook `commit-msg` (lefthook) y `scripts/hooks/` |
 | **Gobernanza** | `CODEOWNERS` (vale en GitHub y GitLab), plantillas de PR y MR con lista de seguridad, `SECURITY.md`, `docs/CONTRIBUIR.md` | — |

@@ -14,7 +14,7 @@ Nada de esto está escrito en el código: cambia solo la configuración y el man
 | **Cómo llegan al contenedor** | Variable de entorno | Variable o archivo montado (`NOMBRE_FILE`) | ídem | ídem | ídem |
 | **Identidad de la carga de trabajo (sin llaves)** | — (no aplica) | Cuenta de servicio · Workload Identity | Rol de IAM · IRSA / Pod Identity | Identidad administrada · Workload Identity | Cuenta de sistema del servidor |
 | **Balanceador / entrada** | Entrada propia de Render | Cloud Load Balancing (Ingress `gce`) | ALB (Ingress `alb`) | Application Gateway / enrutamiento de aplicaciones | nginx · HAProxy · Traefik |
-| **Saltos de proxy (`TRUST_PROXY`)** | 1 (verificar) | 2 con ALB de Google (verificar) | 1 con ALB (verificar) | 1 (verificar) | los que tengas |
+| **Saltos de proxy (`TRUST_PROXY`)** | 3 (Cloudflare + balanceador de Render; verificado con `X-Forwarded-For` falsos) | 2 con ALB de Google (verificar) | 1 con ALB (verificar) | 1 (verificar) | los que tengas |
 | **Registro de imágenes** | GHCR / GitLab Registry | Artifact Registry | ECR | ACR | Registry propio (Harbor…) |
 | **Métricas (`/metrics`)** | Sin recolector (el servicio duerme) | Managed Service for Prometheus + Cloud Monitoring | Managed Prometheus / CloudWatch | Azure Monitor (Prometheus administrado) | Prometheus propio |
 | **Trazas (OTLP)** | — | Cloud Trace (vía colector OTLP) | X-Ray / Collector | Application Insights / Collector | Jaeger · Tempo |
@@ -28,7 +28,7 @@ Nada de esto está escrito en el código: cambia solo la configuración y el man
 
 | Escenario | Qué cambia | Qué NO cambia |
 |---|---|---|
-| **Local → POC** | `DATABASE_URL` (pooler de sesión), `DATABASE_SCHEMA=ipam`, auth Basic con hash, `TRUST_PROXY=1` | Imagen, código, esquema SQL |
+| **Local → POC** | `DATABASE_URL` (pooler de sesión), `DATABASE_SCHEMA=ipam`, auth Basic con hash, `TRUST_PROXY` según los saltos de proxy (3 en el POC) | Imagen, código, esquema SQL |
 | **POC → Cloud Run / GKE** | `DATABASE_URL` (Cloud SQL), secretos desde Secret Manager, `PUBLIC_URL`, OIDC de Google | Imagen, código, esquema SQL, API |
 | **GCP → AWS o Azure** | Overlay de Helm (`values-eks.yaml` / `values-aks.yaml`), base gestionada, identidad de carga de trabajo | Imagen, código, esquema SQL, API |
 | **Nube → plataforma central futura («Safiro»/«DS»)** | Quien opere la plataforma define dónde corre la imagen; se mantienen las variables | Todo lo demás: el contrato es la API OpenAPI |

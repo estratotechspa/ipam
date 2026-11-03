@@ -2,6 +2,10 @@
 
 Decisiones tomadas a propósito para la prueba de concepto (POC). Cada punto dice qué falta y qué haría falta para cerrarlo.
 
+## Cerradas
+- **Deriva de versión de Node entre CI y producción:** la imagen usaba una base con Node 26 mientras el CI probaba Node 22. Ahora el runtime es `gcr.io/distroless/nodejs22-debian13` fijado por digest.
+- **Job «construir» intermitente (QEMU/SIGILL en arm64):** la etapa de dependencias corre en la arquitectura del que construye; una prueba impide agregar dependencias nativas.
+
 ## 1. Firma de imágenes (Cosign)
 - **Hoy:** la imagen se publica en GHCR con SBOM y atestación de procedencia (`publicar.yml`), pero **sin firma**.
 - **Falta:** firmar con Cosign (sin llaves, con la identidad OIDC de GitHub, o con la llave del cliente) y, en el clúster, exigir la firma con una política de admisión (Kyverno / Sigstore policy-controller).
