@@ -36,7 +36,7 @@ export async function renderImportar() {
   const ambiente = h(
     'select',
     { id: 'imp-amb' },
-    [['', '(el archivo lo trae)'], ...['dev', 'qa', 'pre', 'prod'].map((v) => [v, v])].map(([v, t]) =>
+    [['', '(el archivo lo trae)'], ...['dev', 'qa', 'lab', 'pre', 'prod'].map((v) => [v, v])].map(([v, t]) =>
       h('option', { value: v, selected: IMP.defectos.ambiente === v }, t),
     ),
   );

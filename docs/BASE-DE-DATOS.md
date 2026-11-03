@@ -9,6 +9,7 @@
 | 11 | `proyecto` y `subred` en `asignaciones` y `reservas` (la VLAN y su nombre ya existían) |
 | 12 | `alcance` en `tokens_servicio` (grupos de la API que puede usar el token) |
 | 13 | `descripcion`, `responsable` y `uso` en `asignaciones` |
+| 14 | ambiente `lab` en `pools` (reemplaza la restricción `pools_ambiente_check`) |
 
 `mvp/db/schema.sql` y `mvp/chart/ipam/files/schema.sql` deben ser idénticos (lo exige una prueba). En Supabase, si una versión agrega tablas, vuelve a ejecutar `mvp/db/supabase/01-rls.sql` ([POC](ops/POC-RENDER-SUPABASE.md)).
 

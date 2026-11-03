@@ -34,7 +34,7 @@ Con este IPAM puedes:
 |---|---|---|---|
 | **Qué es** | El **bloque grande** de un ambiente (por ejemplo `gke-nodos-qa` = `10.20.0.0/16`) | Un pedazo **apartado por un tiempo**, esperando aprobación | Un pedazo **entregado de forma definitiva** a un proyecto |
 | **Analogía** | El terreno ya loteado | El lote con un cartel de «apartado» | El lote entregado y escriturado |
-| **Dura** | Siempre | 24 horas por defecto (máximo 72) | Hasta que alguien la libere |
+| **Dura** | Siempre | 72 horas por defecto (máximo una semana) | Hasta que alguien la libere |
 
 Los tres se escriben como **CIDR** (por ejemplo `10.20.16.0/24`). Cuanto **más pequeño** es el número después de la barra, **más grande** es el rango: un `/16` tiene 65.536 direcciones; un `/24`, 256; un `/28`, 16.
 
@@ -65,7 +65,7 @@ Arriba están las pestañas; la que estás viendo aparece subrayada. Con el tecl
 Es la pantalla de inicio.
 - **Los cinco números de arriba:** cuántos pools hay, cuántas asignaciones activas, el **uso total**, cuántos pools están **sobre 80 %** y cuántas **direcciones quedan libres**.
 - **La barra de uso** de cada pool combina **asignado** (azul) y **reservado** (ámbar). Se pinta **verde** por debajo de 70 %, **ámbar** entre 70 % y 90 % y **roja** por encima de 90 %, con un ícono de alerta: es la señal para pedir un bloque más grande antes de quedarte sin espacio.
-- **Filtros:** *Ambiente* (`dev`, `qa`, `pre`, `prod`) y *Proveedor*. Se conservan al cambiar de pestaña; **Limpiar filtro** los quita.
+- **Filtros:** *Ambiente* (`dev`, `qa`, `lab`, `pre`, `prod`) y *Proveedor*. Se conservan al cambiar de pestaña; **Limpiar filtro** los quita.
 - **Buscar:** el cuadro encuentra un pool por nombre, tipo, ambiente, proveedor o CIDR, o por lo que tengan sus segmentos (proyecto, VPC, subred, ticket, responsable, uso, descripción). Los pools donde coincide un segmento se abren solos y muestran solo esos segmentos.
 - **Haz clic en el nombre de un pool** para abrir su ficha.
 
@@ -115,7 +115,7 @@ Las IPs fijas de routers, switches, firewalls, gateways y servidores. Escribe el
 2. Elige el **pool**. (Ninguno viene elegido de antemano, y la máscara se habilita al elegirlo.)
 3. Si quieres, escribe el **proyecto** y la **VPC** (ambos opcionales y por separado). Usa minúsculas, números y guiones: `vpc-tienda-web`.
 4. Elige la **máscara**. La lista ofrece **solo tamaños que caben** y dice cuántos bloques libres quedan de cada uno (`/24 · 15 libres`). Si no sabes cuál, mira la tabla de disponibilidad que aparece al elegir el pool.
-5. Opcional: **VLAN o subred** (una sola casilla: un número es la VLAN, un texto es el nombre de la subred), **ticket** y cuánto debe durar la reserva (hasta 72 horas).
+5. Opcional: **VLAN o subred** (una sola casilla: un número es la VLAN, un texto es el nombre de la subred), **ticket** y cuánto debe durar la reserva (hasta 168 horas, una semana).
 6. Pulsa **Reservar**. El segmento queda **Reservado** y **un administrador debe aprobarlo**.
 
 > Si escribes un CIDR a mano, el IPAM lo revisa **mientras escribes** y te avisa si está mal escrito, desalineado o fuera del pool, antes de enviar.
@@ -170,7 +170,7 @@ Las IPs fijas de routers, switches, firewalls, gateways y servidores. Escribe el
 ### Crear un pool nuevo (administrador)
 1. **Pools** → **Nuevo pool**.
 2. Escribe el **nombre** (minúsculas, números y guiones), el **tipo** (Nodos, Pods, Servicios…), el **ambiente**, el **proveedor** y el **CIDR** del bloque.
-3. No puede solaparse con otro pool del **mismo proveedor y ambiente**. Para cambiar el tipo o el proveedor, o eliminar un pool vacío, abre su ficha → *Editar o eliminar este pool*.
+3. No puede solaparse con **ningún otro pool**, ni de otro ambiente ni de otro proveedor: los rangos no se repiten entre `dev`, `qa`, `lab`, `pre` y `prod`. Para cambiar el tipo o el proveedor, o eliminar un pool vacío, abre su ficha → *Editar o eliminar este pool*.
 
 ### Crear una llave para un pipeline (administrador)
 ![Pestaña Tokens](img/08-tokens.png)
@@ -208,7 +208,7 @@ Si el problema sigue, anota **la hora**, lo que hacías y el mensaje, y avisa a 
 
 ## 7. Preguntas frecuentes
 
-**¿Por qué mi reserva «desapareció»?** Expiró: nadie la aprobó dentro de su plazo (24 horas por defecto). El rango volvió al pool. Crea otra.
+**¿Por qué mi reserva «desapareció»?** Expiró: nadie la aprobó dentro de su plazo (72 horas por defecto). El rango volvió al pool. Crea otra.
 
 **¿Puedo cambiar el CIDR de una asignación?** No. Libera la anterior (si ya no se usa) y pide una nueva. Así el historial es fiel.
 

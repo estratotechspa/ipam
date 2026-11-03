@@ -102,8 +102,8 @@ Tipos: *texto*, *entero*, *booleano* (`true`/`false`) y *lista* (valores separad
 
 | Variable | Tipo | Por defecto | Descripción |
 |---|---|---|---|
-| `RESERVA_TTL_HORAS` | entero | 24 | Vigencia por defecto de una reserva sin confirmar.  |
-| `RESERVA_TTL_MAX_HORAS` | entero | 72 | Vigencia máxima que se puede pedir para una reserva.  |
+| `RESERVA_TTL_HORAS` | entero | 72 | Vigencia por defecto de una reserva sin confirmar.  |
+| `RESERVA_TTL_MAX_HORAS` | entero | 168 | Vigencia máxima que se puede pedir para una reserva.  |
 
 ## Límite de peticiones
 

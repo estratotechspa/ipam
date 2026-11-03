@@ -32,7 +32,7 @@ flowchart LR
 | `aprobacion-manual` | **Una persona** lo ejecuta en un ambiente protegido (`allow_failure: false`: sin esto no avanza) |
 | `apply` | Aplica el plan aprobado |
 | `confirmar-ipam` | Confirma las reservas en el IPAM con `aprobado_por` (quien ejecutó el paso manual) y `referencia` (la URL del pipeline); recién ahí son asignaciones definitivas |
-| `liberar-ipam` | Si algo falla o se rechaza, libera las reservas. Si nadie hace nada, **expiran solas** (24 h por defecto, máximo 72) |
+| `liberar-ipam` | Si algo falla o se rechaza, libera las reservas. Si nadie hace nada, **expiran solas** (72 h por defecto, máximo 168) |
 
 ## Reglas importantes
 - **Human-in-the-loop:** ninguna reserva se vuelve asignación definitiva sin aprobación humana. El IPAM no puede *verificar* quién aprobó: la garantía real es el **ambiente protegido** del paso manual; por eso solo los aprobadores definidos deben poder ejecutarlo.

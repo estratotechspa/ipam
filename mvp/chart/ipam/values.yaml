@@ -30,8 +30,8 @@ config:
   databaseSchema: public        # esquema de PostgreSQL donde viven las tablas (el POC usa «ipam»)
   migrarAlArrancar: false       # EXCEPCIÓN: aplicar el esquema al arrancar la app. Lo normal es el Job de esquema de este chart.
   # Reservas tentativas (agentes): una reserva sin confirmar expira sola.
-  reservaTtlHoras: 24           # vigencia por defecto
-  reservaTtlMaxHoras: 72        # máximo que se puede pedir
+  reservaTtlHoras: 72           # vigencia por defecto
+  reservaTtlMaxHoras: 168       # máximo que se puede pedir
   confirmacionExigeAprobador: true   # un token debe declarar quién aprobó (aprobado_por) y la referencia al confirmar (human-in-the-loop)
   barredorIntervaloSegundos: 60
 

@@ -6,7 +6,7 @@ const { validarVlan } = require('../dominio/vlan');
 const { validarNombres } = require('../dominio/nombres');
 const { ok, fallo, ConflictoDeDatos } = require('./resultado');
 
-const AMBIENTES = ['dev', 'qa', 'pre', 'prod'];
+const AMBIENTES = ['dev', 'qa', 'lab', 'pre', 'prod'];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SIN_CONTROL = /^[^\p{Cc}]{1,120}$/u; // sin caracteres de control
 
@@ -38,7 +38,7 @@ function validarDestino(e) {
   if (pool && pool.length > 100) return malo('pool_invalido', 'El nombre del pool es demasiado largo.');
   if (pool) return ok({ pool, ambiente: null, tipo: null });
   if (!AMBIENTES.includes(e.ambiente) || typeof e.tipo !== 'string' || !e.tipo.trim()) {
-    return malo('falta_destino', 'Indica el pool, o bien ambiente (dev, qa, pre o prod) y tipo (p. ej. Nodos, Pods, Servicios).');
+    return malo('falta_destino', 'Indica el pool, o bien ambiente (dev, qa, lab, pre o prod) y tipo (p. ej. Nodos, Pods, Servicios).');
   }
   return ok({ pool: null, ambiente: e.ambiente, tipo: e.tipo.trim() });
 }

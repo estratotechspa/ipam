@@ -11,7 +11,7 @@ const { ok, fallo } = require('./resultado');
 function crearPools({ repo, eventos }) {
   const solapado = (p) =>
     fallo('conflicto', 'pool_solapado', {
-      mensaje: `Se solapa con el pool ${p.id} (${p.cidr}) del mismo proveedor y ambiente. Elige otro rango o ajusta el existente.`,
+      mensaje: `Se solapa con el pool ${p.id} (${p.cidr}) (los rangos no se repiten entre ambientes ni proveedores). Elige otro rango o ajusta el existente.`,
       conflicto: p,
     });
 

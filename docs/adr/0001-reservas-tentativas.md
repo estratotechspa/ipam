@@ -31,7 +31,7 @@ stateDiagram-v2
 Reglas que se mantienen:
 1. **Ninguna reserva se vuelve asignación definitiva sin confirmación explícita.** Y un token de servicio debe declarar `aprobado_por` y `referencia` (p. ej. el MR aprobado) para confirmar;
    queda en la auditoría. (El IPAM no puede *verificar* que esa persona aprobó: la garantía real es el paso manual protegido del pipeline. Ver `docs/ops/gitlab/`.)
-2. **Una reserva sin confirmar expira sola** (24 h por defecto, máximo 72; ver [0003](0003-ttl-24-horas.md)).
+2. **Una reserva sin confirmar expira sola** (72 h por defecto, máximo 168; ver [0003](0003-ttl-24-horas.md)).
 3. **Los rangos ocupados son asignaciones + reservas vigentes**, con las mismas garantías de no solape (bloqueo por pool y restricción de exclusión en la base).
 4. **Idempotencia:** misma clave y reserva viva → se devuelve la misma (`repetida: true`); misma clave con reserva liberada o expirada → 409 (no se «resucita»).
 5. Solo el dueño o un admin opera sobre una reserva.

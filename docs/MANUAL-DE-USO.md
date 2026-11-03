@@ -8,7 +8,7 @@ Para quien usa el IPAM día a día. Si buscas cómo instalarlo, ve a [DESPLIEGUE
 ## 1 · Para qué sirve (en 30 segundos)
 Un **IPAM** (*IP Address Management*, gestión de direcciones IP) es el libro oficial de quién usa qué rango de IP. Su trabajo principal es **impedir que dos redes reciban rangos que se pisan**; si eso ocurre, las redes no se pueden conectar entre sí más adelante y arreglarlo es caro.
 En este IPAM:
-- Hay **pools**: rangos grandes ya definidos por ambiente (`dev`, `qa`, `pre`, `prod`) y tipo (**Nodos**, **Pods**, **Servicios**).
+- Hay **pools**: rangos grandes ya definidos por ambiente (`dev`, `qa`, `lab`, `pre`, `prod`) y tipo (**Nodos**, **Pods**, **Servicios**).
 - Cada proyecto recibe **asignaciones**: pedazos de un pool (por ejemplo un `/22`) que nadie más puede tomar.
 - Los agentes automáticos (pipelines) no asignan directo: **reservan** un rango por un tiempo limitado y **una persona aprueba** antes de que se vuelva definitivo (*human-in-the-loop*, «humano en el circuito»).
 
@@ -48,14 +48,14 @@ Debajo, una fila por pool: su **tipo** (Nodos, Pods, Servicios), **ambiente**, *
 
 **Cómo se calcula el uso de un pool:** se suman las direcciones de cada segmento asignado o reservado (un `/24` son 256, incluidas la de red y la de difusión) y se dividen por las direcciones del pool. Ejemplo: un `/20` (4.096) con un `/24` asignado y un `/25` reservado → 256 + 128 = 384 → **9,4 %** (6,3 % asignado + 3,1 % reservado).
 
-- **＋ Nuevo pool (bloque base)** (solo admin): nombre (minúsculas, números y guiones), tipo, ambiente, proveedor y CIDR (alineado, de `/8` a `/30`). No puede solaparse con otro pool del **mismo proveedor y ambiente**; en otro ambiente o proveedor el mismo rango sí se permite (p. ej. el mismo `10.40.0.0/16` en dev on-prem y en qa on-prem). Para **editar** el tipo o el proveedor, o **eliminar** un pool vacío (sin segmentos, reservas vigentes ni IPs), abre su ficha → «Editar o eliminar este pool». El CIDR y el ambiente no se editan: dejarían segmentos fuera de su pool.
+- **＋ Nuevo pool (bloque base)** (solo admin): nombre (minúsculas, números y guiones), tipo, ambiente, proveedor y CIDR (alineado, de `/8` a `/30`). No puede solaparse con **ningún otro pool**, ni de otro ambiente ni de otro proveedor (los rangos no se repiten entre ambientes). Para **editar** el tipo o el proveedor, o **eliminar** un pool vacío (sin segmentos, reservas vigentes ni IPs), abre su ficha → «Editar o eliminar este pool». El CIDR y el ambiente no se editan: dejarían segmentos fuera de su pool.
 - **Haz clic en el nombre de un pool** para abrir su **ficha** (ver más abajo).
 - **Buscar:** el cuadro «Buscar» de arriba encuentra un pool por su nombre, tipo, ambiente, proveedor o CIDR, o por lo que tengan sus segmentos (proyecto, VPC, subred, ticket, responsable, uso, descripción). Los pools donde coincide un segmento se abren solos y muestran solo esos segmentos. En Segmentos funciona igual sobre la lista de segmentos.
 - **Ver los segmentos de un pool sin salir de la pestaña:** la flecha ▸ junto al nombre del pool despliega debajo de la fila sus segmentos (asignados y reservados); vuelve a pulsarla para contraer. **Expandir todos** y **Contraer todos** actúan sobre toda la tabla. El nombre del pool abre su ficha en el panel lateral: puedes usar la que prefieras.
 - **Importar segmentos** (solo admin) abre la importación masiva (ver más abajo); **← Volver a Pools** regresa.
 - **Exportar a Excel** baja una planilla con todo.
 
-**Filtro por ambiente y proveedor:** arriba de la tabla hay dos listas, **Ambiente** (`dev`, `qa`, `pre`, `prod`) y **Proveedor** (p. ej. GCP). Al elegir una, los números y la tabla muestran solo esos pools. El filtro **se conserva** al pasar a Segmentos, que también queda acotada; **Limpiar filtro** lo quita.
+**Filtro por ambiente y proveedor:** arriba de la tabla hay dos listas, **Ambiente** (`dev`, `qa`, `lab`, `pre`, `prod`) y **Proveedor** (p. ej. GCP). Al elegir una, los números y la tabla muestran solo esos pools. El filtro **se conserva** al pasar a Segmentos, que también queda acotada; **Limpiar filtro** lo quita.
 
 ### Ficha de detalle — «todo sobre un pool o un segmento»
 Al hacer clic en un **pool** (pestaña Pools) o en el **ID** de una asignación (`ASG-000123`, pestaña Segmentos) se abre un panel a la derecha, como en NetBox. Se cierra con **Cerrar** o la tecla Esc.
@@ -112,7 +112,7 @@ Se abre con **Importar segmentos** en la pestaña Pools. Para partir con el inve
 **Reservar un segmento — «apartado, esperando aprobación».** Aquí entran las reservas tentativas que crean los agentes, Jira y las personas. Una reserva **aparta** un rango sin entregarlo todavía:
 - **Nuevo segmento con «Es una reserva» marcada** (formulario plegado arriba, para solicitante y admin; el solicitante no ve la casilla): eliges pool (ninguno viene elegido), proyecto/VPC, máscara (solo las que caben) o CIDR, VLAN opcional, ticket opcional y vigencia (hasta 72 h). Al confirmarla, la VLAN pasa a la asignación. **Un admin debe aprobarla** (Confirmar) para que sea asignación.
 - **Estados:** *Reservado* (vigente, con **cuenta regresiva**), *Asignado* (confirmada: ya es asignación), *Liberada* (se devolvió) y *Expirada* (nadie la aprobó a tiempo; las dos últimas están en *Historial*).
-- Por defecto expira a las **24 horas** (máximo 72); si nadie hace nada, el rango vuelve solo al pool.
+- Por defecto expira a las **72 horas** (máximo 168, una semana); si nadie hace nada, el rango vuelve solo al pool.
 - Puedes **confirmar** o **liberar** las tuyas (el admin, las de todos). Las reservas que llegan desde **Jira** (solicitante `jira-webhook`) solo las puede aprobar un **admin**: confirmar equivale a dar la **aprobación manual** para asignar el CIDR. Un agente debe indicar **quién aprobó** y **dónde consta** (un MR, un ticket): así queda registro de la aprobación humana.
 - Para ver solo lo pendiente, usa el botón **Reservados**; para encontrar las de un agente, escribe su nombre en **Buscar** (por ejemplo `svc:agente-redes`).
 

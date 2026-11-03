@@ -12,7 +12,7 @@ const { validarVlan } = require('./vlan');
 const { validarNombres } = require('./nombres');
 const { validarDetalle } = require('./detalle');
 
-const AMBIENTES = ['dev', 'qa', 'pre', 'prod'];
+const AMBIENTES = ['dev', 'qa', 'lab', 'pre', 'prod'];
 const ESTADOS = ['ok', 'ya_existe', 'solapa_otro_pool', 'choca_mismo_pool', 'invalida'];
 const MAX_FILAS = 5000;
 

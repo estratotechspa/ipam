@@ -19,7 +19,7 @@
     }
   },
   "$defs": {
-    "ambiente": { "enum": ["dev", "qa", "pre", "prod"] },
+    "ambiente": { "enum": ["dev", "qa", "lab", "pre", "prod"] },
     "nombre": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,40}$" },
     "rango": {
       "type": "object",
@@ -39,7 +39,7 @@
         "subnet": { "$ref": "#/$defs/nombre", "description": "Nombre lógico de la subred. Con el ambiente forma la clave de idempotencia." },
         "region": { "type": "string", "pattern": "^[a-z]+-[a-z]+[0-9]+$" },
         "ambiente": { "$ref": "#/$defs/ambiente" },
-        "ttl_horas": { "type": "integer", "minimum": 1, "maximum": 72, "description": "Cuánto dura la reserva sin confirmar. Por defecto 24 y nunca más de 72." },
+        "ttl_horas": { "type": "integer", "minimum": 1, "maximum": 168, "description": "Cuánto dura la reserva sin confirmar. Por defecto 72 y nunca más de 168 (una semana)." },
         "primary": { "$ref": "#/$defs/rango" },
         "secondary_ranges": {
           "type": "array",

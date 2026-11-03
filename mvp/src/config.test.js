@@ -34,8 +34,8 @@ test('valores por defecto seguros', () =>
     assert.equal(config.http.puerto, 8080);
     assert.equal(config.rol, 'todos');
     assert.equal(config.produccion, false);
-    assert.equal(config.reservas.ttlHoras, 24);
-    assert.equal(config.reservas.ttlMaxHoras, 72);
+    assert.equal(config.reservas.ttlHoras, 72);
+    assert.equal(config.reservas.ttlMaxHoras, 168);
     assert.equal(config.bd.esquema, 'public');
     assert.equal(config.bd.migrarAlArrancar, false);
     assert.equal(config.auth.permitirAnonimo, false);

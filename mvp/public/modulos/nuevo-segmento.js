@@ -13,11 +13,11 @@ export function formularioNuevoSegmento(pools, estado, recargar) {
   const cidr = h('input', { id: 'ns-cidr', placeholder: 'opcional: vacío = el primer rango libre' });
   const red = campoRed('ns');
   const ticket = h('input', { id: 'ns-ticket', maxlength: 60, placeholder: 'opcional (si no, se genera NET-xxx)' });
-  const ttl = h('input', { id: 'ns-ttl', type: 'number', min: 1, max: 72, value: 24 });
+  const ttl = h('input', { id: 'ns-ttl', type: 'number', min: 1, max: 168, value: 72 });
   // Reservar es lo normal y lo seguro: la casilla viene marcada. Quien no es admin no la ve y siempre reserva.
   const reserva = h('input', { id: 'ns-reserva', type: 'checkbox', checked: true });
   const boton = h('button', { class: 'btn', type: 'submit', id: 'ns-go' }, 'Reservar');
-  const campoTtl = campo('Vigencia (horas, máx. 72)', ttl);
+  const campoTtl = campo('Vigencia (horas, máx. 168)', ttl);
   const definitivo = h(
     'p',
     { id: 'ns-definitivo', class: 'alert', role: 'status', hidden: true, style: 'flex:1 1 100%;margin:0' },
@@ -84,7 +84,7 @@ export function formularioNuevoSegmento(pools, estado, recargar) {
     if (cidr.value.trim()) cuerpo.cidr = cidr.value.trim();
     else cuerpo.mascara = +mascara.value;
     if (ticket.value.trim()) cuerpo.ticket = ticket.value.trim();
-    if (comoReserva) cuerpo.ttl_horas = +ttl.value || 24;
+    if (comoReserva) cuerpo.ttl_horas = +ttl.value || 72;
     else if (
       !(await confirmar({
         titulo: '¿Asignar ahora, sin aprobación?',
@@ -103,7 +103,7 @@ export function formularioNuevoSegmento(pools, estado, recargar) {
     if (r.ok) {
       if (comoReserva)
         RES.aviso = {
-          texto: `Reservado ${d.cidr} en ${d.pool_id} por ${ttl.value || 24} h. Falta la aprobación de un admin para que sea asignación; si no se aprueba, expira sola.`,
+          texto: `Reservado ${d.cidr} en ${d.pool_id} por ${ttl.value || 72} h. Falta la aprobación de un admin para que sea asignación; si no se aprueba, expira sola.`,
           tipo: 'ok',
         };
       else ASIG.aviso = `Asignado ${d.cidr} (${d.codigo || 'sin ID'}) en ${d.pool_id}${d.vpc ? ' para ' + d.vpc : ''}. Ticket ${d.ticket}.`;

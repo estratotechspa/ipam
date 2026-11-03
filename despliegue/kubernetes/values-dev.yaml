@@ -4,7 +4,7 @@ replicaCount: 1
 config:
   publicUrl: https://ipam-dev.ejemplo.interno
   logLevel: debug
-  reservaTtlHoras: 24
+  reservaTtlHoras: 72
 secrets:
   existingSecret: ipam-secrets
 limites:

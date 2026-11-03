@@ -8,7 +8,7 @@ const marca = require('../marca');
 const { leerSegmentos } = require('../archivo-segmentos');
 
 const ORDENES = ['fecha', 'cidr', 'pool', 'vpc', 'solicitante', 'ticket', 'origen', 'codigo', 'direcciones'];
-const AMBIENTES = ['dev', 'qa', 'pre', 'prod'];
+const AMBIENTES = ['dev', 'qa', 'lab', 'pre', 'prod'];
 const LIMITE_MAXIMO = 1000;
 
 /** Valida los parámetros de la lista de asignaciones. Devuelve los filtros o { error } con un mensaje claro. */
