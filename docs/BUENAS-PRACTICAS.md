@@ -15,7 +15,7 @@ Ningún cambio automático debe volverse definitivo sin la aprobación de una pe
 - Usa `Idempotency-Key` estable por cambio (por ejemplo, id del MR + pool): un reintento no duplica reservas.
 - Un token por pipeline, con rol `agente`, cuota baja y vencimiento corto; guárdalo como variable **enmascarada y protegida**.
 - Orden de ejecución: infraestructura crea el proyecto → redes aplica políticas, VPC, subredes y firewall → infraestructura despliega el resto ([diagrama](ARQUITECTURA.md#5--orden-de-ejecución-entre-equipos-mvp-del-cliente)).
-- Etapas: `validate → scan (Trivy y Checkov) → plan → aprobación manual → apply → confirmar-ipam`, con `liberar-ipam` si falla o se rechaza ([ejemplo](ops/gitlab/README.md)).
+- Etapas: `validate → scan (Trivy y Checkov) → plan → aprobación en el IPAM (un admin confirma) → apply`, con `liberar-ipam` si falla o se rechaza ([ejemplo](ops/gitlab/README.md)).
 - Las redes críticas llevan `lifecycle { prevent_destroy = true }`.
 - Usa `tofu` (OpenTofu); `terraform` es compatible.
 - Sin llaves de nube de larga duración: federación OIDC ([MIGRAR-A-GITLAB](ops/MIGRAR-A-GITLAB.md)).

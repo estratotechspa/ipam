@@ -73,10 +73,10 @@ sequenceDiagram
   G->>I: POST /reservas (Idempotency-Key)
   I-->>G: 201 reserva «reservada», expira en 72 h
   G->>H: plan de infraestructura para revisar
-  alt aprueba y el apply sale bien
-    H->>G: aprobación manual (ambiente protegido)
-    G->>I: POST /reservas/{id}/confirmar {aprobado_por, referencia}
-    I-->>G: asignación definitiva (origen «agente»)
+  alt aprueba
+    H->>I: confirma la reserva en el IPAM (solo admin)
+    I-->>G: GET /reservas/{id} → estado «confirmada»
+    G->>G: apply (solo avanza si está confirmada)
   else rechaza o falla
     G->>I: DELETE /reservas/{id}
     I-->>G: liberada
@@ -112,7 +112,7 @@ flowchart LR
   B --> C["3 · Infraestructura<br/>despliega el resto"]
   B -. reglas hacia on-premise .-> M[Manual]
 ```
-Pipeline de redes (OpenTofu): `validate → scan (Trivy y Checkov) → plan → aprobación manual → apply → confirmar-ipam`, con `liberar-ipam` si algo falla o se rechaza. Detalle y ejemplo en [ops/gitlab](ops/gitlab/README.md). Las redes críticas llevan `lifecycle { prevent_destroy = true }`.
+Pipeline de redes (OpenTofu): `validate → scan (Trivy y Checkov) → plan → aprobación en el IPAM (un admin confirma) → apply`, con `liberar-ipam` si algo falla o se rechaza. Detalle y ejemplo en [ops/gitlab](ops/gitlab/README.md). Las redes críticas llevan `lifecycle { prevent_destroy = true }`.
 
 ## 6 · Procesos y escalado
 - Sin estado en memoria: se pueden correr varias réplicas. El límite de peticiones y el barredor comparten estado en PostgreSQL (el barredor usa un *advisory lock*: solo una réplica lo ejecuta a la vez).

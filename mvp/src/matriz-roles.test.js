@@ -30,7 +30,7 @@ const MATRIZ = {
   'POST /api/v1/reservas': 'agente',
   'GET /api/v1/reservas/{id}': 'lector',
   'DELETE /api/v1/reservas/{id}': 'agente',
-  'POST /api/v1/reservas/{id}/confirmar': 'agente',
+  'POST /api/v1/reservas/{id}/confirmar': 'admin',
   'GET /api/v1/direcciones': 'lector',
   'POST /api/v1/direcciones': 'agente',
   'PATCH /api/v1/direcciones/{id}': 'agente',

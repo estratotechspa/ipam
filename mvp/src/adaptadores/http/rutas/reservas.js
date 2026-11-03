@@ -33,7 +33,7 @@ function montar(app, { casos, audita, validacion }) {
     return r.ok ? res.json(r.reserva) : enviarFallo(res, r);
   });
 
-  api(app, 'post', '/reservas/:id/confirmar', requiere('agente'), validacion.cuerpo('ReservaConfirmar', { opcional: true }), async (req, res) => {
+  api(app, 'post', '/reservas/:id/confirmar', requiere('admin'), validacion.cuerpo('ReservaConfirmar', { opcional: true }), async (req, res) => {
     const r = await reservas.confirmar(req.actor, req.params.id, req.body || {});
     if (!r.ok) return enviarFallo(res, r);
     if (!r.repetida)

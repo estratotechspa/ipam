@@ -123,12 +123,20 @@ test('reservas: todos los códigos de respuesta reales cumplen el contrato', opt
   await verificar(await llamar('GET', `${R}/${r.id}`), 'GET', `${R}/{id}`);
   await verificar(await llamar('GET', `${R}/no-es-uuid`), 'GET', `${R}/{id}`); // 404
 
-  await verificar(await llamar('POST', `${R}/${r.id}/confirmar`, {}, comoAgente()), 'POST', `${R}/{id}/confirmar`); // 400 falta aprobación
-  const conf = await llamar('POST', `${R}/${r.id}/confirmar`, { aprobado_por: 'ana@empresa.example', referencia: 'https://gitlab.example/mr/1' }, comoAgente());
+  // Un token de servicio NO confirma (403): la aprobación humana es solo del admin.
+  const noPuede = await llamar(
+    'POST',
+    `${R}/${r.id}/confirmar`,
+    { aprobado_por: 'ana@empresa.example', referencia: 'https://gitlab.example/mr/1' },
+    comoAgente(),
+  );
+  assert.equal(noPuede.status, 403);
+  await verificar(noPuede, 'POST', `${R}/{id}/confirmar`);
+  const conf = await llamar('POST', `${R}/${r.id}/confirmar`, { aprobado_por: 'ana@empresa.example', referencia: 'https://gitlab.example/mr/1' }, ADM);
   assert.equal(conf.status, 200);
-  assert.equal((await verificar(conf, 'POST', `${R}/{id}/confirmar`)).asignacion.origen, 'agente');
+  await verificar(conf, 'POST', `${R}/{id}/confirmar`);
   await verificar(await llamar('POST', `${R}/${r.id}/confirmar`, {}, ADM), 'POST', `${R}/{id}/confirmar`); // repetida
-  await verificar(await llamar('POST', `${R}/${r.id}/confirmar`, { raro: 1 }, comoAgente()), 'POST', `${R}/{id}/confirmar`); // 400 forma
+  await verificar(await llamar('POST', `${R}/${r.id}/confirmar`, { raro: 1 }, ADM), 'POST', `${R}/{id}/confirmar`); // 400 forma
   await verificar(await llamar('POST', `${R}/11111111-1111-4111-8111-111111111111/confirmar`, {}, ADM), 'POST', `${R}/{id}/confirmar`); // 404
   const otro = await (await llamar('POST', '/api/v1/tokens', { nombre: 'otro-contrato', rol: 'agente' })).json();
   await verificar(await llamar('DELETE', `${R}/${r.id}`, undefined, { Authorization: `Bearer ${otro.token}` }), 'DELETE', `${R}/{id}`); // 403 no es dueño

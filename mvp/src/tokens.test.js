@@ -213,36 +213,38 @@ test(
   },
 );
 
-test('dueño vs admin por HTTP: otro token no opera sobre mi reserva; un admin sí; el agente confirma con aprobación humana', opts, async () => {
+test('dueño vs admin por HTTP: otro token no opera sobre mi reserva; un admin sí; el agente NO confirma (solo un admin)', opts, async () => {
   const a = await crearToken('agente-a', 'agente');
   const bb = await crearToken('agente-b', 'agente');
   const r = await json(await reservar(a.token, {}, 'dueno-1'));
   assert.equal(r.estado, 201);
   const id = r.cuerpo.id;
-  for (const [m, ruta, cuerpo] of [
-    ['POST', `/api/v1/reservas/${id}/confirmar`, { aprobado_por: 'x', referencia: 'y' }],
-    ['DELETE', `/api/v1/reservas/${id}`],
-  ]) {
-    const x = await json(await llamar(m, ruta, cuerpo, bearer(bb.token)));
-    assert.deepEqual({ e: x.estado, c: x.cuerpo.error }, { e: 403, c: 'no_es_dueno' }, `${m} por otro token`);
+  const otro = await json(await llamar('DELETE', `/api/v1/reservas/${id}`, undefined, bearer(bb.token)));
+  assert.deepEqual({ e: otro.estado, c: otro.cuerpo.error }, { e: 403, c: 'no_es_dueno' }, 'otro token no libera mi reserva');
+  // Ningún token confirma, ni siquiera el dueño, aunque declare quién aprobó: la aprobación humana no depende de lo que el agente diga.
+  for (const t of [a, bb]) {
+    const x = await json(
+      await llamar(
+        'POST',
+        `/api/v1/reservas/${id}/confirmar`,
+        { aprobado_por: 'ana@empresa.example', referencia: 'https://gitlab.example/mr/7' },
+        bearer(t.token),
+      ),
+    );
+    assert.equal(x.estado, 403, 'un token de servicio no confirma');
   }
-  const sin = await json(await llamar('POST', `/api/v1/reservas/${id}/confirmar`, {}, bearer(a.token)));
-  assert.deepEqual({ e: sin.estado, c: sin.cuerpo.error }, { e: 400, c: 'falta_aprobacion' }, 'sin aprobación humana no se vuelve definitiva');
   assert.equal((await json(await fetch(`${url}/api/v1/reservas/${id}`, { headers: ADM }))).cuerpo.estado, 'reservada');
   const ok = await json(
-    await llamar(
-      'POST',
-      `/api/v1/reservas/${id}/confirmar`,
-      { aprobado_por: 'ana@empresa.example', referencia: 'https://gitlab.example/redes/-/merge_requests/7' },
-      bearer(a.token),
-    ),
+    await admin('POST', `/api/v1/reservas/${id}/confirmar`, {
+      aprobado_por: 'ana@empresa.example',
+      referencia: 'https://gitlab.example/redes/-/merge_requests/7',
+    }),
   );
   assert.equal(ok.estado, 200);
-  assert.equal(ok.cuerpo.asignacion.origen, 'agente');
-  const aud = (await b.sql("select usuario, detalle from auditoria where accion = 'confirmar_reserva' and detalle->>'reserva' = $1", [id])).rows[0];
+  const aud = (await b.sql("select detalle from auditoria where accion = 'confirmar_reserva' and detalle->>'reserva' = $1", [id])).rows[0];
   assert.deepEqual(
-    { u: aud.usuario, ap: aud.detalle.aprobado_por, ref: aud.detalle.referencia },
-    { u: 'svc:agente-a', ap: 'ana@empresa.example', ref: 'https://gitlab.example/redes/-/merge_requests/7' },
+    { ap: aud.detalle.aprobado_por, ref: aud.detalle.referencia },
+    { ap: 'ana@empresa.example', ref: 'https://gitlab.example/redes/-/merge_requests/7' },
   );
   // Un admin (sesión abierta de pruebas) sí puede liberar la de otro; borra la asignación.
   const adm = await json(await admin('DELETE', `/api/v1/reservas/${id}`));

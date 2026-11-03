@@ -4,7 +4,8 @@ const { grupoDe, permite, validarAlcance, NOMBRES } = require('./alcance');
 
 test('alcance: cada petición cae en su grupo y las rutas de admin en ninguno', () => {
   assert.equal(grupoDe('POST', '/api/v1/reservas'), 'reservas');
-  assert.equal(grupoDe('post', '/api/v1/reservas/3f2c1a9e-0000-4000-8000-000000000000/confirmar'), 'reservas');
+  assert.equal(grupoDe('delete', '/api/v1/reservas/3f2c1a9e-0000-4000-8000-000000000000'), 'reservas');
+  assert.equal(grupoDe('post', '/api/v1/reservas/3f2c1a9e-0000-4000-8000-000000000000/confirmar'), undefined, 'confirmar es solo de admin');
   assert.equal(grupoDe('GET', '/api/v1/pools/dev-nodos/disponibilidad'), 'consulta');
   assert.equal(grupoDe('GET', '/api/v1/asignaciones'), 'consulta');
   assert.equal(grupoDe('PATCH', '/api/v1/direcciones/7'), 'direcciones');
