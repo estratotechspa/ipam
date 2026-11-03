@@ -69,6 +69,7 @@ function crearRepositorioMemoria({ reloj = { ahora: () => new Date() }, pools = 
       subred = null,
       grupo = null,
       rango = null,
+      nombre = null,
     }) {
       if (datos.asignaciones.some((x) => x.pool_id === pool && cruza(x.cidr, cidr))) throw new ConflictoDeDatos('solapamiento', '23P01');
       const id = ++datos.idAsignacion;
@@ -84,6 +85,7 @@ function crearRepositorioMemoria({ reloj = { ahora: () => new Date() }, pools = 
         subred,
         grupo,
         rango,
+        nombre,
         solicitante,
         ticket,
         origen,
@@ -125,6 +127,7 @@ function crearRepositorioMemoria({ reloj = { ahora: () => new Date() }, pools = 
       subred = null,
       grupo = null,
       rango = null,
+      nombre = null,
     }) {
       if (clave && datos.reservas.some((r) => r.solicitante === solicitante && r.clave_idem === clave)) throw new ConflictoDeDatos('clave repetida', '23505');
       if (
@@ -143,6 +146,7 @@ function crearRepositorioMemoria({ reloj = { ahora: () => new Date() }, pools = 
         subred,
         grupo,
         rango,
+        nombre,
         solicitante,
         ticket,
         estado: 'reservada',
@@ -156,7 +160,11 @@ function crearRepositorioMemoria({ reloj = { ahora: () => new Date() }, pools = 
       return vista(r);
     },
     async reservasDeGrupo(grupo) {
-      return datos.reservas.filter((r) => r.grupo === grupo).map(vista);
+      const peso = (r) => (r.rango === 'principal' ? 0 : r.rango === 'pods' ? 1 : 2);
+      return datos.reservas
+        .filter((r) => r.grupo === grupo)
+        .sort((a, b) => peso(a) - peso(b) || a.cidr.localeCompare(b.cidr))
+        .map(vista);
     },
     async nuevoGrupo() {
       return crypto.randomUUID();
@@ -222,6 +230,7 @@ function crearRepositorioMemoria({ reloj = { ahora: () => new Date() }, pools = 
         subred: r.subred ?? null,
         grupo: r.grupo ?? null,
         rango: r.rango ?? null,
+        nombre: r.nombre ?? null,
       });
     },
     async purgarLimite() {

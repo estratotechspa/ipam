@@ -108,7 +108,9 @@ test('validaciones: nodos exigen máscara, usos repetidos o desconocidos, ambien
   const { g } = await entorno();
   const err = async (cambio) => (await g.reservarLote(AGENTE, { ...PEDIDO, ...cambio })).error;
   assert.equal(await err({ rangos: [{ uso: 'nodos' }] }), 'falta_tamano');
-  assert.equal(await err({ rangos: [{ uso: 'pods' }, { uso: 'pods' }] }), 'uso_repetido');
+  assert.equal(await err({ rangos: Array.from({ length: 21 }, () => ({ uso: 'servicios' })) }), 'rangos_invalidos');
+  assert.equal(await err({ rangos: [{ uso: 'pods', nombre: 'x'.repeat(81) }] }), 'nombre_invalido');
+  assert.equal(await err({ grupo: 'no-uuid' }), 'grupo_invalido');
   assert.equal(await err({ rangos: [{ uso: 'otro' }] }), 'uso_invalido');
   assert.equal(await err({ rangos: [] }), 'rangos_invalidos');
   assert.equal(await err({ ambiente: 'staging' }), 'ambiente_invalido');
@@ -188,4 +190,88 @@ test('un grupo inexistente o con id mal formado es 404', async () => {
   const { g } = await entorno();
   for (const f of [g.obtenerGrupo('x'), g.obtenerGrupo('11111111-1111-4111-8111-111111111111'), g.confirmarGrupo(ADMIN, 'x', {}), g.liberarGrupo(ADMIN, 'x')])
     assert.equal((await f).tipo, 'no_encontrado');
+});
+
+test('nodos y servicios son opcionales: solo pods, o solo servicios', async () => {
+  const { g } = await entorno();
+  const r = await g.reservarLote(AGENTE, { ambiente: 'dev', proyecto: 'proy-x', rangos: [{ uso: 'pods' }] });
+  assert.deepEqual(
+    r.grupo.rangos.map((x) => x.rango),
+    ['pods'],
+  );
+});
+
+test('varias subredes y varios rangos del mismo uso en UN solo grupo, con nombre por rango', async () => {
+  const { g } = await entorno();
+  const r = await g.reservarLote(AGENTE, {
+    ambiente: 'dev',
+    proyecto: 'proy-pagos',
+    rangos: [
+      { uso: 'nodos', mascara: 24, subred: 'gke-a' },
+      { uso: 'pods', nombre: 'pods-a', subred: 'gke-a' },
+      { uso: 'servicios', nombre: 'svc-a', subred: 'gke-a' },
+      { uso: 'nodos', mascara: 26, subred: 'gke-b' },
+      { uso: 'pods', nombre: 'pods-b', subred: 'gke-b' },
+    ],
+  });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.equal(new Set(r.grupo.rangos.map((x) => x.grupo)).size, 1, 'un solo grupo');
+  assert.equal(r.grupo.rangos.length, 5);
+  const pods = r.grupo.rangos.filter((x) => x.rango === 'pods');
+  assert.deepEqual(
+    pods.map((x) => [x.nombre, x.subred]),
+    [
+      ['pods-a', 'gke-a'],
+      ['pods-b', 'gke-b'],
+    ],
+  );
+  assert.notEqual(pods[0].cidr, pods[1].cidr, 'cada rango de pods es distinto');
+  const nodos = r.grupo.rangos.filter((x) => x.rango === 'principal');
+  assert.deepEqual(
+    nodos.map((x) => [x.subred, x.cidr.split('/')[1]]),
+    [
+      ['gke-a', '24'],
+      ['gke-b', '26'],
+    ].sort(),
+  );
+  const c = await g.confirmarGrupo(ADMIN, r.grupo.grupo, {});
+  assert.equal(c.grupo.rangos.length, 5, 'se aprueba el pedido entero de una vez');
+});
+
+test('agregar rangos a una subred existente: mismo grupo, sin reservar nodos', async () => {
+  const { g, uso } = await entorno();
+  const a = await g.reservarLote(AGENTE, PEDIDO);
+  const b = await g.reservarLote(AGENTE, { ambiente: 'dev', grupo: a.grupo.grupo, rangos: [{ uso: 'pods', nombre: 'pods-extra', subred: 'gke-principal' }] });
+  assert.equal(b.ok, true, JSON.stringify(b));
+  assert.equal(b.grupo.grupo, a.grupo.grupo);
+  assert.equal(b.grupo.rangos.length, 4);
+  assert.deepEqual([b.grupo.proyecto, b.grupo.ticket], [a.grupo.proyecto, a.grupo.ticket], 'hereda proyecto y ticket del grupo');
+  // reglas: dueño, ambiente y vigencia
+  await uso.guardar('qa', 'pods', 'qa-todo');
+  assert.equal((await g.reservarLote(OTRO, { ambiente: 'dev', grupo: a.grupo.grupo, rangos: [{ uso: 'pods' }] })).error, 'no_es_dueno');
+  assert.equal((await g.reservarLote(AGENTE, { ambiente: 'qa', grupo: a.grupo.grupo, rangos: [{ uso: 'pods' }] })).error, 'grupo_de_otro_ambiente');
+  assert.equal(
+    (await g.reservarLote(AGENTE, { ambiente: 'dev', grupo: '11111111-1111-4111-8111-111111111111', rangos: [{ uso: 'pods' }] })).tipo,
+    'no_encontrado',
+  );
+  await g.liberarGrupo(AGENTE, a.grupo.grupo);
+  assert.equal((await g.reservarLote(AGENTE, { ambiente: 'dev', grupo: a.grupo.grupo, rangos: [{ uso: 'pods' }] })).error, 'grupo_no_vigente');
+});
+
+test('idempotencia: la misma clave con otros parámetros es conflicto; con los mismos, el mismo grupo', async () => {
+  const { g } = await entorno();
+  const a = await g.reservarLote(AGENTE, PEDIDO, 'mr-77');
+  const cambiado = { ...PEDIDO, rangos: [{ uso: 'nodos', mascara: 25 }, { uso: 'pods' }, { uso: 'servicios' }] };
+  assert.equal((await g.reservarLote(AGENTE, cambiado, 'mr-77')).error, 'idempotencia_conflicto');
+  assert.equal((await g.reservarLote(AGENTE, { ...PEDIDO, proyecto: 'otro' }, 'mr-77')).error, 'idempotencia_conflicto');
+  const mismo = await g.reservarLote(AGENTE, { ...PEDIDO, rangos: [...PEDIDO.rangos].reverse() }, 'mr-77'); // el orden no importa
+  assert.deepEqual([mismo.repetida, mismo.grupo.grupo], [true, a.grupo.grupo]);
+});
+
+test('«prd» es alias de «prod» en el lote y en la tabla ambiente + uso → pool', async () => {
+  const { g, uso, repo } = await entorno({ mapear: false });
+  repo.pools?.set?.('x', {});
+  assert.equal((await uso.guardar('prd', 'pods', 'dev-pods')).error, 'pool_de_otro_ambiente', 'prd se trata como prod: el pool es de dev');
+  assert.equal((await g.reservarLote(AGENTE, { ambiente: 'prd', rangos: [{ uso: 'pods' }] })).error, 'uso_sin_pool');
+  assert.equal((await uso.borrar('prd', 'pods')).error, 'no_encontrado');
 });

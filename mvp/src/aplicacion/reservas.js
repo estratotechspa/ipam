@@ -6,7 +6,7 @@ const { validarVlan } = require('../dominio/vlan');
 const { validarNombres } = require('../dominio/nombres');
 const { ok, fallo, ConflictoDeDatos } = require('./resultado');
 
-const AMBIENTES = ['dev', 'qa', 'lab', 'pre', 'prod'];
+const { AMBIENTES, normalizarAmbiente } = require('../dominio/ambiente');
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SIN_CONTROL = /^[^\p{Cc}]{1,120}$/u; // sin caracteres de control
 
@@ -22,6 +22,7 @@ const presentar = (r) => ({
   subred: r.subred ?? null,
   grupo: r.grupo ?? null,
   rango: r.rango ?? null,
+  nombre: r.nombre ?? null,
   solicitante: r.solicitante,
   ticket: r.ticket,
   estado: r.estado,
@@ -34,15 +35,22 @@ const presentar = (r) => ({
 
 const malo = (error, mensaje) => fallo('validacion', error, { mensaje });
 
+/** Una reserva de un grupo se opera con el grupo entero (todo o nada): sueltas dejarían el grupo a medias. */
+const deGrupo = (accion) =>
+  fallo('conflicto', 'reserva_de_grupo', {
+    mensaje: `Esta reserva pertenece a un grupo: no se puede ${accion} sola. Usa /api/v1/reservas/grupo/{grupo}${accion === 'confirmar' ? '/confirmar' : ''}.`,
+  });
+
 /** Destino: un pool, o ambiente + tipo. */
 function validarDestino(e) {
   const pool = e.pool === undefined || e.pool === null || e.pool === '' ? null : String(e.pool);
   if (pool && pool.length > 100) return malo('pool_invalido', 'El nombre del pool es demasiado largo.');
   if (pool) return ok({ pool, ambiente: null, tipo: null });
-  if (!AMBIENTES.includes(e.ambiente) || typeof e.tipo !== 'string' || !e.tipo.trim()) {
-    return malo('falta_destino', 'Indica el pool, o bien ambiente (dev, qa, lab, pre o prod) y tipo (p. ej. Nodos, Pods, Servicios).');
+  const ambiente = normalizarAmbiente(e.ambiente);
+  if (!AMBIENTES.includes(String(ambiente)) || typeof e.tipo !== 'string' || !e.tipo.trim()) {
+    return malo('falta_destino', 'Indica el pool, o bien ambiente (dev, qa, lab, pre o prod; prd = prod) y tipo (p. ej. Nodos, Pods, Servicios).');
   }
-  return ok({ pool: null, ambiente: e.ambiente, tipo: e.tipo.trim() });
+  return ok({ pool: null, ambiente, tipo: e.tipo.trim() });
 }
 
 /** Tamaño: un CIDR exacto (alineado) o una máscara. */
@@ -267,6 +275,7 @@ function crearReservas({ repo, eventos, config, alConfirmar }) {
     if (!ap.ok) return fallo('validacion', ap.error, { mensaje: ap.mensaje });
     const o = await paraOperar(actor, id);
     if (!o.ok) return o;
+    if (o.previa.grupo) return deGrupo('confirmar');
     const r = await repo.transaccion(async (tx) => {
       await tx.bloquear(`pool:${o.previa.pool_id}`);
       const actual = await tx.reservaPorId(id, { bloquear: true });
@@ -318,6 +327,7 @@ function crearReservas({ repo, eventos, config, alConfirmar }) {
   async function liberar(actor, id) {
     const o = await paraOperar(actor, id);
     if (!o.ok) return o;
+    if (o.previa.grupo) return deGrupo('liberar');
     const r = await repo.transaccion(async (tx) => {
       await tx.bloquear(`pool:${o.previa.pool_id}`);
       const actual = await tx.reservaPorId(id, { bloquear: true });

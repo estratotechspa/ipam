@@ -398,3 +398,10 @@ end $$;
 
 insert into esquema_version (version, descripcion) values (15, 'reserva en grupo y tabla ambiente + uso a pool')
   on conflict (version) do nothing;
+
+-- Nombre opcional de cada rango dentro de su grupo (p. ej. el nombre del rango secundario de la subred: «pods-a», «servicios»).
+alter table reservas add column if not exists nombre text check (char_length(nombre) <= 80);
+alter table asignaciones add column if not exists nombre text check (char_length(nombre) <= 80);
+
+insert into esquema_version (version, descripcion) values (16, 'nombre opcional por rango')
+  on conflict (version) do nothing;
