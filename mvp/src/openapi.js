@@ -137,6 +137,10 @@ const schemas = {
   },
   Cidr: { type: 'string', pattern: '^\\d{1,3}(\\.\\d{1,3}){3}/\\d{1,2}$', description: 'Rango IPv4 en notación CIDR.', example: '10.220.0.0/24' },
   Ambiente: { enum: ['dev', 'qa', 'lab', 'pre', 'prod'], description: 'Ambiente.' },
+  AmbienteEntrada: {
+    enum: ['dev', 'qa', 'lab', 'pre', 'prod', 'prd'],
+    description: 'Ambiente. `prd` se acepta como alias de `prod` (el nombre canónico es `prod`).',
+  },
   Salud: { type: 'object', required: ['ok'], properties: { ok: { type: 'boolean' } }, example: { ok: true } },
   Listo: {
     type: 'object',
@@ -301,6 +305,7 @@ const schemas = {
       id: { type: 'string', pattern: '^\\d+$', description: 'Identificador numérico (como texto).' },
       grupo: { type: ['string', 'null'], format: 'uuid', description: 'Grupo de rangos pedidos juntos (clúster GKE). Nulo si se pidió suelto.' },
       rango: { enum: ['principal', 'pods', 'servicios', null], description: 'Para qué sirve el rango dentro de su grupo (principal = nodos).' },
+      nombre: { type: ['string', 'null'], maxLength: 80, description: 'Nombre del rango dentro de su grupo (p. ej. el del rango secundario de la subred).' },
       codigo: {
         type: 'string',
         pattern: '^ASG-\\d{6,}$',
@@ -374,7 +379,7 @@ const schemas = {
       'Indica el destino con `pool`, o con `ambiente` + `tipo` (si hay más de un pool candidato, la respuesta es 422 con `opciones`), y el tamaño con `mascara` o con `cidr`.',
     properties: {
       pool: { type: 'string', maxLength: 100 },
-      ambiente: { $ref: '#/components/schemas/Ambiente' },
+      ambiente: { $ref: '#/components/schemas/AmbienteEntrada' },
       tipo: { type: 'string', maxLength: 40, description: 'Tipo de pool: Nodos, Pods, Servicios, Control plane…' },
       mascara: { type: 'integer', description: 'Tamaño del bloque (24 = /24), de 8 a 32. Se busca el primer rango libre.' },
       cidr: { $ref: '#/components/schemas/Cidr' },
@@ -402,6 +407,7 @@ const schemas = {
       vlan_nombre: { type: ['string', 'null'], maxLength: 80, description: 'Nombre de la VLAN (opcional).' },
       grupo: { type: ['string', 'null'], format: 'uuid', description: 'Grupo de rangos pedidos juntos (clúster GKE). Nulo si se pidió suelto.' },
       rango: { enum: ['principal', 'pods', 'servicios', null], description: 'Para qué sirve el rango dentro de su grupo (principal = nodos).' },
+      nombre: { type: ['string', 'null'], maxLength: 80, description: 'Nombre del rango dentro de su grupo (p. ej. el del rango secundario de la subred).' },
       solicitante: { type: 'string' },
       ticket: { type: 'string' },
       estado: { enum: ['reservada', 'confirmada', 'liberada', 'expirada'], description: 'Estado real ahora: una reservada vencida ya figura como expirada.' },
@@ -433,16 +439,28 @@ const schemas = {
     properties: {
       uso: { enum: ['nodos', 'pods', 'servicios'], description: 'Para qué es el rango; el pool sale de la tabla ambiente + uso.' },
       mascara: { type: 'integer', description: 'Tamaño (24 = /24), de 8 a 32. Pods /14 y Servicios /20 por defecto (los de GKE); los nodos la exigen.' },
+      nombre: { type: 'string', maxLength: 80, description: 'Nombre del rango (p. ej. el del rango secundario: «pods-a»).' },
+      subred: {
+        type: 'string',
+        maxLength: 80,
+        description: 'Subred a la que pertenece este rango; si falta, la del pedido. Sirve para pedir varias subredes en un solo grupo.',
+      },
     },
   },
   LoteCrear: {
     type: 'object',
     additionalProperties: false,
     required: ['ambiente', 'rangos'],
-    description: 'Los rangos de un proyecto con clúster GKE, reservados juntos: todo o nada.',
+    description:
+      'Los rangos de un proyecto con clúster GKE, reservados juntos: todo o nada y **un solo grupo**, aunque sean de varias subredes o haya varios rangos del mismo uso. Nodos y Servicios son opcionales (con GKE 1.29 o superior, GKE gestiona el rango de Servicios).',
     properties: {
-      ambiente: { $ref: '#/components/schemas/Ambiente' },
-      rangos: { type: 'array', minItems: 1, maxItems: 3, items: { $ref: '#/components/schemas/RangoPedido' } },
+      ambiente: { $ref: '#/components/schemas/AmbienteEntrada' },
+      rangos: { type: 'array', minItems: 1, maxItems: 20, items: { $ref: '#/components/schemas/RangoPedido' } },
+      grupo: {
+        type: 'string',
+        format: 'uuid',
+        description: 'Opcional: agrega estos rangos a un grupo que ya existe (mismo dueño y ambiente, sin reservar nodos de nuevo).',
+      },
       proyecto: { type: ['string', 'null'], maxLength: 120 },
       subred: { type: ['string', 'null'], maxLength: 80 },
       vpc: { type: 'string', maxLength: 120 },
@@ -1380,7 +1398,7 @@ function rutasDeReservas(p) {
         'Solo el dueño o un admin. Si la reserva sigue vigente, la libera. Si ya estaba confirmada (es una asignación definitiva), solo un admin puede liberarla y se borra también la asignación; un agente recibe 403 `solo_admin_libera_asignacion`. Idempotente.',
       params: [ID_RESERVA],
       ok: { 200: respuesta('Liberada (o ya lo estaba: `repetida: true`).', 'ReservaLiberada') },
-      extra: { ...e403, ...e404 },
+      extra: { ...e403, ...e404, 409: respuesta('La reserva pertenece a un grupo (`reserva_de_grupo`): se libera con el grupo entero.', 'Error') },
     }),
   };
   p['/api/v1/reservas/{id}/confirmar'] = {
@@ -1393,7 +1411,7 @@ function rutasDeReservas(p) {
       params: [ID_RESERVA],
       body: { required: false, content: json('ReservaConfirmar', schemas.ReservaConfirmar.example) },
       ok: { 200: respuesta('Confirmada (o ya lo estaba).', 'ReservaConfirmada') },
-      extra: { ...e400, ...e403, ...e404, 409: respuesta('La reserva está liberada o expirada.', 'Error') },
+      extra: { ...e400, ...e403, ...e404, 409: respuesta('La reserva está liberada o expirada, o pertenece a un grupo (`reserva_de_grupo`).', 'Error') },
     }),
   };
 }
@@ -1406,7 +1424,7 @@ function rutasDeGrupos(p) {
       id: 'reservarLote',
       summary: 'Reserva en grupo los rangos de un clúster (todo o nada)',
       description:
-        'Rol `agente` o superior. Pide de 1 a 3 rangos (`nodos`, `pods`, `servicios`); cada uno sale del pool que la tabla ambiente + uso → pool indica (`GET /pool-uso`). Pods `/14` y Servicios `/20` por defecto (tamaños de GKE). **Todo o nada:** si uno no cabe, no se reserva ninguno (409 `sin_espacio`). Con `?simular=true` solo dice qué reservaría. Idempotente con `Idempotency-Key`. El grupo se aprueba entero (solo admin) o se libera entero.',
+        'Rol `agente` o superior. Pide de 1 a 20 rangos (`nodos`, `pods`, `servicios`, en cualquier cantidad y combinación; cada uno con `nombre` y `subred` opcionales); cada uno sale del pool que la tabla ambiente + uso → pool indica (`GET /pool-uso`). Pods `/14` y Servicios `/20` por defecto (tamaños de GKE). **Todo o nada:** si uno no cabe, no se reserva ninguno (409 `sin_espacio`). Con `?simular=true` solo dice qué reservaría. Idempotente con `Idempotency-Key`. Un pedido es **un solo grupo** (una sola caducidad), aunque sea de varias subredes. Con `grupo` agrega rangos a uno existente. El grupo se aprueba entero (solo admin) o se libera entero; sus rangos no se confirman ni liberan sueltos (409 `reserva_de_grupo`).',
       params: [CLAVE_IDEM, param('simular', 'query', 'true: devuelve lo que se reservaría, sin reservar.', { type: 'boolean' }, false)],
       body: cuerpo('LoteCrear', schemas.LoteCrear.example),
       ok: {
@@ -1419,7 +1437,10 @@ function rutasDeGrupos(p) {
         ...e400,
         ...e403,
         404: respuesta('Un pool configurado ya no existe.', 'Error'),
-        409: respuesta('No cabe un rango, o la clave de idempotencia ya se usó.', 'Error'),
+        409: respuesta(
+          'No cabe un rango, la clave de idempotencia ya se usó (o con otros parámetros), el grupo al que se agrega no está vigente o es de otro ambiente.',
+          'Error',
+        ),
         422: respuesta('Un uso no tiene pool configurado para ese ambiente.', 'Error'),
         429: respuesta('Cuota de reservas excedida o demasiadas peticiones.', 'Error'),
       },
@@ -1463,7 +1484,7 @@ function rutasDeGrupos(p) {
       summary: 'Asigna el pool de un ambiente y uso',
       description: 'Solo admin. El pool debe ser del mismo ambiente.',
       params: [
-        param('ambiente', 'path', 'Ambiente.', { $ref: '#/components/schemas/Ambiente' }),
+        param('ambiente', 'path', 'Ambiente (`prd` = `prod`).', { $ref: '#/components/schemas/AmbienteEntrada' }),
         param('uso', 'path', 'Uso.', { enum: ['nodos', 'pods', 'servicios'] }),
       ],
       body: cuerpo('PoolUsoGuardar', schemas.PoolUsoGuardar.example),
@@ -1475,7 +1496,7 @@ function rutasDeGrupos(p) {
       summary: 'Quita la asignación de pool de un ambiente y uso',
       description: 'Solo admin.',
       params: [
-        param('ambiente', 'path', 'Ambiente.', { $ref: '#/components/schemas/Ambiente' }),
+        param('ambiente', 'path', 'Ambiente (`prd` = `prod`).', { $ref: '#/components/schemas/AmbienteEntrada' }),
         param('uso', 'path', 'Uso.', { enum: ['nodos', 'pods', 'servicios'] }),
       ],
       ok: { 200: respuesta('Quitado.', { type: 'object' }) },

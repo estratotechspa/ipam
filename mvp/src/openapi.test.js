@@ -121,7 +121,7 @@ test('la validación de entrada sale del contrato: campos faltantes, desconocido
   const extra = v.validar('ReservaCrear', { vpc: 'v', mascar: 24 });
   assert.deepEqual(extra.errores, [{ campo: '/mascar', mensaje: 'campo no permitido' }]);
   assert.deepEqual(v.validar('ReservaCrear', { vpc: 5 }).errores, [{ campo: '/vpc', mensaje: 'debe ser texto' }]);
-  assert.deepEqual(v.validar('ReservaCrear', { vpc: 'v', ambiente: 'staging' }).errores[0].mensaje, 'debe ser uno de: dev, qa, lab, pre, prod');
+  assert.deepEqual(v.validar('ReservaCrear', { vpc: 'v', ambiente: 'staging' }).errores[0].mensaje, 'debe ser uno de: dev, qa, lab, pre, prod, prd');
   assert.match(v.validar('TokenCrear', { nombre: 'Mal Nombre', rol: 'agente' }).errores[0].mensaje, /formato/);
   assert.equal(v.validar('TokenCrear', { nombre: 'ok-1', rol: 'admin' }).ok, false);
   assert.equal(v.validar('ReservaCrear', []).ok, false, 'un arreglo no es un objeto');

@@ -195,8 +195,8 @@ test('reserva en grupo y tabla ambiente + uso → pool: las respuestas reales cu
   const comoAgente = (extra = {}) => ({ Authorization: `Bearer ${tg.token}`, 'Content-Type': 'application/json', ...extra }); // un clúster pide 3 reservas
   for (const [id, cidr] of [
     ['ct-lab-nodos', '10.160.0.0/16'],
-    ['ct-lab-pods', '10.164.0.0/14'],
-    ['ct-lab-svc', '10.168.0.0/16'],
+    ['ct-lab-pods', '10.168.0.0/13'],
+    ['ct-lab-svc', '10.180.0.0/16'],
   ])
     assert.equal((await llamar('POST', '/api/v1/pools', { id, tipo: 'x', ambiente: 'lab', proveedor: 'GCP', cidr })).status, 201);
   for (const [uso, pool] of [
@@ -223,14 +223,38 @@ test('reserva en grupo y tabla ambiente + uso → pool: las respuestas reales cu
     g.rangos.map((x) => [x.rango, x.cidr]),
     [
       ['principal', '10.160.0.0/24'],
-      ['pods', '10.164.0.0/14'],
-      ['servicios', '10.168.0.0/20'],
+      ['pods', '10.168.0.0/14'],
+      ['servicios', '10.180.0.0/20'],
     ],
   );
   const otra = await llamar('POST', '/api/v1/reservas/lote', pedido, comoAgente({ 'Idempotency-Key': 'ct-grupo-1' }));
   assert.equal((await verificar(otra, 'POST', '/api/v1/reservas/lote')).repetida, true);
   await verificar(await llamar('GET', `${G}/${g.grupo}`), 'GET', `${G}/{id}`);
   await verificar(await llamar('GET', `${G}/no-es-uuid`), 'GET', `${G}/{id}`); // 404
+
+  // Una reserva de un grupo no se opera suelta: ni liberar (agente) ni confirmar (admin).
+  const miembro = g.rangos[1].id;
+  const l1 = await llamar('DELETE', `/api/v1/reservas/${miembro}`, undefined, comoAgente());
+  assert.equal(l1.status, 409);
+  assert.equal((await verificar(l1, 'DELETE', '/api/v1/reservas/{id}')).error, 'reserva_de_grupo');
+  const c1 = await llamar('POST', `/api/v1/reservas/${miembro}/confirmar`, {});
+  assert.equal(c1.status, 409);
+  assert.equal((await verificar(c1, 'POST', '/api/v1/reservas/{id}/confirmar')).error, 'reserva_de_grupo');
+  // Misma clave con otros parámetros: conflicto. «prd» es alias de «prod».
+  const otraClave = await llamar('POST', '/api/v1/reservas/lote', { ...pedido, proyecto: 'otro' }, comoAgente({ 'Idempotency-Key': 'ct-grupo-1' }));
+  assert.equal(otraClave.status, 409);
+  assert.equal((await otraClave.json()).error, 'idempotencia_conflicto');
+  assert.equal((await llamar('PUT', '/api/v1/pool-uso/prd/pods', { pool: 'ct-lab-pods' })).status, 400, 'prd = prod: el pool es de lab');
+  // Agregar un rango con nombre al mismo grupo (sin nodos).
+  const mas = await llamar(
+    'POST',
+    '/api/v1/reservas/lote',
+    { ambiente: 'lab', grupo: g.grupo, rangos: [{ uso: 'pods', nombre: 'pods-b', subred: 'gke-ct' }] },
+    comoAgente(),
+  );
+  assert.equal(mas.status, 201);
+  const gm = (await verificar(mas, 'POST', '/api/v1/reservas/lote')).grupo;
+  assert.deepEqual([gm.grupo, gm.rangos.length, gm.rangos.filter((x) => x.nombre === 'pods-b').length], [g.grupo, 4, 1]);
 
   // Un token no confirma; un admin sí, y los tres rangos pasan juntos.
   assert.equal((await llamar('POST', `${G}/${g.grupo}/confirmar`, {}, comoAgente())).status, 403);
@@ -243,7 +267,7 @@ test('reserva en grupo y tabla ambiente + uso → pool: las respuestas reales cu
   // Ya confirmado, un agente no lo libera; un admin sí y se borran las tres asignaciones.
   assert.equal((await llamar('DELETE', `${G}/${g.grupo}`, undefined, comoAgente())).status, 403);
   const lib = await llamar('DELETE', `${G}/${g.grupo}`);
-  assert.equal((await verificar(lib, 'DELETE', `${G}/{id}`)).asignaciones_borradas, 3);
+  assert.equal((await verificar(lib, 'DELETE', `${G}/{id}`)).asignaciones_borradas, 4);
   const sinPool = await llamar('POST', '/api/v1/reservas/lote', { ambiente: 'pre', rangos: [{ uso: 'pods' }] }, comoAgente());
   assert.equal(sinPool.status, 422);
   assert.equal((await llamar('DELETE', '/api/v1/pool-uso/lab/servicios')).status, 200);

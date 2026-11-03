@@ -67,6 +67,14 @@ Si nadie confirma ni libera, la reserva **expira sola** (72 h por defecto, 168 h
 
 **Reservar los rangos de un clúster GKE (en grupo, todo o nada)**
 Un proyecto con clúster necesita tres rangos: la subred de nodos y sus rangos secundarios de Pods y Servicios. Se piden juntos; si uno no cabe, no se reserva ninguno. Cada rango sale del pool que la tabla **ambiente + uso → pool** indica (`GET /api/v1/pool-uso`; un admin la define con `PUT /api/v1/pool-uso/{ambiente}/{uso}`). Pods `/14` y Servicios `/20` por defecto (los de GKE); los nodos exigen `mascara`. Un proyecto **sin** clúster usa la reserva suelta de más arriba.
+
+- **Un pedido es un solo grupo** (una sola caducidad, `ttl_horas`), de 1 a 20 rangos: puede traer varias subredes (`subred` por rango) y varios rangos del mismo uso (p. ej. dos de pods), cada uno con un `nombre` opcional (el del rango secundario).
+- **Nodos y Servicios son opcionales.** Con GKE 1.29 o superior, GKE gestiona el rango de Servicios: no lo pidas.
+- **Agregar a una subred existente:** `"grupo": "<id>"` suma los rangos al grupo (mismo dueño y ambiente, grupo vigente), sin reservar nodos.
+- **Ambiente:** `dev`, `qa`, `lab`, `pre`, `prod`; `prd` se acepta como alias de `prod`.
+- **Idempotencia:** la misma `Idempotency-Key` con los mismos parámetros devuelve el mismo grupo; con otros parámetros, `409 idempotencia_conflicto`; de un grupo liberado o expirado, `409 clave_idem_usada`.
+- **Un rango de un grupo no se confirma ni se libera suelto** (`409 reserva_de_grupo`): se opera con el grupo entero.
+- **Permisos del token:** `reservas` y `consulta` (o sin alcance); `GET /pool-uso` es de `consulta`. La cuota (`cuota_reservas`, 20 por defecto) cuenta cada rango; los pedidos en paralelo de un mismo token se encolan. Límite de escritura: 30 por minuto.
 ```bash
 # ¿Qué reservaría? (no reserva nada)
 curl -s -H "Authorization: Bearer $IPAM_TOKEN" -H 'Content-Type: application/json' \

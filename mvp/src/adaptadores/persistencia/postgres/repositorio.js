@@ -8,11 +8,11 @@ const { USO_POOL, COLUMNAS_DIRECCION } = require('./sql-comun');
 const { consultasDeExportacion } = require('./exportacion');
 
 const COLUMNAS_ASIGNACION =
-  'id, codigo, pool_id, cidr::text, vpc, proyecto, subred, vlan, vlan_nombre, solicitante, ticket, origen, creado_en, descripcion, responsable, uso, grupo, rango';
+  'id, codigo, pool_id, cidr::text, vpc, proyecto, subred, vlan, vlan_nombre, solicitante, ticket, origen, creado_en, descripcion, responsable, uso, grupo, rango, nombre';
 
 // Lista de asignaciones con alias de tabla (se une con pools para filtrar por ambiente).
 const COLUMNAS_ASIGNACION_A =
-  'a.id, a.codigo, a.pool_id, a.cidr::text, a.vpc, a.proyecto, a.subred, a.vlan, a.vlan_nombre, a.solicitante, a.ticket, a.origen, a.creado_en, a.descripcion, a.responsable, a.uso, a.grupo, a.rango';
+  'a.id, a.codigo, a.pool_id, a.cidr::text, a.vpc, a.proyecto, a.subred, a.vlan, a.vlan_nombre, a.solicitante, a.ticket, a.origen, a.creado_en, a.descripcion, a.responsable, a.uso, a.grupo, a.rango, a.nombre';
 // Valores de la asignación que nace de una reserva confirmada, en el orden de los parámetros $1…$10 de su INSERT.
 const valoresDeReserva = (r) => [
   r.pool_id,
@@ -27,6 +27,7 @@ const valoresDeReserva = (r) => [
   r.subred ?? null,
   r.grupo ?? null,
   r.rango ?? null,
+  r.nombre ?? null,
 ];
 // Valores de una asignación importada, en el orden de los parámetros $1…$14 de su INSERT.
 const valoresImportada = (a) => [
@@ -60,12 +61,14 @@ const ORDEN_ASIGNACIONES = {
 
 // Reservas: el estado «real» considera el plazo con el reloj de la BASE (no el de cada réplica): una reserva «reservada» vencida cuenta como expirada.
 const ESTADO_EFECTIVO = `case when estado = 'reservada' and expira_en <= now() then 'expirada' else estado end`;
-const COLUMNAS_RESERVA = `id, pool_id, cidr::text, vpc, proyecto, subred, vlan, vlan_nombre, solicitante, ticket, creado_en, expira_en, resuelto_en, asignacion_id, grupo, rango,
+const COLUMNAS_RESERVA = `id, pool_id, cidr::text, vpc, proyecto, subred, vlan, vlan_nombre, solicitante, ticket, creado_en, expira_en, resuelto_en, asignacion_id, grupo, rango, nombre,
   ${ESTADO_EFECTIVO} as estado, estado as estado_registrado,
   case when estado = 'reservada' and expira_en > now() then floor(extract(epoch from (expira_en - now())))::int else 0 end as segundos_restantes`;
 const RESERVA_VIGENTE = `estado = 'reservada' and expira_en > now()`;
 const SQL_RESERVA_POR_ID = `select ${COLUMNAS_RESERVA} from reservas where id=$1`;
-const SQL_GRUPO = `select ${COLUMNAS_RESERVA} from reservas where grupo = $1::uuid order by creado_en, id`;
+// Orden estable: los rangos de un grupo nacen en la misma transacción (mismo creado_en) y su id es aleatorio.
+const SQL_GRUPO = `select ${COLUMNAS_RESERVA} from reservas where grupo = $1::uuid
+  order by case rango when 'principal' then 0 when 'pods' then 1 else 2 end, cidr, id`;
 const SQL_GRUPO_BLOQUEADO = `${SQL_GRUPO} for update`;
 const SQL_RESERVA_POR_ID_BLOQUEADA = `${SQL_RESERVA_POR_ID} for update`; // FOR UPDATE: nadie más cambia esta reserva mientras decidimos
 
@@ -180,14 +183,15 @@ function consultas(x) {
       subred = null,
       grupo = null,
       rango = null,
+      nombre = null,
     }) {
       return (
         await q(
           `with nueva as (
-           insert into reservas (pool_id, cidr, vpc, solicitante, ticket, clave_idem, expira_en, vlan, vlan_nombre, proyecto, subred, grupo, rango)
-           values ($1,$2,$3,$4,$5,$6, now() + make_interval(hours => $7::int), $8, $9, $10, $11, $12, $13) returning *)
+           insert into reservas (pool_id, cidr, vpc, solicitante, ticket, clave_idem, expira_en, vlan, vlan_nombre, proyecto, subred, grupo, rango, nombre)
+           values ($1,$2,$3,$4,$5,$6, now() + make_interval(hours => $7::int), $8, $9, $10, $11, $12, $13, $14) returning *)
          select ${COLUMNAS_RESERVA} from nueva`,
-          [pool, cidr, vpc, solicitante, ticket, clave, ttlHoras, vlan, vlan_nombre, proyecto, subred, grupo, rango],
+          [pool, cidr, vpc, solicitante, ticket, clave, ttlHoras, vlan, vlan_nombre, proyecto, subred, grupo, rango, nombre],
         )
       ).rows[0];
     },
@@ -235,7 +239,7 @@ function consultas(x) {
       await q("select set_config('ipam.reserva_confirmando', $1, true)", [r.id]);
       return (
         await q(
-          `insert into asignaciones (pool_id, cidr, vpc, solicitante, ticket, origen, vlan, vlan_nombre, proyecto, subred, grupo, rango) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) returning ${COLUMNAS_ASIGNACION}`,
+          `insert into asignaciones (pool_id, cidr, vpc, solicitante, ticket, origen, vlan, vlan_nombre, proyecto, subred, grupo, rango, nombre) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) returning ${COLUMNAS_ASIGNACION}`,
           valoresDeReserva(r),
         )
       ).rows[0];

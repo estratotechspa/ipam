@@ -4,65 +4,11 @@
 // Todo o nada: si uno no cabe, no se reserva ninguno. Cada rango sale del pool que la tabla «ambiente + uso → pool» indica.
 const { parse, libres } = require('../dominio/cidr');
 const R = require('../dominio/reserva');
-const { validarNombres } = require('../dominio/nombres');
+const { RANGO_DE, UUID, normalizarLote, mismoLote } = require('../dominio/lote');
 const { ok, fallo } = require('./resultado');
 const { presentar } = require('./reservas');
 
-const AMBIENTES = ['dev', 'qa', 'lab', 'pre', 'prod'];
-const USOS = ['nodos', 'pods', 'servicios'];
-const RANGO_DE = { nodos: 'principal', pods: 'pods', servicios: 'servicios' };
-// Tamaños por defecto de GKE (documentación oficial): Pods /14, Servicios /20. Los nodos no tienen un valor por defecto.
-const MASCARA_DEFECTO = { pods: 14, servicios: 20 };
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const malo = (error, mensaje) => fallo('validacion', error, { mensaje });
-
-/** Valida la lista de rangos pedidos: usos válidos, sin repetir, con su máscara (o la de GKE por defecto). */
-function validarRangos(lista) {
-  if (!Array.isArray(lista) || !lista.length || lista.length > USOS.length)
-    return malo('rangos_invalidos', 'Indica de 1 a 3 rangos: nodos, pods y/o servicios.');
-  const vistos = new Set();
-  const salida = [];
-  for (const r of lista) {
-    const uso = r && typeof r === 'object' ? String(r.uso) : '';
-    if (!USOS.includes(uso)) return malo('uso_invalido', `El uso debe ser uno de: ${USOS.join(', ')}.`);
-    if (vistos.has(uso)) return malo('uso_repetido', `El uso «${uso}» está repetido.`);
-    vistos.add(uso);
-    const pedida = r.mascara === undefined || r.mascara === null || r.mascara === '' ? MASCARA_DEFECTO[uso] : Number(r.mascara);
-    if (pedida === undefined) return malo('falta_tamano', `Indica la máscara de «${uso}» (no tiene tamaño por defecto).`);
-    if (!Number.isInteger(pedida) || pedida < 8 || pedida > 32) return malo('mascara_invalida', `La máscara de «${uso}» debe ser un entero entre 8 y 32.`);
-    salida.push({ uso, mascara: pedida });
-  }
-  return ok({ rangos: USOS.map((u) => salida.find((x) => x.uso === u)).filter(Boolean) });
-}
-
-/** Valida y normaliza el pedido completo sin tocar la base. */
-function normalizarLote(e, claveHeader, config) {
-  if (!AMBIENTES.includes(e.ambiente)) return malo('ambiente_invalido', `El ambiente debe ser uno de: ${AMBIENTES.join(', ')}.`);
-  const rangos = validarRangos(e.rangos);
-  if (!rangos.ok) return rangos;
-  const nom = validarNombres(e);
-  if (!nom.ok) return malo(nom.error, nom.mensaje);
-  if (e.vpc !== undefined && e.vpc !== null && (typeof e.vpc !== 'string' || e.vpc.trim().length > 120))
-    return malo('vpc_invalido', 'La VPC admite hasta 120 caracteres.');
-  const ttl = R.validarTtl(e.ttl_horas, { defecto: config.reservas.ttlHoras, max: config.reservas.ttlMaxHoras });
-  if (!ttl.ok) return malo(ttl.error, ttl.mensaje);
-  const t = R.validarTicket(e.ticket);
-  if (!t.ok) return malo(t.error, t.mensaje);
-  const k = R.validarClaveIdem(claveHeader);
-  if (!k.ok) return malo(k.error, k.mensaje);
-  return ok({
-    d: {
-      ambiente: e.ambiente,
-      rangos: rangos.rangos,
-      proyecto: nom.proyecto,
-      subred: nom.subred,
-      vpc: (e.vpc || '').trim(),
-      ticket: t.ticket,
-      ttlHoras: ttl.horas,
-      clave: k.clave,
-    },
-  });
-}
 
 /** Resuelve el pool de cada rango con la tabla ambiente + uso → pool y comprueba que la máscara quepa. */
 async function resolverPools(repo, d) {
@@ -119,7 +65,7 @@ async function revisarCuotaLote(tx, actor, config, cuantas) {
 
 /** Presenta el grupo: el estado del conjunto sale de sus rangos. */
 function presentarGrupo(filas) {
-  const rangos = filas.map(presentar).map((r, i) => ({ ...r, rango: filas[i].rango, grupo: filas[i].grupo }));
+  const rangos = filas.map(presentar);
   const estados = new Set(rangos.map((r) => r.estado));
   const estado = estados.size === 1 ? [...estados][0] : 'mixto';
   const primera = rangos[0];
@@ -136,14 +82,44 @@ function presentarGrupo(filas) {
   };
 }
 
+/** Idempotencia del lote: la misma clave devuelve el mismo grupo; liberado o expirado se rechaza; con otros parámetros, conflicto. */
+async function revisarIdempotenciaLote(tx, actor, d) {
+  if (!d.clave) return null;
+  const previa = await tx.reservaPorClave(actor.nombre, `${d.clave}:0`);
+  if (!previa || !previa.grupo) return null;
+  if (R.decidirIdempotencia(previa.estado) === 'rechazar')
+    return fallo('conflicto', 'clave_idem_usada', { mensaje: `Esa Idempotency-Key ya se usó para un grupo que está ${previa.estado}. Usa una clave nueva.` });
+  const filas = await tx.reservasDeGrupo(previa.grupo);
+  // Al agregar a un grupo existente, el grupo ya tiene otros rangos: solo se comprueba que sea el mismo grupo.
+  const igual = d.grupo ? d.grupo === previa.grupo : mismoLote(filas, d);
+  if (!igual)
+    return fallo('conflicto', 'idempotencia_conflicto', {
+      mensaje: 'Esa Idempotency-Key ya se usó con otros parámetros. Usa una clave nueva o repite la misma petición.',
+    });
+  return ok({ filas, repetida: true, expiradas: [] });
+}
+
+/** El grupo al que se agregan rangos: debe existir, ser del dueño (o de un admin), del mismo ambiente y seguir vigente. */
+async function validarGrupoExistente(tx, actor, d) {
+  const filas = await tx.reservasDeGrupo(d.grupo);
+  if (!filas.length) return fallo('no_encontrado', 'no_encontrado', { mensaje: 'El grupo no existe.' });
+  if (!R.puedeOperar(actor, filas[0])) return fallo('prohibido', 'no_es_dueno', { mensaje: 'Solo quien creó el grupo (o un admin) puede agregarle rangos.' });
+  if (filas.every((f) => f.estado === 'liberada' || f.estado === 'expirada'))
+    return fallo('conflicto', 'grupo_no_vigente', { mensaje: 'El grupo está liberado o expirado: no se le pueden agregar rangos. Pide uno nuevo.' });
+  const pool = await tx.obtenerPool(filas[0].pool_id);
+  if (!pool || pool.ambiente !== d.ambiente)
+    return fallo('conflicto', 'grupo_de_otro_ambiente', { mensaje: `El grupo es de ${pool ? pool.ambiente : 'otro ambiente'}, no de ${d.ambiente}.` });
+  return ok({ filas });
+}
+
 /**
  * @param {{repo: any, eventos: import('./puertos').PublicadorEventos, config: any}} deps
  */
 function crearReservasGrupo({ repo, eventos, config }) {
-  /** Reserva todos los rangos del grupo o ninguno. Con `simular`, solo dice qué reservaría. */
+  /** Reserva todos los rangos del grupo o ninguno. Con `simular`, solo dice qué reservaría. Con `grupo`, agrega rangos a un grupo existente. */
   async function reservarLote(actor, entrada, claveHeader, { simular = false } = {}) {
     const n = normalizarLote(entrada || {}, claveHeader, config);
-    if (!n.ok) return n;
+    if (!n.ok) return malo(n.error, n.mensaje);
     const d = n.d;
     const dest = await resolverPools(repo, d);
     if (!dest.ok) return dest;
@@ -151,16 +127,11 @@ function crearReservasGrupo({ repo, eventos, config }) {
 
     const r = await repo.transaccion(async (tx) => {
       await tx.bloquear(`actor:${actor.nombre}`);
-      if (d.clave) {
-        const previa = await tx.reservaPorClave(actor.nombre, `${d.clave}:${dest.destinos[0].uso}`);
-        if (previa && previa.grupo) {
-          if (R.decidirIdempotencia(previa.estado) === 'rechazar')
-            return fallo('conflicto', 'clave_idem_usada', {
-              mensaje: `Esa Idempotency-Key ya se usó para un grupo que está ${previa.estado}. Usa una clave nueva.`,
-            });
-          return ok({ filas: await tx.reservasDeGrupo(previa.grupo), repetida: true, expiradas: [] });
-        }
-      }
+      if (d.grupo) await tx.bloquear(`grupo:${d.grupo}`); // el mismo orden que confirmar y liberar un grupo: primero el grupo, luego los pools
+      const repetido = await revisarIdempotenciaLote(tx, actor, d);
+      if (repetido) return repetido;
+      const previo = d.grupo ? await validarGrupoExistente(tx, actor, d) : null;
+      if (previo && !previo.ok) return previo;
       const sinCuota = simular ? null : await revisarCuotaLote(tx, actor, config, dest.destinos.length);
       if (sinCuota) return sinCuota;
       const expiradas = [];
@@ -171,33 +142,43 @@ function crearReservasGrupo({ repo, eventos, config }) {
       const p = await planificar(tx, dest.destinos);
       if (!p.ok) return { ...p, expiradas };
       if (simular) return ok({ simulacion: p.plan, expiradas });
-      const grupo = await tx.nuevoGrupo();
-      const ticket = d.ticket || (await tx.siguienteTicket());
+      const base = previo ? previo.filas[0] : null;
+      const grupo = d.grupo || (await tx.nuevoGrupo());
+      const ticket = d.ticket || base?.ticket || (await tx.siguienteTicket());
       const filas = [];
-      for (const x of p.plan)
+      for (const [k, x] of p.plan.entries())
         filas.push(
           await tx.insertarReserva({
             pool: x.pool.id,
             cidr: x.cidr,
-            vpc: d.vpc,
+            vpc: d.vpc || base?.vpc || '',
             solicitante: actor.nombre,
             ticket,
             ttlHoras: d.ttlHoras,
-            clave: d.clave ? `${d.clave}:${x.uso}` : null,
-            proyecto: d.proyecto,
-            subred: d.subred,
+            clave: d.clave ? `${d.clave}:${k}` : null,
+            proyecto: d.proyecto ?? base?.proyecto ?? null,
+            subred: x.subred,
+            nombre: x.nombre,
             grupo,
             rango: RANGO_DE[x.uso],
           }),
         );
-      return ok({ filas, repetida: false, expiradas });
+      return ok({ filas: d.grupo ? await tx.reservasDeGrupo(grupo) : filas, repetida: false, expiradas });
     });
     for (const e of r.expiradas || []) await eventos.publicar('reserva_expirada', { reserva: e.id, cidr: e.cidr, pool: e.pool_id, solicitante: e.solicitante });
     if (!r.ok) return r;
     if (r.simulacion)
       return ok({
         simulacion: true,
-        rangos: r.simulacion.map((x) => ({ uso: x.uso, rango: RANGO_DE[x.uso], pool: x.pool.id, cidr: x.cidr, mascara: x.mascara })),
+        rangos: r.simulacion.map((x) => ({
+          uso: x.uso,
+          rango: RANGO_DE[x.uso],
+          nombre: x.nombre,
+          subred: x.subred,
+          pool: x.pool.id,
+          cidr: x.cidr,
+          mascara: x.mascara,
+        })),
       });
     const grupo = presentarGrupo(r.filas);
     if (!r.repetida)
@@ -206,6 +187,7 @@ function crearReservasGrupo({ repo, eventos, config }) {
         solicitante: actor.nombre,
         ticket: grupo.ticket,
         rangos: grupo.rangos.map((x) => x.cidr),
+        agregado: Boolean(d.grupo),
       });
     return ok({ grupo, repetida: r.repetida });
   }
@@ -223,6 +205,7 @@ function crearReservasGrupo({ repo, eventos, config }) {
     const previas = UUID.test(String(id)) ? await repo.reservasDeGrupo(id) : [];
     if (!previas.length) return fallo('no_encontrado', 'no_encontrado', { mensaje: 'El grupo no existe.' });
     const r = await repo.transaccion(async (tx) => {
+      await tx.bloquear(`grupo:${id}`);
       for (const idPool of [...new Set(previas.map((x) => x.pool_id))].sort()) await tx.bloquear(`pool:${idPool}`);
       const filas = await tx.reservasDeGrupo(id, { bloquear: true });
       const malas = filas.filter((x) => R.decidirConfirmacion(x.estado).accion === 'rechazar');
@@ -258,6 +241,7 @@ function crearReservasGrupo({ repo, eventos, config }) {
     if (!R.puedeOperar(actor, previas[0]))
       return fallo('prohibido', 'no_es_dueno', { mensaje: 'Solo quien creó el grupo (o un admin) puede operar sobre él.' });
     const r = await repo.transaccion(async (tx) => {
+      await tx.bloquear(`grupo:${id}`);
       for (const idPool of [...new Set(previas.map((x) => x.pool_id))].sort()) await tx.bloquear(`pool:${idPool}`);
       const filas = await tx.reservasDeGrupo(id, { bloquear: true });
       if (filas.some((x) => x.estado === 'confirmada') && actor.rol !== 'admin')
