@@ -66,6 +66,7 @@ Es la pantalla de inicio.
 - **Los cinco números de arriba:** cuántos pools hay, cuántas asignaciones activas, el **uso total**, cuántos pools están **sobre 80 %** y cuántas **direcciones quedan libres**.
 - **La barra de uso** de cada pool combina **asignado** (azul) y **reservado** (ámbar). Se pinta **verde** por debajo de 70 %, **ámbar** entre 70 % y 90 % y **roja** por encima de 90 %, con un ícono de alerta: es la señal para pedir un bloque más grande antes de quedarte sin espacio.
 - **Filtros:** *Ambiente* (`dev`, `qa`, `pre`, `prod`) y *Proveedor*. Se conservan al cambiar de pestaña; **Limpiar filtro** los quita.
+- **Buscar:** el cuadro encuentra un pool por nombre, tipo, ambiente, proveedor o CIDR, o por lo que tengan sus segmentos (proyecto, VPC, subred, ticket, responsable, uso, descripción). Los pools donde coincide un segmento se abren solos y muestran solo esos segmentos.
 - **Haz clic en el nombre de un pool** para abrir su ficha.
 
 ### La ficha de un pool

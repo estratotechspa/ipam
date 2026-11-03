@@ -18,7 +18,7 @@ Flujo normal: **pedir (reserva) → un admin aprueba → asignación**. Un agent
 
 ## Qué incluye
 - **Garantía en la base de datos:** dos segmentos de un pool nunca se solapan (restricción de exclusión de PostgreSQL), ni con concurrencia ni con varias réplicas.
-- **Interfaz web** con pools (cada uno despliega sus segmentos), una pestaña única de **segmentos** (asignados y reservados, con proyecto, VPC, subred/VLAN, descripción y responsable), direcciones IP fijas, integración con Jira, tokens, usuarios y auditoría; filtro por ambiente y proveedor; importación y exportación Excel/CSV.
+- **Interfaz web** con pools (cada uno despliega sus segmentos), una pestaña única de **segmentos** (asignados y reservados, con proyecto, VPC, subred/VLAN, descripción y responsable), direcciones IP fijas, integración con Jira, tokens, usuarios y auditoría; filtro por ambiente y proveedor y buscador de texto que mira también dentro de los segmentos de cada pool; importación y exportación Excel/CSV.
 - **API REST** (`/api/v1`, contrato OpenAPI 3.1) con tokens de servicio de rol `agente` o `lector`, limitados por **alcance** (`reservas`, `consulta`, `direcciones`). `MODULOS_DESACTIVADOS` apaga los módulos que no se usan.
 - **Acceso:** SSO (OIDC), usuario y contraseña para POC, o cuentas locales para pruebas. Roles `lector < agente < solicitante < admin`.
 - **Seguro por defecto:** en producción no arranca sin autenticación; secretos solo por variables de entorno; auditoría de solo inserción; límite de peticiones y cuota por token.
