@@ -164,3 +164,50 @@ test('pools: cada fila despliega y contrae sus segmentos en la misma pestaña, y
 
   await request.delete(`/api/v1/asignaciones/${a.id}`, { headers: H });
 });
+
+test('buscador de texto: Pools encuentra el pool por su nombre o por el contenido de sus segmentos, y Segmentos por cualquier dato', async ({
+  page,
+  request,
+}) => {
+  const marca = `buscar-${Date.now()}`;
+  const a = await (
+    await request.post('/api/v1/solicitudes', {
+      headers: H,
+      data: { pool: 'gke-nodos-qa', vpc: `${marca}-vpc`, proyecto: `${marca}-proy`, subred: `${marca}-subred`, mascara: 28 },
+    })
+  ).json();
+  await page.goto('/'); // Pools es la pestaña inicial: no se vuelve a pulsar (rehacería la pantalla mientras se escribe)
+  await expect(page.locator('#pools [data-expandir-pool]').first()).toBeVisible();
+  const total = await page.locator('#pools [data-expandir-pool]').count();
+  expect(total).toBeGreaterThan(2);
+
+  // Por el contenido de un segmento: queda solo su pool, abierto y con solo ese segmento.
+  await page.locator('#p-buscar').fill(`${marca}-subred`);
+  await expect(page.locator('#pools [data-expandir-pool]')).toHaveCount(1);
+  await expect(page.locator('#pools')).toContainText('1 de');
+  const detalle = page.locator('#seg-pool-gke-nodos-qa');
+  await expect(detalle).toBeVisible();
+  await expect(detalle).toContainText(`${marca}-vpc`);
+  await expect(detalle).toContainText('Solo los segmentos que coinciden');
+  await expect(page.locator('#p-buscar')).toBeFocused(); // la pantalla se rehízo sin quitar el foco
+
+  // Sin coincidencias.
+  await page.locator('#p-buscar').fill('zzz-no-existe-zzz');
+  await expect(page.locator('#pools')).toContainText('Ningún pool ni segmento coincide');
+  await expect(page.locator('#pools [data-expandir-pool]')).toHaveCount(0);
+
+  // Por el nombre del pool, y al borrar vuelven todos (y el pool deja de estar abierto por la búsqueda).
+  await page.locator('#p-buscar').fill('gke-cp-prod');
+  await expect(page.locator('#pools [data-expandir-pool]')).toHaveCount(1);
+  await page.locator('#p-buscar').fill('');
+  await expect(page.locator('#pools [data-expandir-pool]')).toHaveCount(total);
+  await expect(page.locator('#seg-pool-gke-nodos-qa')).toBeHidden();
+
+  // Segmentos: el mismo texto encuentra el segmento por su subred.
+  await page.locator('#nav').getByRole('button', { name: 'Segmentos', exact: true }).click();
+  await page.locator('#f-buscar').fill(`${marca}-subred`);
+  await expect(page.locator('#segmentos tbody tr')).toHaveCount(1);
+  await expect(page.locator('#segmentos tbody tr')).toContainText(`${marca}-proy`);
+
+  await request.delete(`/api/v1/asignaciones/${a.id}`, { headers: H });
+});

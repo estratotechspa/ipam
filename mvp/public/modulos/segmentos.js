@@ -1,7 +1,7 @@
 // Pestaña Segmentos: asignaciones (definitivas) y reservas (apartadas, pendientes de aprobación) en una sola lista.
 import { fmt as _fmt, parseCidr, tamanoCidr } from '../calculos.js';
 import { $, ESTADO, I, YO, esc, fail, fecha, fechaHora, fmt, get, h, msg, puede, size, todasLasAsignaciones } from './base.js';
-import { FILTRO, barraFiltro, pasaFiltro } from './filtro.js';
+import { FILTRO, barraFiltro, pasaFiltro, textoDeSegmento } from './filtro.js';
 import { fichaAsignacion } from './fichas.js';
 import { ASIG, liberarAsignacion, textoRed } from './asignaciones.js';
 import { RES, accionReserva, restante, tictac } from './reservas.js';
@@ -191,16 +191,7 @@ export async function renderSegmentos() {
     const todas = unificar(asignaciones, [...pendientes, ...historial]).filter((x) => dePool.has(x.pool_id) && pasaFiltro(dePool.get(x.pool_id)));
     const cuentas = { asignados: todas.filter((x) => x.tipo === 'asignado').length, reservados: todas.filter((x) => x.tipo === 'reservado').length };
     cuentas.todos = cuentas.asignados + cuentas.reservados;
-    const lista = todas
-      .filter((x) => pasaVista(x, vista))
-      .filter(
-        (x) =>
-          !q ||
-          [x.id, x.cidr, x.proyecto, x.vpc, x.subred, x.ticket, x.solicitante, x.pool_id, x.origen, x.vlan, x.vlan_nombre, x.responsable, x.descripcion, x.uso]
-            .join(' ')
-            .toLowerCase()
-            .includes(q),
-      );
+    const lista = todas.filter((x) => pasaVista(x, vista)).filter((x) => !q || textoDeSegmento(x).includes(q));
     const total = lista.length;
     lista.sort(comparar(ORDEN.col, ORDEN.dir));
     ORDEN.pagina = Math.min(ORDEN.pagina, Math.max(0, Math.ceil(total / POR_PAGINA) - 1));

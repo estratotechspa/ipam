@@ -4,7 +4,8 @@ import { icono } from '../iconos.js';
 /** Estado de la interfaz compartido entre módulos (los módulos ES no pueden reasignar variables importadas). */
 export const ESTADO = {
   vista: 'pools',
-  busquedaAsig: '', // texto del buscador de Asignaciones
+  busquedaAsig: '', // texto del buscador de Segmentos
+  busquedaPools: '', // texto del buscador de Pools
   ultimoJira: null, // resultado de la última simulación (se muestra tras recargar la pestaña)
   vistaSegmentos: 'todos', // filtro de la pestaña Segmentos: todos | asignados | reservados | historial
   poolsAviso: null, // aviso que Pools muestra tras crear o eliminar un pool

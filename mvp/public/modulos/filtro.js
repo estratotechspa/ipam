@@ -56,3 +56,26 @@ export const barraFiltro = (todos, recargar) =>
     { class: 'filtros', role: 'search', 'aria-label': 'Filtrar por ambiente y proveedor', onsubmit: (e) => e.preventDefault() },
     camposFiltro(todos, recargar),
   );
+
+/** Texto en el que busca el cuadro «Buscar» de un segmento (asignado o reservado): todo lo que se ve de él, en minúsculas. */
+export const textoDeSegmento = (x) =>
+  [
+    x.id,
+    x.codigo,
+    x.cidr,
+    x.pool_id,
+    x.proyecto,
+    x.vpc,
+    x.subred,
+    x.ticket,
+    x.solicitante,
+    x.origen,
+    x.vlan,
+    x.vlan_nombre,
+    x.responsable,
+    x.descripcion,
+    x.uso,
+  ]
+    .filter((v) => v !== null && v !== undefined)
+    .join(' ')
+    .toLowerCase();
