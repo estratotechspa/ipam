@@ -18,6 +18,7 @@ Términos en orden alfabético, explicados sin jerga. El término en inglés va 
 | **Cuota** | Tope de reservas vigentes que puede tener un token. |
 | **Expiración perezosa** (*lazy expiry*) | Una reserva vencida se trata como vencida en el momento de consultarla, aunque el barredor aún no la haya marcado. |
 | **GKE / Cloud Run / Cloud SQL** | Servicios de Google Cloud: Kubernetes administrado, contenedores sin servidor y PostgreSQL administrado. |
+| **Clúster** (pestaña) | La vista de un grupo de reservas: nodos, pods y servicios de un clúster GKE reservados juntos y aprobados juntos. |
 | **Hexagonal (arquitectura)** | Diseño en que el núcleo no conoce los detalles externos; habla con ellos por «puertos». Es lo que permite cambiar de nube sin reescribir. |
 | **Human-in-the-loop** | «Humano en el circuito»: un cambio automático no se vuelve definitivo sin la aprobación de una persona. |
 | **Grupo** (de reservas) | Los rangos de un proyecto con clúster GKE (nodos, pods y servicios) pedidos, aprobados y liberados juntos: todo o nada. Cada rango lleva su `rango` (`principal`, `pods` o `servicios`). |

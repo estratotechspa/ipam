@@ -75,6 +75,8 @@ export const textoDeSegmento = (x) =>
     x.responsable,
     x.descripcion,
     x.uso,
+    x.nombre,
+    x.rango,
   ]
     .filter((v) => v !== null && v !== undefined)
     .join(' ')

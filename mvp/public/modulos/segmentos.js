@@ -7,6 +7,7 @@ import { ASIG, liberarAsignacion, textoRed } from './asignaciones.js';
 import { RES, accionReserva, restante, tictac } from './reservas.js';
 import { formularioNuevoSegmento } from './nuevo-segmento.js';
 import { columnasAjustables } from './ui.js';
+import { abrirCluster } from './clusteres.js';
 
 export const POR_PAGINA = 25;
 
@@ -17,6 +18,7 @@ export const COLUMNAS = [
   ['estado', 'Estado'],
   ['codigo', 'ID'],
   ['cidr', 'Segmento'],
+  ['rango', 'Rango'],
   ['pool', 'Pool'],
   ['proyecto', 'Proyecto'],
   ['vpc', 'VPC'],
@@ -54,6 +56,9 @@ export function unificar(asignaciones, reservas) {
     subred: x.subred,
     vlan: x.vlan,
     vlan_nombre: x.vlan_nombre,
+    rango: x.rango,
+    nombre: x.nombre,
+    grupo: x.grupo,
     solicitante: x.solicitante,
     origen: x.origen,
     ticket: x.ticket,
@@ -74,6 +79,9 @@ export function unificar(asignaciones, reservas) {
       subred: r.subred,
       vlan: r.vlan,
       vlan_nombre: r.vlan_nombre,
+      rango: r.rango,
+      nombre: r.nombre,
+      grupo: r.grupo,
       solicitante: r.solicitante,
       origen: origenDeReserva(r.solicitante),
       ticket: r.ticket,
@@ -90,6 +98,7 @@ const clave = {
     const c = parseCidr(x.cidr);
     return c ? c.ip * 64 + c.len : 0;
   },
+  rango: (x) => x.rango || '',
   pool: (x) => x.pool_id,
   proyecto: (x) => x.proyecto || '',
   vpc: (x) => x.vpc || '',
@@ -140,10 +149,15 @@ const celdaFecha = (x) => {
   return `<time class="restante" datetime="${esc(x.ref.expira_en)}" data-fin="${fin}" title="Vence ${esc(fechaHora(x.ref.expira_en))}">${restante(x.ref.segundos_restantes)}</time>`;
 };
 
+const NOMBRE_RANGO = { principal: 'Nodos', pods: 'Pods', servicios: 'Servicios' };
+const celdaRango = (x) =>
+  x.rango ? `<span class="chip-rango rango-${esc(x.rango)}">${NOMBRE_RANGO[x.rango]}</span>${x.nombre ? ' ' + esc(x.nombre) : ''}` : '—';
+
 const celdaAcciones = (x, puedeOperar) => {
   if (x.tipo === 'asignado')
     return puede('admin') ? `<button type="button" class="btn sec pequeno" data-del="${x.ref.id}" data-c="${esc(x.cidr)}">${I('liberar')}Liberar</button>` : '';
   if (x.tipo !== 'reservado' || !puedeOperar(x.ref)) return '';
+  if (x.grupo) return `<button type="button" class="btn sec pequeno" data-cluster="${esc(x.grupo)}">Ver el clúster</button>`; // un rango de un grupo se aprueba con el grupo entero
   return `<span class="acciones"><button type="button" class="btn pequeno" data-res="confirmar" data-id="${esc(x.ref.id)}" aria-label="Confirmar la reserva ${esc(x.cidr)}">Confirmar</button>
     <button type="button" class="btn sec pequeno" data-res="liberar" data-id="${esc(x.ref.id)}" aria-label="Liberar la reserva ${esc(x.cidr)}">${I('liberar')}Liberar</button></span>`;
 };
@@ -151,7 +165,7 @@ const celdaAcciones = (x, puedeOperar) => {
 const fila = (x, puedeOperar) =>
   `<tr class="seg-${x.tipo}"><td><span class="tag ${esc(x.marca)}">${ETIQUETA[x.marca]}</span></td>
   <td>${x.tipo === 'asignado' ? `<button type="button" class="enlace" data-ficha-asig="${esc(x.ref.id)}"><code>${esc(x.id)}</code></button>` : `<code>${esc(x.id)}</code>`}</td>
-  <td><code>${esc(x.cidr)}</code></td><td>${esc(x.pool_id)}</td><td>${esc(x.proyecto || '—')}</td><td>${esc(x.vpc || '—')}</td><td>${esc(textoRed(x))}</td><td>${fmt(size(x.cidr))}</td><td>${esc(x.solicitante)}</td><td>${esc(x.origen)}</td><td>${esc(x.ticket)}</td><td>${celdaFecha(x)}</td>
+  <td><code>${esc(x.cidr)}</code></td><td>${celdaRango(x)}</td><td>${esc(x.pool_id)}</td><td>${esc(x.proyecto || '—')}</td><td>${esc(x.vpc || '—')}</td><td>${esc(textoRed(x))}</td><td>${fmt(size(x.cidr))}</td><td>${esc(x.solicitante)}</td><td>${esc(x.origen)}</td><td>${esc(x.ticket)}</td><td>${celdaFecha(x)}</td>
   <td>${celdaAcciones(x, puedeOperar)}</td></tr>`;
 
 const textoVacio = (vista, filtrando) =>
@@ -257,6 +271,7 @@ function enlazar(raiz, reservaPorId) {
   );
   raiz.querySelectorAll('[data-ficha-asig]').forEach((b) => (b.onclick = () => fichaAsignacion(b.dataset.fichaAsig)));
   raiz.querySelectorAll('[data-del]').forEach((b) => (b.onclick = () => liberarAsignacion(b.dataset.del, b.dataset.c, renderSegmentos)));
+  raiz.querySelectorAll('[data-cluster]').forEach((b) => (b.onclick = () => abrirCluster(b.dataset.cluster)));
   raiz.querySelectorAll('[data-res]').forEach((b) => (b.onclick = () => accionReserva(reservaPorId.get(b.dataset.id), b.dataset.res, renderSegmentos)));
 }
 

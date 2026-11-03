@@ -156,3 +156,66 @@ test('mapa de bloques: conserva la suma de direcciones (ocupado + parcial + libr
   assert.deepEqual(m.resumen, { libre: 256 - 141, parcial: 1, ocupado: 128 + 8 + 4 });
   assert.equal(tamanoCidr('10.1.0.0/21'), 2048);
 });
+
+test('resumen para gerencia: semáforo, qué cabe todavía y reparto por proyecto', async () => {
+  const { resumenDelPool, capacidadRestante, repartoPorProyecto, agruparPorGrupo } = await cargar();
+  const r = resumenDelPool({ uso: 0.74, total: 16384, libres: 4288 });
+  assert.deepEqual([r.nivel, r.semaforo.clase, r.titulo], ['medio', 'sem-atencion', 'Se usó el 74 % de esta red']);
+  assert.match(r.detalle, /4\.288 direcciones de 16\.384/);
+
+  const por = [
+    { mascara: 21, bloques_libres: 1 },
+    { mascara: 24, bloques_libres: 16 },
+    { mascara: 26, bloques_libres: 0 },
+  ];
+  const cap = capacidadRestante(por, 18, [
+    { etiqueta: 'grande', mascara: 21 },
+    { etiqueta: 'normal', mascara: 24 },
+    { etiqueta: 'chica', mascara: 26 },
+    { etiqueta: 'pods', mascara: 14 },
+  ]);
+  assert.deepEqual(
+    cap.map((x) => [x.estado, x.texto]),
+    [
+      ['poco', 'Solo 1 más'],
+      ['si', 'Sí, hasta 16'],
+      ['sin_espacio', 'Ya no queda espacio'],
+      ['no_cabe', 'No cabe en esta red (es más chica)'],
+    ],
+  );
+
+  const rep = repartoPorProyecto(
+    [
+      { cidr: '10.0.0.0/24', proyecto: 'a' },
+      { cidr: '10.0.1.0/24', proyecto: 'a' },
+      { cidr: '10.0.2.0/24', vpc: 'vpc-b' },
+      { cidr: '10.0.3.0/25', reserva: true },
+      { cidr: '10.0.4.0/26' },
+    ],
+    1024,
+    1,
+  );
+  assert.deepEqual(
+    rep.map((x) => [x.nombre, x.direcciones, x.tipo]),
+    [
+      ['a', 512, 'proyecto'],
+      ['Otros proyectos', 320, 'otros'],
+      ['Reservado, esperando aprobación', 128, 'reservado'],
+    ],
+  );
+  assert.equal(Math.round(rep[0].pct), 50);
+
+  const g = agruparPorGrupo([
+    { grupo: 'g1', estado: 'reservada', proyecto: 'p', solicitante: 's', ticket: 'T', creado_en: '2026-11-01T00:00:00Z', segundos_restantes: 100 },
+    { grupo: 'g1', estado: 'expirada', creado_en: '2026-11-01T00:00:00Z', segundos_restantes: 0 },
+    { grupo: null, estado: 'reservada', creado_en: '2026-11-02T00:00:00Z' },
+    { grupo: 'g2', estado: 'confirmada', proyecto: 'q', creado_en: '2026-11-02T00:00:00Z', segundos_restantes: 0 },
+  ]);
+  assert.deepEqual(
+    g.map((x) => [x.grupo, x.estado, x.filas.length]),
+    [
+      ['g2', 'confirmada', 1],
+      ['g1', 'mixto', 2],
+    ],
+  );
+});

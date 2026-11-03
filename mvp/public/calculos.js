@@ -109,3 +109,85 @@ export function mapaBloques(poolCidr, asignaciones) {
   }
   return { granularidad, bloques, resumen };
 }
+
+// ---------- Resumen de un pool para quien no es técnico ----------
+export const SEMAFORO = {
+  bajo: { texto: 'Hay espacio', clase: 'sem-ok' },
+  medio: { texto: 'Atención: queda poco', clase: 'sem-atencion' },
+  alto: { texto: 'Crítico: casi lleno', clase: 'sem-critico' },
+};
+
+/** Frase y semáforo de un pool. `uso` es la fracción ocupada (asignado + reservado, de 0 a 1). */
+export function resumenDelPool({ uso, total, libres }) {
+  const nivel = nivelUso(uso);
+  return {
+    nivel,
+    semaforo: SEMAFORO[nivel],
+    titulo: `Se usó el ${Math.round(uso * 100)} % de esta red`,
+    detalle: `Quedan ${fmt(libres)} direcciones de ${fmt(total)}.`,
+  };
+}
+
+/**
+ * Qué cabe todavía: una fila por tamaño habitual. `porMascara` es la lista de /disponibilidad ({mascara, direcciones, bloques_libres}).
+ * Una máscara más grande que el pool no cabe nunca; sin bloques libres, tampoco.
+ */
+export function capacidadRestante(porMascara, mascaraDelPool, tamanos) {
+  return tamanos.map(({ etiqueta, mascara }) => {
+    const m = porMascara.find((x) => x.mascara === mascara);
+    const direcciones = 2 ** (32 - mascara);
+    if (mascara < mascaraDelPool) return { etiqueta, mascara, direcciones, estado: 'no_cabe', texto: 'No cabe en esta red (es más chica)' };
+    const n = m ? m.bloques_libres : 0;
+    if (!n) return { etiqueta, mascara, direcciones, estado: 'sin_espacio', texto: 'Ya no queda espacio' };
+    return { etiqueta, mascara, direcciones, estado: n === 1 ? 'poco' : 'si', texto: n === 1 ? 'Solo 1 más' : `Sí, hasta ${fmt(n)}` };
+  });
+}
+
+/**
+ * Reparto del espacio ocupado entre proyectos. `items`: [{cidr, proyecto?, vpc?, reserva?}]. Las reservas pendientes van juntas;
+ * los proyectos que no entran en los primeros `max` se agrupan en «Otros». Devuelve [{nombre, direcciones, pct, tipo}] de mayor a menor.
+ */
+export function repartoPorProyecto(items, totalDirecciones, max = 5) {
+  const por = new Map();
+  let reservado = 0;
+  for (const x of items) {
+    const n = tamanoCidr(x.cidr);
+    if (x.reserva) reservado += n;
+    else por.set(x.proyecto || x.vpc || 'Sin proyecto', (por.get(x.proyecto || x.vpc || 'Sin proyecto') || 0) + n);
+  }
+  const ordenados = [...por.entries()].sort((a, b) => b[1] - a[1]);
+  const principales = ordenados.slice(0, max).map(([nombre, direcciones]) => ({ nombre, direcciones, tipo: 'proyecto' }));
+  const resto = ordenados.slice(max).reduce((s, [, n]) => s + n, 0);
+  const salida = [...principales];
+  if (resto) salida.push({ nombre: 'Otros proyectos', direcciones: resto, tipo: 'otros' });
+  if (reservado) salida.push({ nombre: 'Reservado, esperando aprobación', direcciones: reservado, tipo: 'reservado' });
+  return salida.map((s) => ({ ...s, pct: totalDirecciones ? (s.direcciones / totalDirecciones) * 100 : 0 }));
+}
+
+/** Agrupa las reservas y asignaciones con `grupo` (clústeres). → [{grupo, filas, estado, ...}] con el más nuevo primero. */
+export function agruparPorGrupo(reservas) {
+  const mapa = new Map();
+  for (const r of reservas) {
+    if (!r.grupo) continue;
+    if (!mapa.has(r.grupo)) mapa.set(r.grupo, []);
+    mapa.get(r.grupo).push(r);
+  }
+  return [...mapa.entries()]
+    .map(([grupo, filas]) => {
+      const estados = new Set(filas.map((f) => f.estado));
+      const primera = filas[0];
+      return {
+        grupo,
+        filas,
+        estado: estados.size === 1 ? [...estados][0] : 'mixto',
+        proyecto: primera.proyecto || '',
+        solicitante: primera.solicitante,
+        ticket: primera.ticket,
+        creado_en: filas.map((f) => f.creado_en).sort()[0],
+        segundos_restantes: Math.max(...filas.map((f) => f.segundos_restantes || 0)),
+      };
+    })
+    .sort((a, b) => new Date(b.creado_en) - new Date(a.creado_en));
+}
+
+export const ETIQUETA_RANGO = { principal: 'Nodos', pods: 'Pods', servicios: 'Servicios' };
