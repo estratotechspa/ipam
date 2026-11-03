@@ -84,6 +84,8 @@ sequenceDiagram
     I-->>I: expira sola (TTL)
   end
 ```
+**Proyecto con clúster GKE: reserva en grupo.** Los rangos de nodos, pods y servicios se piden juntos (`POST /reservas/lote`), comparten `grupo` y se aprueban o liberan como una unidad (todo o nada, en una sola transacción); cada uno sale del pool de la tabla ambiente + uso → pool.
+
 **Tickets de Jira: el mismo principio.** El webhook **no asigna**: crea una reserva (solicitante `jira-webhook`, idempotente por ticket) y un **admin** la aprueba en la pestaña Segmentos (vista «Reservados»). Solo entonces se asigna el CIDR (origen `jira`) y se actualiza el ticket.
 ```mermaid
 sequenceDiagram

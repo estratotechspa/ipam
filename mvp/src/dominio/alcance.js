@@ -8,11 +8,19 @@
 const GRUPOS = {
   reservas: {
     descripcion: 'Reservar, consultar y liberar reservas propias (confirmar es solo de admin)',
-    rutas: ['POST /reservas', 'GET /reservas', 'GET /reservas/:id', 'DELETE /reservas/:id'],
+    rutas: [
+      'POST /reservas',
+      'GET /reservas',
+      'GET /reservas/:id',
+      'DELETE /reservas/:id',
+      'POST /reservas/lote',
+      'GET /reservas/grupo/:id',
+      'DELETE /reservas/grupo/:id',
+    ],
   },
   consulta: {
     descripcion: 'Consultar pools, disponibilidad y asignaciones (para comprobar que no haya solapamientos)',
-    rutas: ['GET /pools', 'GET /pools/:id/libres', 'GET /pools/:id/disponibilidad', 'GET /resumen', 'GET /asignaciones'],
+    rutas: ['GET /pools', 'GET /pools/:id/libres', 'GET /pools/:id/disponibilidad', 'GET /resumen', 'GET /asignaciones', 'GET /pool-uso'],
   },
   direcciones: {
     descripcion: 'Consultar y registrar direcciones IP fijas',

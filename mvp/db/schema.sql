@@ -368,3 +368,33 @@ end $$;
 
 insert into esquema_version (version, descripcion) values (14, 'ambiente lab')
   on conflict (version) do nothing;
+
+-- Reserva en grupo (clúster GKE): los rangos pedidos juntos comparten `grupo`, y `rango` dice para qué sirve cada uno
+-- (principal = nodos de la subred; pods y servicios = rangos secundarios). Opcionales: lo anterior queda en blanco.
+alter table reservas add column if not exists grupo uuid;
+alter table reservas add column if not exists rango text check (rango in ('principal','pods','servicios'));
+alter table asignaciones add column if not exists grupo uuid;
+alter table asignaciones add column if not exists rango text check (rango in ('principal','pods','servicios'));
+create index if not exists reservas_grupo_idx on reservas (grupo) where grupo is not null;
+create index if not exists asignaciones_grupo_idx on asignaciones (grupo) where grupo is not null;
+
+-- Qué pool corresponde a cada uso en cada ambiente: el agente reserva por (ambiente, uso) y nunca adivina por el texto del tipo.
+create table if not exists pool_uso (
+  ambiente text not null check (ambiente in ('dev','qa','lab','pre','prod')),
+  uso      text not null check (uso in ('nodos','pods','servicios')),
+  pool_id  text not null references pools(id),
+  primary key (ambiente, uso)
+);
+
+-- La tabla nueva necesita el permiso del rol de la aplicación (el bloque de permisos de arriba solo vio las tablas anteriores).
+do $$
+declare
+  esq text := current_schema();
+begin
+  if exists (select 1 from pg_roles where rolname = 'ipam_app') then
+    execute format('grant select, insert, update, delete on %I.pool_uso to ipam_app', esq);
+  end if;
+end $$;
+
+insert into esquema_version (version, descripcion) values (15, 'reserva en grupo y tabla ambiente + uso a pool')
+  on conflict (version) do nothing;
