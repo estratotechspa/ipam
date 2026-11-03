@@ -12,7 +12,7 @@ const { validarVlan } = require('./vlan');
 const { validarNombres } = require('./nombres');
 const { validarDetalle } = require('./detalle');
 
-const AMBIENTES = ['dev', 'qa', 'pre', 'prod'];
+const AMBIENTES = ['dev', 'qa', 'lab', 'pre', 'prod'];
 const ESTADOS = ['ok', 'ya_existe', 'solapa_otro_pool', 'choca_mismo_pool', 'invalida'];
 const MAX_FILAS = 5000;
 
@@ -105,6 +105,14 @@ function elegirPool(d, poolsC, poolsNuevos) {
   const fam = familia(d.c);
   const id = `imp-${slug(d.proveedor)}-${d.ambiente}-${fam.sufijo}`;
   if (poolsC.some((p) => p.id === id)) return { error: `El pool ${id} ya existe pero no contiene a ${d.cidr}.` };
+  // Los rangos de los pools no se repiten entre ambientes ni proveedores: si el bloque automático pisa a otro pool, no se crea.
+  const fc = parse(fam.cidr);
+  const pisado =
+    fc && [...poolsC, ...[...poolsNuevos.values()].filter((p) => p.id !== id).map((p) => ({ ...p, c: parse(p.cidr) }))].find((p) => p.c && overlap(p.c, fc));
+  if (pisado)
+    return {
+      error: `No hay un pool que contenga a ${d.cidr} y el pool automático (${fam.cidr}) se solaparía con ${pisado.id}. Crea antes un pool para ese rango.`,
+    };
   const pool = poolsNuevos.get(id) || { id, tipo: 'Importado', ambiente: d.ambiente, proveedor: d.proveedor, cidr: fam.cidr };
   poolsNuevos.set(id, pool);
   return { pool, nuevo: true };

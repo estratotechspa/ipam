@@ -4,7 +4,7 @@ create extension if not exists btree_gist;
 create table if not exists pools (
   id        text primary key,
   tipo      text not null,
-  ambiente  text not null check (ambiente in ('dev','qa','pre','prod')),
+  ambiente  text not null constraint pools_ambiente_check check (ambiente in ('dev','qa','lab','pre','prod')),
   proveedor text not null,
   cidr      cidr not null
 );
@@ -352,4 +352,19 @@ alter table asignaciones add column if not exists responsable text check (char_l
 alter table asignaciones add column if not exists uso text check (char_length(uso) <= 60);
 
 insert into esquema_version (version, descripcion) values (13, 'descripción, responsable y uso por segmento')
+  on conflict (version) do nothing;
+
+-- Ambiente «lab» (laboratorio) además de dev, qa, pre y prod. La restricción original no tiene nombre propio: se reemplaza una sola vez.
+do $$
+begin
+  if exists (
+    select 1 from pg_constraint
+    where conrelid = 'pools'::regclass and contype = 'c' and conname = 'pools_ambiente_check' and pg_get_constraintdef(oid) not like '%lab%'
+  ) then
+    alter table pools drop constraint pools_ambiente_check;
+    alter table pools add constraint pools_ambiente_check check (ambiente in ('dev','qa','lab','pre','prod'));
+  end if;
+end $$;
+
+insert into esquema_version (version, descripcion) values (14, 'ambiente lab')
   on conflict (version) do nothing;

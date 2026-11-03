@@ -7,7 +7,7 @@ Términos en orden alfabético, explicados sin jerga. El término en inglés va 
 | **Adaptador** (*adapter*) | Pieza que conecta el núcleo del IPAM con algo externo: la base de datos, el login, el límite de peticiones. Se puede cambiar sin tocar las reglas de negocio. |
 | **Agente** | Programa o pipeline que usa la API con un token. Puede reservar, pero no asignar directo ni administrar. También es un rol. |
 | **Alcance** (de un token) | Lista de grupos de la API que un token puede usar (`reservas`, `consulta`, `direcciones`). Fuera de ellos responde 403 `fuera_de_alcance`. Se elige al crear el token. |
-| **Ambiente** | `dev`, `qa`, `pre` o `prod`: la etapa de un proyecto. Cada pool pertenece a uno. |
+| **Ambiente** | `dev`, `qa`, `lab`, `pre` o `prod`: la etapa de un proyecto. Cada pool pertenece a uno, y los rangos de un ambiente no se repiten en otro. |
 | **Asignación** | Segmento entregado de forma definitiva a un proyecto. Nadie más puede tomarlo hasta que se libere. |
 | **Auditoría** | Bitácora de solo inserción: quién hizo qué y cuándo. No se puede editar ni borrar. |
 | **Barredor** (*sweeper*) | Tarea de fondo que marca como `expirada` las reservas vencidas. La corrección no depende de él (ver «expiración perezosa»). |
@@ -32,7 +32,7 @@ Términos en orden alfabético, explicados sin jerga. El término en inglés va 
 | **Pooler** | Intermediario de conexiones delante de PostgreSQL (el de Supabase). El IPAM necesita el modo **sesión**. |
 | **Prometheus / `/metrics`** | Sistema de métricas y la ruta que las publica. Nace cerrada. |
 | **Rate limit** | Límite de peticiones por minuto para evitar abusos. Responde 429 al pasarse. |
-| **Reserva** (*reservation*) | Rango apartado de forma tentativa. Expira sola (24 h por defecto, 72 h máximo) si nadie la confirma. |
+| **Reserva** (*reservation*) | Rango apartado de forma tentativa. Expira sola (72 h por defecto, 168 h = una semana como máximo) si nadie la confirma. |
 | **RLS** | *Row Level Security*: seguridad por filas de PostgreSQL. Se usa como defensa extra en Supabase. |
 | **Rol** | Nivel de permisos: `lector < agente < solicitante < admin`. |
 | **Secondary ranges** (rangos secundarios) | En GCP, rangos adicionales de una subred que usan los Pods y Servicios de GKE. Ver [CONTRATO-YAML-REDES](CONTRATO-YAML-REDES.md). |

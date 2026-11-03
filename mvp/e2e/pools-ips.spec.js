@@ -124,7 +124,7 @@ test('pools: «Nuevo pool» es un botón visible y el formulario permite elegir 
   await expect(page.locator('#np-ambiente')).toBeHidden();
   await boton.click();
   await expect(page.locator('#np-ambiente')).toBeVisible();
-  await expect(page.locator('#np-ambiente option')).toHaveText(['Elige…', 'dev', 'qa', 'pre', 'prod']);
+  await expect(page.locator('#np-ambiente option')).toHaveText(['Elige…', 'dev', 'qa', 'lab', 'pre', 'prod']);
   await expect(page.locator('#pools details', { hasText: 'Nuevo pool' })).toContainText('en el ambiente que corresponda');
 });
 

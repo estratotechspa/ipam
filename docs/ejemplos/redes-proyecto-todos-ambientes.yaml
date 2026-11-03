@@ -4,11 +4,11 @@
 redes:
   ipam_reservations:
     # ---- dev ----
-    - {subnet: gke-principal, region: us-central1, ambiente: dev, ttl_horas: 24, primary: {tipo: Nodos, mascara: 24},
+    - {subnet: gke-principal, region: us-central1, ambiente: dev, ttl_horas: 72, primary: {tipo: Nodos, mascara: 24},
        secondary_ranges: [{name: pods, tipo: Pods, mascara: 20}, {name: servicios, tipo: Servicios, mascara: 24}]}
     - {subnet: vm-apoyo, region: us-central1, ambiente: dev, primary: {tipo: Nodos, mascara: 27}}
     # ---- qa ----
-    - {subnet: gke-principal, region: us-central1, ambiente: qa, ttl_horas: 24, primary: {tipo: Nodos, mascara: 24},
+    - {subnet: gke-principal, region: us-central1, ambiente: qa, ttl_horas: 72, primary: {tipo: Nodos, mascara: 24},
        secondary_ranges: [{name: pods, tipo: Pods, mascara: 20}, {name: servicios, tipo: Servicios, mascara: 24}]}
     - {subnet: vm-apoyo, region: us-central1, ambiente: qa, primary: {tipo: Nodos, mascara: 27}}
     # ---- pre ----

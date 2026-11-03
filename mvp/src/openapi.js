@@ -136,7 +136,7 @@ const schemas = {
     },
   },
   Cidr: { type: 'string', pattern: '^\\d{1,3}(\\.\\d{1,3}){3}/\\d{1,2}$', description: 'Rango IPv4 en notación CIDR.', example: '10.220.0.0/24' },
-  Ambiente: { enum: ['dev', 'qa', 'pre', 'prod'], description: 'Ambiente.' },
+  Ambiente: { enum: ['dev', 'qa', 'lab', 'pre', 'prod'], description: 'Ambiente.' },
   Salud: { type: 'object', required: ['ok'], properties: { ok: { type: 'boolean' } }, example: { ok: true } },
   Listo: {
     type: 'object',
@@ -382,9 +382,9 @@ const schemas = {
       ticket: { type: 'string', maxLength: 64, description: 'Referencia de seguimiento. Si falta, el IPAM genera una (NET-n).' },
       vlan: { type: ['integer', 'string', 'null'], description: 'VLAN opcional (1–4094); pasa a la asignación al confirmar.' },
       vlan_nombre: { type: ['string', 'null'], maxLength: 80, description: 'Nombre opcional de la VLAN.' },
-      ttl_horas: { type: 'integer', description: 'Vigencia de la reserva sin confirmar. Por defecto 24; máximo 72 (RESERVA_TTL_MAX_HORAS).' },
+      ttl_horas: { type: 'integer', description: 'Vigencia de la reserva sin confirmar. Por defecto 72; máximo 168, una semana (RESERVA_TTL_MAX_HORAS).' },
     },
-    example: { ambiente: 'qa', tipo: 'Nodos', mascara: 24, vpc: 'proyecto-demo-qa', ticket: 'NET-901', ttl_horas: 24 },
+    example: { ambiente: 'qa', tipo: 'Nodos', mascara: 24, vpc: 'proyecto-demo-qa', ticket: 'NET-901', ttl_horas: 72 },
   },
   Reserva: {
     type: 'object',
@@ -633,7 +633,7 @@ const schemas = {
       formato: { enum: ['xlsx', 'csv'] },
       contenido_base64: { type: 'string', description: 'El archivo codificado en base64.' },
       proveedor: { type: 'string', description: 'Proveedor por defecto para las filas que no lo traen (p. ej. GCP u On-prem).' },
-      ambiente: { enum: ['dev', 'qa', 'pre', 'prod'], description: 'Ambiente por defecto para las filas que no lo traen.' },
+      ambiente: { enum: ['dev', 'qa', 'lab', 'pre', 'prod'], description: 'Ambiente por defecto para las filas que no lo traen.' },
       tipo: { type: 'string', description: 'Tipo por defecto (por omisión «Importado»).' },
       aprobar: {
         type: 'array',
@@ -1238,7 +1238,7 @@ function rutasDeReservas(p) {
       id: 'reservar',
       summary: 'Reserva un rango (tentativo, expira solo)',
       description:
-        'Rol `agente` o superior. La reserva **no es definitiva**: expira sola (24 h por defecto, máximo 72) salvo que se confirme. Idempotente con `Idempotency-Key`: misma clave y reserva viva → 200 con `repetida: true`; misma clave con reserva liberada o expirada → 409.',
+        'Rol `agente` o superior. La reserva **no es definitiva**: expira sola (72 h por defecto, máximo 168) salvo que se confirme. Idempotente con `Idempotency-Key`: misma clave y reserva viva → 200 con `repetida: true`; misma clave con reserva liberada o expirada → 409.',
       params: [CLAVE_IDEM],
       body: cuerpo('ReservaCrear', schemas.ReservaCrear.example),
       ok: {

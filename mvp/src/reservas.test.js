@@ -46,7 +46,7 @@ test('ciclo completo: reservar → ver → confirmar (origen agente) → liberar
     { pool: r.cuerpo.pool_id, estado: r.cuerpo.estado, rep: r.cuerpo.repetida, ticket: r.cuerpo.ticket },
     { pool: 'gke-nodos-qa', estado: 'reservada', rep: false, ticket: 'NET-901' },
   );
-  assert.ok(r.cuerpo.segundos_restantes > 86000 && r.cuerpo.segundos_restantes <= 86400);
+  assert.ok(r.cuerpo.segundos_restantes > 259000 && r.cuerpo.segundos_restantes <= 259200);
   const id = r.cuerpo.id;
 
   const rep = await json(await reservar({ ticket: 'NET-901' }, 'ciclo-1'));
@@ -149,8 +149,8 @@ test('pool ambiguo → 422 con las opciones; mascara y cidr inconsistentes y TTL
   await llamar('DELETE', `/api/v1/reservas/${ok.cuerpo.id}`);
   await b.sql("delete from reservas where pool_id = 'gke-nodos-qa-2'");
   await b.sql("delete from pools where id = 'gke-nodos-qa-2'");
-  assert.equal((await json(await reservar({ ttl_horas: 73 }))).cuerpo.error, 'ttl_excede_maximo');
-  assert.equal((await json(await reservar({ ttl_horas: 72 }))).estado, 201);
+  assert.equal((await json(await reservar({ ttl_horas: 169 }))).cuerpo.error, 'ttl_excede_maximo');
+  assert.equal((await json(await reservar({ ttl_horas: 168 }))).estado, 201);
   assert.equal((await json(await reservar({ mascara: 22, cidr: '10.20.8.0/24' }))).cuerpo.error, 'mascara_no_coincide');
   assert.equal((await json(await reservar({ pool: 'nope', ambiente: undefined, tipo: undefined }))).estado, 404);
   assert.equal((await json(await llamar('POST', '/api/v1/reservas/no-es-uuid/confirmar', {}))).estado, 404);

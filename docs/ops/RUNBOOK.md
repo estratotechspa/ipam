@@ -18,7 +18,7 @@ curl -s $IPAM_URL/healthz ; curl -s $IPAM_URL/readyz
 | 404 en `/api/pools`, `/api/solicitudes`… | Las rutas sin versión se retiraron | Usa `/api/v1/...` |
 | 429 | Límite de peticiones o cuota de reservas | Espera `Retry-After`; baja la frecuencia del agente; libera reservas viejas; sube los límites solo si es legítimo |
 | 409 al reservar | Rango ocupado, o clave ya usada y liberada/expirada | Pide otro rango o una `Idempotency-Key` nueva |
-| Reservas «colgadas» | El pipeline murió sin liberar | Esperan su expiración (≤ 72 h) o libéralas en la pestaña Segmentos (botón «Reservados») |
+| Reservas «colgadas» | El pipeline murió sin liberar | Esperan su expiración (≤ 168 h) o libéralas en la pestaña Segmentos (botón «Reservados») |
 | Todas las personas figuran con la misma IP (`::1`) en auditoría y el límite por IP es global | `TRUST_PROXY` menor que los saltos de proxy reales | Ajusta `TRUST_PROXY` (3 en el POC de Render) |
 | El barredor no corre (alerta) | Réplica `worker` caída o base sin conexión | Revisa que haya una réplica con `ROL=todos` o `worker`; el estado está en `barredor_estado` |
 | Un pool lleno (≥ 90 %) | Crecimiento | Agrega otro pool/rango ([MIGRACION](MIGRACION.md) para cargar pools) o libera lo que ya no se use |

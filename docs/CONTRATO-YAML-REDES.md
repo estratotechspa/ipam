@@ -25,13 +25,26 @@ flowchart LR
 | `redes.ipam_reservations[]` | sí | Lista de subredes a reservar | al menos una |
 | `…subnet` | sí | Nombre lógico de la subred. Con el ambiente forma la clave de idempotencia | `^[a-z][a-z0-9-]{1,40}$` |
 | `…region` | no | Región de GCP (informativa para el agente; el IPAM no la usa) | p. ej. `us-central1` |
-| `…ambiente` | sí | Ambiente | `dev`, `qa`, `pre` o `prod` |
-| `…ttl_horas` | no | Cuánto dura la reserva sin confirmar | 1 a 72 (por defecto 24) |
+| `…ambiente` | sí | Ambiente | `dev`, `qa`, `lab`, `pre` o `prod` |
+| `…ttl_horas` | no | Cuánto dura la reserva sin confirmar | 1 a 168 (por defecto 72) |
 | `…primary.tipo` | sí | Tipo de pool del rango principal | `Nodos`, `Pods`, `Servicios`, `Control plane`… |
 | `…primary.mascara` | sí | Tamaño del bloque (`24` = /24) | 8 a 32 |
 | `…primary.pool` | no | Pool concreto, solo si hay más de uno del mismo ambiente y tipo | id del pool |
 | `…secondary_ranges[].name` | sí | Nombre del rango secundario (en GKE, el nombre del rango de la subred) | `^[a-z][a-z0-9-]{1,40}$` |
 | `…secondary_ranges[].tipo / mascara / pool` | sí / sí / no | Igual que `primary` | |
+
+## Tamaños de los rangos de un clúster GKE
+Valores de la documentación oficial de GKE (VPC-native clusters), revisados el 2026-11-03:
+
+| Rango | Tamaño por defecto | Límites documentados |
+|---|---|---|
+| **Pods** | `/14` (GKE lo elige solo si no se indica) | Cada nodo toma un `/24` (hasta 110 Pods); un node pool necesita al menos un `/24`. Un clúster de ~900 nodos pide un rango de `/14` o más grande. |
+| **Servicios** | `/20` (4.096 Servicios) | De `/28` (rango propio) o `/27` (administrado por GKE) hasta `/16` (65.536). **Un `/14` no es válido para Servicios.** |
+
+Los rangos secundarios **no se pueden modificar** después de crear la subred (solo se pueden sumar rangos de Pods discontiguos). Por eso conviene reservar con holgura.
+Fuentes: [VPC-native clusters](https://cloud.google.com/kubernetes-engine/docs/concepts/alias-ips), [Create a VPC-native cluster](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/alias-ips) y [Configure maximum Pods per node](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/flexible-pod-cidr).
+
+Ojo: el **pool** de Pods puede ser un `/14` (un bloque grande del que salen los rangos), pero el rango de **Servicios de cada clúster** es mucho más chico (`/20` por defecto); un pool de Servicios de `/14` alcanza para muchos clústeres.
 
 ## Cómo lo traduce el agente a llamadas al IPAM
 Una entrada de `ipam_reservations` con *n* rangos produce *n* reservas. La clave de idempotencia hace que **reintentar no duplique nada**.
@@ -55,7 +68,7 @@ sequenceDiagram
   participant GL as GitLab (repo de redes)
   participant P as Persona (aprobación manual)
   Ag->>I: reservar (una por rango)
-  I-->>Ag: CIDR reservados (vencen en 24 h por defecto)
+  I-->>Ag: CIDR reservados (vencen en 72 h por defecto)
   Ag->>GL: MR con los CIDR en variables de OpenTofu
   GL->>GL: validate → scan → plan
   P->>GL: aprueba el MR / el paso manual
@@ -76,7 +89,7 @@ está en [`ops/gitlab/`](ops/gitlab/).
 Ambos se validan automáticamente contra el esquema en cada ejecución de pruebas (`src/contrato-yaml.test.js`).
 
 1. [`ejemplos/redes-proyecto-nuevo-dev.yaml`](ejemplos/redes-proyecto-nuevo-dev.yaml): proyecto nuevo en dev con un clúster GKE.
-2. [`ejemplos/redes-proyecto-todos-ambientes.yaml`](ejemplos/redes-proyecto-todos-ambientes.yaml): el mismo proyecto en dev, qa, pre y prod, con plano de control y subred de apoyo.
+2. [`ejemplos/redes-proyecto-todos-ambientes.yaml`](ejemplos/redes-proyecto-todos-ambientes.yaml): el mismo proyecto en dev, qa, pre y prod (el IPAM también acepta `lab`), con plano de control y subred de apoyo.
 
 ## Lo que este contrato NO hace
 - No define la estructura del resto del YAML (infraestructura y DevOps): eso es de `cd-agents`.

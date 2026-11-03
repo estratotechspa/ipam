@@ -1,4 +1,6 @@
-# ADR 0003 · TTL de las reservas: 24 horas por defecto, 72 como máximo
+# ADR 0003 · TTL de las reservas: 72 horas por defecto, una semana como máximo
+
+> **Actualizado el 2026-11-03.** Esta decisión nació con 24 h por defecto y 72 h como máximo. Se amplió a **72 h por defecto y 168 h (una semana) como máximo** porque la aprobación humana de un cambio de redes tarda más de un día hábil. El archivo conserva su nombre para no romper enlaces; el razonamiento original sigue abajo con los valores nuevos.
 
 - **Estado:** aceptada · **Fecha:** 2026-10-21
 
@@ -7,8 +9,8 @@ Una reserva tentativa aparta un rango mientras una persona revisa y aprueba el c
 que nadie va a usar quedan apartados.
 
 ## Decisión
-- **Por defecto 24 horas** (`RESERVA_TTL_HORAS`): cubre un día hábil de revisión con holgura.
-- **Máximo 72 horas** (`RESERVA_TTL_MAX_HORAS`): cubre un fin de semana largo sin permitir reservas «eternas». Pedir más es un error 400 (`ttl_excede_maximo`): **no se recorta en silencio**,
+- **Por defecto 72 horas** (`RESERVA_TTL_HORAS`): cubre un fin de semana largo de revisión con holgura.
+- **Máximo 168 horas** (`RESERVA_TTL_MAX_HORAS`): una semana completa de revisión sin permitir reservas «eternas». Pedir más es un error 400 (`ttl_excede_maximo`): **no se recorta en silencio**,
   para que el agente sepa que su reserva durará menos de lo que esperaba.
 - Ambos valores se configuran por variable de entorno y por `values.yaml`.
 

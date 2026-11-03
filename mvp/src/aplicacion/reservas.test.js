@@ -101,7 +101,7 @@ test('validaciones de la petición', async () => {
   await falla({ ticket: 'con espacios' }, 'ticket_invalido');
   assert.equal((await e.reservas.reservar(AGENTE, { ambiente: 'qa', tipo: 'Nodos', mascara: 24, vpc: 'v' }, 'clave mala')).error, 'clave_idem_invalida');
   assert.equal((await pedir(e, AGENTE, { pool: 'no-existe', ambiente: undefined, tipo: undefined })).error, 'pool_no_existe');
-  assert.equal((await pedir(e, AGENTE, { ttl_horas: 72 })).ok, true, 'el máximo (72 h) sí se acepta');
+  assert.equal((await pedir(e, AGENTE, { ttl_horas: 72 })).ok, true, 'el máximo configurado (72 h) sí se acepta');
   assert.equal((await pedir(e, AGENTE, { mascara: undefined, cidr: '10.220.8.0/22', ttl_horas: 2 })).reserva.cidr, '10.220.8.0/22');
 });
 

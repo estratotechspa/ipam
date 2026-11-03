@@ -71,7 +71,7 @@ sequenceDiagram
   participant I as IPAM
   participant H as Persona aprobadora
   G->>I: POST /reservas (Idempotency-Key)
-  I-->>G: 201 reserva «reservada», expira en 24 h
+  I-->>G: 201 reserva «reservada», expira en 72 h
   G->>H: plan de infraestructura para revisar
   alt aprueba y el apply sale bien
     H->>G: aprobación manual (ambiente protegido)
@@ -123,4 +123,4 @@ Pipeline de redes (OpenTofu): `validate → scan (Trivy y Checkov) → plan → 
 - La migración del esquema es un paso aparte (`npm run migrar`); la app no modifica el esquema al arrancar salvo `MIGRAR_AL_ARRANCAR=true`.
 
 ## 7 · Decisiones
-[ADR 0000–0009](adr/): arquitectura desacoplada, reservas, tokens, TTL de 24 h, seguro por defecto, rate limiting, métricas, POC Render + Supabase, portabilidad entre nubes y CI portable.
+[ADR 0000–0009](adr/): arquitectura desacoplada, reservas, tokens, TTL de 72 h, seguro por defecto, rate limiting, métricas, POC Render + Supabase, portabilidad entre nubes y CI portable.

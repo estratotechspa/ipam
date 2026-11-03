@@ -143,8 +143,8 @@ test('Helm: renderiza con allowAnonymous, con appUser, con existingSecret o con 
   ]) {
     const r = helm(...args);
     assert.equal(r.status, 0, `${args.join(' ')}: ${r.stderr}`);
-    assert.match(r.stdout, /RESERVA_TTL_HORAS: "24"/);
-    assert.match(r.stdout, /RESERVA_TTL_MAX_HORAS: "72"/);
+    assert.match(r.stdout, /RESERVA_TTL_HORAS: "72"/);
+    assert.match(r.stdout, /RESERVA_TTL_MAX_HORAS: "168"/);
   }
   const anon = helm('--set', 'auth.allowAnonymous=true');
   assert.match(anon.stdout, /ALLOW_ANONYMOUS: "true"/);

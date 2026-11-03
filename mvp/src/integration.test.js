@@ -240,7 +240,7 @@ test('historial: la auditoría se puede filtrar por pool y por segmento', opts, 
   assert.equal((await (await fetch(`${base}/api/v1/auditoria?pool=no-existe`)).json()).length, 0);
 });
 
-test('pools: crear, no duplicar ni solapar (mismo proveedor y ambiente), editar y eliminar solo si está vacío', opts, async () => {
+test('pools: crear, no duplicar ni solapar (ni siquiera entre ambientes), editar y eliminar solo si está vacío', opts, async () => {
   const H = { 'Content-Type': 'application/json', 'X-Requested-With': 'ipam' };
   const llamar = (metodo, ruta, cuerpo) => fetch(base + ruta, { method: metodo, headers: H, body: cuerpo ? JSON.stringify(cuerpo) : undefined });
   const sufijo = Date.now().toString(36);
@@ -250,8 +250,12 @@ test('pools: crear, no duplicar ni solapar (mismo proveedor y ambiente), editar 
   assert.equal((await (await post('/api/v1/pools', nuevo)).json()).error, 'pool_existe');
   const solapa = await post('/api/v1/pools', { ...nuevo, id: `lan-prueba-2-${sufijo}`, proveedor: 'on-prem', cidr: '10.250.128.0/17' });
   assert.deepEqual([solapa.status, (await solapa.json()).error], [409, 'pool_solapado']);
-  // Otro ambiente: el mismo rango sí se permite.
-  assert.equal((await post('/api/v1/pools', { ...nuevo, id: `lan-prueba-dev-${sufijo}`, ambiente: 'dev' })).status, 201);
+  // Otro ambiente u otro proveedor: el mismo rango tampoco se permite (los rangos no se repiten entre ambientes).
+  const otroAmb = await post('/api/v1/pools', { ...nuevo, id: `lan-prueba-dev-${sufijo}`, ambiente: 'dev' });
+  assert.deepEqual([otroAmb.status, (await otroAmb.json()).error], [409, 'pool_solapado']);
+  const otroProv = await post('/api/v1/pools', { ...nuevo, id: `lan-prueba-gcp-${sufijo}`, proveedor: 'GCP' });
+  assert.equal(otroProv.status, 409);
+  assert.equal((await post('/api/v1/pools', { ...nuevo, id: `lan-prueba-lab-${sufijo}`, ambiente: 'lab', cidr: '10.252.0.0/16' })).status, 201);
   assert.equal((await post('/api/v1/pools', { ...nuevo, id: 'mal', cidr: '10.250.0.0/31' })).status, 400);
 
   const e = await llamar('PATCH', `/api/v1/pools/${id}`, { tipo: 'LAN sucursal', proveedor: 'On-prem' });
@@ -263,7 +267,7 @@ test('pools: crear, no duplicar ni solapar (mismo proveedor y ambiente), editar 
   assert.deepEqual([enUso.status, (await enUso.json()).error], [409, 'pool_en_uso']);
   await llamar('DELETE', `/api/v1/asignaciones/${a.id}`, { motivo: 'prueba' });
   assert.equal((await llamar('DELETE', `/api/v1/pools/${id}`)).status, 200);
-  assert.equal((await llamar('DELETE', `/api/v1/pools/lan-prueba-dev-${sufijo}`)).status, 200);
+  assert.equal((await llamar('DELETE', `/api/v1/pools/lan-prueba-lab-${sufijo}`)).status, 200);
   const hist = await (await fetch(`${base}/api/v1/auditoria?pool=${id}`)).json();
   assert.deepEqual(
     hist.map((f) => f.accion).filter((x) => x.endsWith('_pool')),
@@ -295,12 +299,12 @@ test('direcciones IP fijas: dentro del segmento, excepciones, repetidas, ambigua
   );
   assert.deepEqual([publica.estado, publica.pool_id], [201, null]);
 
-  // El mismo rango privado en dos ambientes: hay que indicar el pool.
+  // Pools heredados con el mismo rango en dos ambientes (la API ya no deja crearlos, pero pueden existir en bases antiguas): hay que indicar el pool.
   for (const [id, ambiente] of [
     ['lan-ips-dev', 'dev'],
     ['lan-ips-qa', 'qa'],
   ])
-    await post('/api/v1/pools', { id, tipo: 'LAN', ambiente, proveedor: 'On-prem', cidr: '10.251.0.0/16' });
+    await db.query('insert into pools (id,tipo,ambiente,proveedor,cidr) values ($1,$2,$3,$4,$5)', [id, 'LAN', ambiente, 'On-prem', '10.251.0.0/16']);
   const amb = await json(await post('/api/v1/direcciones', { ip: '10.251.0.5', excepcion: 'prueba' }));
   assert.deepEqual([amb.estado, amb.error, amb.opciones.length], [422, 'ip_ambigua', 2]);
   const conPool = await json(await post('/api/v1/direcciones', { ip: '10.251.0.5', pool: 'lan-ips-qa', excepcion: 'prueba' }));

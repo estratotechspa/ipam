@@ -5,12 +5,21 @@ const AxeBuilder = require('@axe-core/playwright').default;
 test('importar segmentos: simular no escribe, el solapamiento con otro pool exige aprobación, aplicar importa y queda como «importado»', async ({ page }) => {
   const marca = `e2e-imp-${Date.now()}`;
   const r = Math.floor(Math.random() * 200) + 20;
+  const seg = 100 + Math.floor(Math.random() * 100); // 10.<seg>.0.0/16: fuera de los rangos de la semilla
+  const poolId = `${marca}-pool`;
+  const H = { 'X-Requested-With': 'ipam' };
+  // Los rangos de los pools no se repiten entre ambientes: el destino debe existir antes de importar.
+  const alta = await page.request.post('/api/v1/pools', {
+    headers: H,
+    data: { id: poolId, tipo: 'Importado', ambiente: 'dev', proveedor: 'E2E-Test', cidr: `10.${seg}.0.0/16` },
+  });
+  expect(alta.status()).toBe(201);
   const csv = [
     'cidr,proyecto,tipo',
-    `10.77.${r}.0/24,${marca}-a,Nodos`,
-    `10.77.${r + 1}.0/24,${marca}-b,Pods`,
+    `10.${seg}.${r}.0/24,${marca}-a,Nodos`,
+    `10.${seg}.${r + 1}.0/24,${marca}-b,Pods`,
     `basura,${marca}-c,Nodos`,
-    `10.20.0.0/24,${marca}-d,Nodos`, // solapa con gke-nodos-qa (otro pool)
+    `10.20.0.0/24,${marca}-d,Nodos`, // cae en gke-nodos-qa (otro pool): no hay dónde importarlo
   ].join('\n');
   await page.goto('/');
   await page
@@ -29,7 +38,7 @@ test('importar segmentos: simular no escribe, el solapamiento con otro pool exig
   expect(await yaEsta()).toHaveLength(0);
 
   const tabla = page.getByRole('table', { name: 'Filas de la importación' });
-  await expect(tabla.locator('tr', { hasText: `${marca}-d` })).toContainText('requiere aprobación');
+  await expect(tabla.locator('tr', { hasText: `${marca}-d` })).toContainText('Inválida');
   await expect(tabla.locator('tr', { hasText: `${marca}-c` })).toContainText('Inválida');
   await expect(page.locator('#imp-aplicar')).toHaveText('Importar 2 segmentos');
 
@@ -37,23 +46,18 @@ test('importar segmentos: simular no escribe, el solapamiento con otro pool exig
   const axe = await new AxeBuilder({ page }).include('#importar').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
   expect(axe.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(' | ')}`)).toEqual([]);
 
-  // El admin aprueba el solapamiento: ahora se importan 3.
-  await tabla
-    .locator('tr', { hasText: `${marca}-d` })
-    .getByRole('checkbox')
-    .check();
-  await expect(page.locator('#imp-aplicar')).toHaveText('Importar 3 segmentos');
   await page.click('#imp-aplicar');
   await aceptar(page, 'Importar');
-  await expect(page.locator('#imp-msg')).toContainText('Importados 3 segmentos');
+  await expect(page.locator('#imp-msg')).toContainText('Importados 2 segmentos');
 
   const importadas = await yaEsta();
-  expect(importadas).toHaveLength(3);
+  expect(importadas).toHaveLength(2);
   expect(importadas.every((a) => a.origen === 'importado')).toBe(true);
-  expect(importadas.every((a) => a.pool_id === 'imp-e2e-test-dev-10')).toBe(true);
+  expect(importadas.every((a) => a.pool_id === poolId)).toBe(true);
 
   // Limpieza.
   for (const a of importadas)
     await page.request.delete(`/api/v1/asignaciones/${a.id}`, { headers: { 'X-Requested-With': 'ipam' }, data: { motivo: 'limpieza e2e' } });
   expect(await yaEsta()).toHaveLength(0);
+  await page.request.delete(`/api/v1/pools/${poolId}`, { headers: H });
 });

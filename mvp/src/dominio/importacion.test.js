@@ -20,10 +20,20 @@ test('usa un pool existente del mismo proveedor y ambiente que contiene al segme
   const pools = [{ id: 'dev-nodos', tipo: 'Nodos', ambiente: 'dev', proveedor: 'GCP', cidr: '10.210.0.0/20' }];
   const r = analizar({ pools, ocupados: [], filas: [fila(2, '10.210.1.0/24', { ambiente: 'dev' }), fila(3, '10.230.1.0/24', { ambiente: 'dev' })] });
   assert.equal(r.filas[0].pool, 'dev-nodos');
-  assert.equal(r.filas[1].pool, 'imp-gcp-dev-10', 'fuera del pool existente → pool automático');
+  assert.equal(r.filas[1].estado, 'invalida', 'fuera del pool existente: el pool automático (10.0.0.0/8) pisaría a dev-nodos, así que no se crea');
+  assert.match(r.filas[1].detalle, /se solaparía con dev-nodos/);
+  assert.deepEqual(r.pools_a_crear, []);
+});
+
+test('los pools automáticos tampoco se solapan entre sí: el segundo bloque de la misma familia se rechaza', () => {
+  const r = analizar({ ...vacio, filas: [fila(2, '10.5.0.0/24'), fila(3, '10.6.0.0/24', { ambiente: 'qa' })] });
+  assert.deepEqual(
+    [2, 3].map((n) => estado(r, n)),
+    ['ok', 'invalida'],
+  );
   assert.deepEqual(
     r.pools_a_crear.map((p) => p.id),
-    ['imp-gcp-dev-10'],
+    ['imp-gcp-prod-10'],
   );
 });
 
@@ -82,7 +92,7 @@ test('entre filas del mismo archivo: la primera entra y las siguientes que choca
   const r = analizar({ ...vacio, filas: [fila(2, '10.5.0.0/24'), fila(3, '10.5.0.0/24'), fila(4, '10.5.0.0/25', { proveedor: 'On-prem' })] });
   assert.deepEqual(
     [2, 3, 4].map((n) => estado(r, n)),
-    ['ok', 'choca_mismo_pool', 'solapa_otro_pool'],
+    ['ok', 'choca_mismo_pool', 'invalida'], // la 4 pediría un segundo pool automático de 10.0.0.0/8
   );
   assert.match(r.filas[1].detalle, /otra fila del archivo/);
 });

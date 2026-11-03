@@ -18,10 +18,15 @@ test('pool: rechaza nombre, ambiente, CIDR desalineado y máscaras fuera de /8�
   assert.equal(validarPoolNuevo({ ...base, tipo: '' }).error, 'tipo_invalido');
 });
 
-test('pool: no se solapa con otro del mismo proveedor y ambiente; entre ambientes o proveedores distintos sí puede', () => {
+test('pool: no se solapa con ningún otro, ni de otro ambiente ni de otro proveedor', () => {
   const existentes = [{ id: 'gcp-prod', tipo: 'Nodos', ambiente: 'prod', proveedor: 'GCP', cidr: '10.40.0.0/20' }];
   assert.equal(chocaConPool({ ...base, proveedor: 'gcp' }, existentes).id, 'gcp-prod');
-  assert.equal(chocaConPool(base, existentes), null); // otro proveedor
-  assert.equal(chocaConPool({ ...base, proveedor: 'GCP', ambiente: 'qa' }, existentes), null); // otro ambiente
+  assert.equal(chocaConPool(base, existentes).id, 'gcp-prod'); // otro proveedor
+  assert.equal(chocaConPool({ ...base, proveedor: 'GCP', ambiente: 'qa' }, existentes).id, 'gcp-prod'); // otro ambiente
+  assert.equal(chocaConPool({ ...base, cidr: '10.41.0.0/16' }, existentes), null); // rango distinto
   assert.equal(chocaConPool({ ...base, id: 'gcp-prod', proveedor: 'GCP' }, existentes), null); // él mismo
+});
+
+test('pool: «lab» es un ambiente válido', () => {
+  assert.equal(validarPoolNuevo({ ...base, ambiente: 'lab' }).ok, true);
 });

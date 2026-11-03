@@ -1,10 +1,10 @@
 // @ts-check
 'use strict';
-// Reglas de un bloque base (pool): datos válidos y que no se solape con otro del MISMO proveedor y ambiente.
-// Entre ambientes o proveedores distintos sí puede repetirse (el mismo rango privado se reutiliza en otra nube o en on-prem).
+// Reglas de un bloque base (pool): datos válidos y que no se solape con NINGÚN otro pool, sea cual sea su ambiente o proveedor
+// (los rangos no se repiten entre dev, qa, lab, pre y prod).
 const { parse, overlap } = require('./cidr');
 
-const AMBIENTES = ['dev', 'qa', 'pre', 'prod'];
+const AMBIENTES = ['dev', 'qa', 'lab', 'pre', 'prod'];
 const ID = /^[a-z0-9][a-z0-9-]{1,62}$/;
 const TEXTO = /^[^\p{Cc}]{1,40}$/u;
 const malo = (error, mensaje) => ({ ok: /** @type {false} */ (false), error, mensaje });
@@ -48,7 +48,7 @@ function chocaConPool(nuevo, pools) {
   return (
     pools.find((p) => {
       const pc = parse(p.cidr);
-      return p.id !== nuevo.id && p.ambiente === nuevo.ambiente && p.proveedor.toLowerCase() === nuevo.proveedor.toLowerCase() && pc && overlap(pc, c);
+      return p.id !== nuevo.id && pc && overlap(pc, c);
     }) || null
   );
 }

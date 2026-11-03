@@ -22,6 +22,12 @@ async function xlsx(filas) {
 test.before(async () => {
   if (!hayBase) return;
   b = await crearBaseAislada(); // con los datos de ejemplo históricos
+  // Los rangos de los pools no se repiten entre ambientes: el destino de cada importación existe antes (ya no se crea un /8 automático que los pise).
+  await b.sql(`insert into pools (id,tipo,ambiente,proveedor,cidr) values
+    ('t-gcp-prod','Importado','prod','GCP','10.201.0.0/16'),
+    ('t-onprem-prod','LAN','prod','On-prem','10.202.0.0/16'),
+    ('t-gcp-dev','Importado','dev','GCP','10.230.0.0/16'),
+    ('t-aws-dev','Importado','dev','AWS','172.20.0.0/16')`);
   s = await lanzarServicio({ DATABASE_URL: b.url });
 });
 test.after(async () => {
@@ -40,17 +46,22 @@ test('simular lee un CSV, reconoce encabezados en español y NO escribe nada', o
   );
   assert.equal(r.estado, 200, JSON.stringify(r.cuerpo));
   assert.deepEqual(r.cuerpo.resumen, { ok: 2, ya_existe: 0, solapa_otro_pool: 0, choca_mismo_pool: 1, invalida: 1 });
-  assert.deepEqual(
-    r.cuerpo.pools_a_crear.map((p) => p.id),
-    ['imp-gcp-prod-10'],
-  );
+  assert.deepEqual(r.cuerpo.pools_a_crear, []);
+  assert.equal(r.cuerpo.filas[0].pool, 't-gcp-prod');
   assert.equal(r.cuerpo.columnas.cidr, 'Segmento');
   assert.equal(r.cuerpo.filas[0].n, 2, 'el número de fila es el del archivo (con encabezado en la 1)');
   assert.equal((await b.sql('select count(*)::int as n from asignaciones')).rows[0].n, antes, 'simular no escribe');
   assert.equal((await b.sql("select count(*)::int as n from pools where id like 'imp-%'")).rows[0].n, 0);
 });
 
-test('aplicar un Excel: crea el pool automático, importa lo válido con origen «importado», es idempotente y queda auditado', opts, async () => {
+test('un segmento sin pool propio no crea un pool automático que pise a otros: la fila queda inválida con el motivo', opts, async () => {
+  const r = await post('/api/v1/importaciones/simular', csv('cidr,vpc,proveedor,ambiente\n10.77.5.0/24,sin-pool,GCP,qa\n'));
+  assert.equal(r.cuerpo.filas[0].estado, 'invalida');
+  assert.match(r.cuerpo.filas[0].detalle, /se solaparía con/);
+  assert.deepEqual(r.cuerpo.pools_a_crear, []);
+});
+
+test('aplicar un Excel: importa lo válido con origen «importado», es idempotente y queda auditado', opts, async () => {
   const archivo = await xlsx([
     ['CIDR', 'VPC', 'Proveedor', 'Ambiente', 'Tipo'],
     ['10.202.0.0/24', 'oficina-a', 'On-prem', 'prod', 'LAN'],
@@ -59,17 +70,15 @@ test('aplicar un Excel: crea el pool automático, importa lo válido con origen 
   ]);
   const r = await post('/api/v1/importaciones/aplicar', { ...archivo, nombre: 'oficinas.xlsx' });
   assert.equal(r.estado, 200, JSON.stringify(r.cuerpo));
-  assert.deepEqual([r.cuerpo.importadas, r.cuerpo.pools_creados, r.cuerpo.no_importables], [2, 1, 1]);
+  assert.deepEqual([r.cuerpo.importadas, r.cuerpo.pools_creados, r.cuerpo.no_importables], [2, 0, 1]);
   const filas = (await b.sql("select cidr::text, vpc, origen, pool_id, solicitante from asignaciones where vpc like 'oficina-%' order by cidr")).rows;
   assert.deepEqual(
     filas.map((f) => [f.cidr, f.origen, f.pool_id]),
     [
-      ['10.202.0.0/24', 'importado', 'imp-on-prem-prod-10'],
-      ['10.202.1.0/26', 'importado', 'imp-on-prem-prod-10'],
+      ['10.202.0.0/24', 'importado', 't-onprem-prod'],
+      ['10.202.1.0/26', 'importado', 't-onprem-prod'],
     ],
   );
-  const pool = (await b.sql("select cidr::text, proveedor, tipo from pools where id='imp-on-prem-prod-10'")).rows[0];
-  assert.deepEqual([pool.cidr, pool.proveedor], ['10.0.0.0/8', 'On-prem']);
   // Importar otra vez lo mismo no duplica.
   const otra = await post('/api/v1/importaciones/aplicar', archivo);
   assert.deepEqual([otra.cuerpo.importadas, otra.cuerpo.omitidas], [0, 2]);
@@ -78,7 +87,7 @@ test('aplicar un Excel: crea el pool automático, importa lo válido con origen 
   assert.ok(aud && typeof aud.detalle.importadas === 'number' && aud.detalle.archivo !== undefined);
   assert.ok(!JSON.stringify(aud).includes('contenido_base64'), 'la auditoría no guarda el contenido del archivo');
   // La disponibilidad ya refleja lo importado.
-  const d = await (await fetch(s.url + '/api/v1/pools/imp-on-prem-prod-10/disponibilidad', { headers: H })).json();
+  const d = await (await fetch(s.url + '/api/v1/pools/t-onprem-prod/disponibilidad', { headers: H })).json();
   assert.equal(d.ocupadas, 256 + 64);
 });
 
@@ -113,11 +122,12 @@ test('aplicar guarda ticket, fecha original, responsable, descripción y uso; si
 });
 
 test('un segmento que solapa con OTRO pool exige aprobación del admin: sin aprobar no entra; aprobado, entra en su pool', opts, async () => {
-  // El pool automático de On-prem ya tiene 10.202.0.0/24; el mismo rango de GCP está en otro pool (otro espacio de direcciones).
+  // Base heredada (anterior a la regla de rangos únicos): un pool de GCP que repite el rango del pool de On-prem, que ya tiene 10.202.0.0/24.
+  await b.sql("insert into pools (id,tipo,ambiente,proveedor,cidr) values ('t-legado-gcp','Importado','prod','GCP','10.202.0.0/16')");
   const archivo = csv('cidr,vpc,proveedor,ambiente\n10.202.0.0/24,gcp-mismo-rango,GCP,prod\n');
   const sim = await post('/api/v1/importaciones/simular', archivo);
   assert.equal(sim.cuerpo.filas[0].estado, 'solapa_otro_pool');
-  assert.equal(sim.cuerpo.filas[0].choca_con.pool_id, 'imp-on-prem-prod-10');
+  assert.equal(sim.cuerpo.filas[0].choca_con.pool_id, 't-onprem-prod');
   const sin = await post('/api/v1/importaciones/aplicar', archivo);
   assert.deepEqual([sin.cuerpo.importadas, sin.cuerpo.rechazadas_por_solapamiento], [0, 1]);
   assert.equal((await b.sql("select count(*)::int as n from asignaciones where vpc='gcp-mismo-rango'")).rows[0].n, 0);
@@ -125,7 +135,7 @@ test('un segmento que solapa con OTRO pool exige aprobación del admin: sin apro
   const con = await post('/api/v1/importaciones/aplicar', { ...archivo, aprobar: [2, 99] });
   assert.deepEqual([con.cuerpo.importadas, con.cuerpo.aprobadas], [1, 1]);
   const f = (await b.sql("select pool_id from asignaciones where vpc='gcp-mismo-rango'")).rows[0];
-  assert.equal(f.pool_id, 'imp-gcp-prod-10');
+  assert.equal(f.pool_id, 't-legado-gcp');
 });
 
 test('validaciones: archivo vacío o ilegible, sin columna de CIDR, valores por defecto, y solo admin', opts, async () => {
@@ -141,10 +151,8 @@ test('validaciones: archivo vacío o ilegible, sin columna de CIDR, valores por 
   // Sin proveedor ni ambiente en el archivo: se completan con los valores por defecto del formulario.
   const def = await post('/api/v1/importaciones/simular', { ...csv('cidr\n172.20.0.0/24\n'), proveedor: 'AWS', ambiente: 'dev' });
   assert.equal(def.cuerpo.filas[0].estado, 'ok');
-  assert.deepEqual(
-    def.cuerpo.pools_a_crear.map((p) => p.id),
-    ['imp-aws-dev-172'],
-  );
+  assert.equal(def.cuerpo.filas[0].pool, 't-aws-dev');
+  assert.deepEqual(def.cuerpo.pools_a_crear, []);
   // Sin los valores por defecto, la fila es inválida con el motivo claro.
   const sin = await post('/api/v1/importaciones/simular', csv('cidr\n172.20.0.0/24\n'));
   assert.equal(sin.cuerpo.filas[0].estado, 'invalida');

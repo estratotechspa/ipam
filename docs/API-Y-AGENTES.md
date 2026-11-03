@@ -63,7 +63,7 @@ curl -s -X POST -H "Authorization: Bearer $IPAM_TOKEN" -H 'Content-Type: applica
 ```bash
 curl -s -X DELETE -H "Authorization: Bearer $IPAM_TOKEN" "$IPAM_URL/api/v1/reservas/<id>"
 ```
-Si nadie confirma ni libera, la reserva **expira sola** (24 h por defecto, 72 h máximo).
+Si nadie confirma ni libera, la reserva **expira sola** (72 h por defecto, 168 h como máximo).
 
 **Direcciones IP fijas** (interfaces de router, switch, firewall…): el agente registra la IP y el IPAM la ubica sola en su segmento.
 ```bash
@@ -75,7 +75,7 @@ curl -s -H "Authorization: Bearer $IPAM_TOKEN" "$IPAM_URL/api/v1/direcciones?q=r
 ```
 Si la IP está fuera de todo segmento asignado, es una **excepción**: agrega `"excepcion":"motivo"`. Si cae en varios pools (rangos privados repetidos en distintos ambientes), la respuesta es `422 ip_ambigua` con `opciones`: repite con `"pool":"…"`. Roles: `rol` ∈ `interfaz`, `gateway`, `gestion`, `loopback`, `vip`, `servidor`, `otro`. Editar: `PATCH /api/v1/direcciones/{id}`; eliminar: solo admin.
 
-**Pools (bloques base, solo admin)**: `POST /api/v1/pools` (`id`, `tipo`, `ambiente`, `proveedor`, `cidr` de /8 a /30), `PATCH /api/v1/pools/{id}` (tipo y proveedor) y `DELETE /api/v1/pools/{id}` (solo vacío). Un pool no puede solaparse con otro del mismo proveedor y ambiente.
+**Pools (bloques base, solo admin)**: `POST /api/v1/pools` (`id`, `tipo`, `ambiente`, `proveedor`, `cidr` de /8 a /30), `PATCH /api/v1/pools/{id}` (tipo y proveedor) y `DELETE /api/v1/pools/{id}` (solo vacío). Un pool no puede solaparse con **ningún** otro, aunque sea de otro ambiente o proveedor: los rangos no se repiten entre `dev`, `qa`, `lab`, `pre` y `prod` (`409 pool_solapado`).
 
 ## 4 · Errores y límites
 Los errores son JSON con `error`, `mensaje` y `request_id` (el mismo que viaja en los logs y la auditoría; pásalo al soporte). Códigos habituales: `400` validación, `401` sin credenciales, `403` rol insuficiente, `404`, `409` solapamiento o estado inválido, `429` límite o cuota (con `Retry-After`). El límite por minuto es configurable ([CONFIGURACION](CONFIGURACION.md)).

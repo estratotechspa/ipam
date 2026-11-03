@@ -5,7 +5,7 @@ const { ok, fallo, ConflictoDeDatos } = require('./resultado');
 const { validarVlan } = require('../dominio/vlan');
 const { validarDireccion } = require('../dominio/direccion');
 
-const AMBIENTES = ['dev', 'qa', 'pre', 'prod'];
+const AMBIENTES = ['dev', 'qa', 'lab', 'pre', 'prod'];
 const ORIGENES_IMPORTABLES = ['panel', 'jira', 'semilla', 'agente', 'importado'];
 
 /**

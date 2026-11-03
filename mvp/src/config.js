@@ -133,8 +133,8 @@ def(
 );
 
 // Reservas
-def('RESERVA_TTL_HORAS', 'entero', 24, 'Vigencia por defecto de una reserva sin confirmar.', { min: 1, max: 720 });
-def('RESERVA_TTL_MAX_HORAS', 'entero', 72, 'Vigencia máxima que se puede pedir para una reserva.', { min: 1, max: 720 });
+def('RESERVA_TTL_HORAS', 'entero', 72, 'Vigencia por defecto de una reserva sin confirmar.', { min: 1, max: 720 });
+def('RESERVA_TTL_MAX_HORAS', 'entero', 168, 'Vigencia máxima que se puede pedir para una reserva.', { min: 1, max: 720 });
 def(
   'CONFIRMACION_EXIGE_APROBADOR',
   'booleano',

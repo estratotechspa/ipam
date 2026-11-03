@@ -243,7 +243,7 @@ export function formularioNuevoPool(recargar) {
     'select',
     { id: 'np-ambiente', required: true },
     h('option', { value: '' }, 'Elige…'),
-    ['dev', 'qa', 'pre', 'prod'].map((v) => h('option', { value: v }, v)),
+    ['dev', 'qa', 'lab', 'pre', 'prod'].map((v) => h('option', { value: v }, v)),
   );
   const proveedor = h('input', { id: 'np-proveedor', required: true, maxlength: 40, list: 'np-provs', placeholder: 'GCP, On-prem…' });
   const provs = h(
@@ -273,7 +273,7 @@ export function formularioNuevoPool(recargar) {
     h(
       'p',
       { class: 'muted', style: 'max-width:760px' },
-      'Crea un bloque base en el ambiente que corresponda (dev, qa, pre o prod). CIDR alineado de /8 a /30. No puede solaparse con otro pool del mismo proveedor y ambiente; en otro ambiente o proveedor el mismo rango sí se permite.',
+      'Crea un bloque base en el ambiente que corresponda (dev, qa, lab, pre o prod). CIDR alineado de /8 a /30. No puede solaparse con otro pool del mismo proveedor y ambiente; en otro ambiente o proveedor el mismo rango sí se permite.',
     ),
     h(
       'form',

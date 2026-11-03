@@ -11,7 +11,7 @@ El caso de uso principal: **asignar subredes a un proyecto GCP nuevo a partir de
 | | Qué es | Ejemplo (rangos ficticios) |
 |---|---|---|
 | **Pool** | El bloque grande de un ambiente y tipo (Nodos, Pods o Servicios) | `dev-nodos` = `10.210.0.0/20` |
-| **Reserva** | Un pedazo del pool **apartado por un tiempo**, pendiente de aprobación; expira sola (24 h, máx. 72) | `10.210.1.0/24` para `vpc-ejemplo` |
+| **Reserva** | Un pedazo del pool **apartado por un tiempo**, pendiente de aprobación; expira sola (72 h por defecto, máx. una semana) | `10.210.1.0/24` para `vpc-ejemplo` |
 | **Asignación** | Un pedazo del pool entregado de forma **definitiva**, con ID `ASG-000123` | `10.210.1.0/24` para `vpc-ejemplo` |
 
 Flujo normal: **pedir (reserva) → un admin aprueba → asignación**. Un agente o un ticket de Jira nunca asigna directo.

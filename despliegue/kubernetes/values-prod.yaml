@@ -5,8 +5,8 @@ config:
   publicUrl: https://ipam.ejemplo.interno
   hsts: true
   logLevel: info
-  reservaTtlHoras: 24
-  reservaTtlMaxHoras: 72
+  reservaTtlHoras: 72
+  reservaTtlMaxHoras: 168
   confirmacionExigeAprobador: true
 postgres:
   enabled: false                  # Cloud SQL / RDS / Azure Database: respaldos y alta disponibilidad del proveedor
