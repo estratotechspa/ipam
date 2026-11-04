@@ -223,9 +223,10 @@ async function reservarEnTransaccion(tx, { actor, d, p, config }) {
  * @param {{repo: any, eventos: import('./puertos').PublicadorEventos, config: any, alConfirmar?: (actor: any, reserva: any, asignacion: any, aprobacion: {aprobado_por: string, referencia?: string | null}) => Promise<void>}} deps
  */
 function crearReservas({ repo, eventos, config, alConfirmar }) {
-  /** @param {Array<{id: string, cidr: string, pool_id: string, solicitante: string}>|undefined} lista */
+  /** @param {Array<{id: string, cidr: string, pool_id: string, solicitante: string, grupo?: string|null}>|undefined} lista */
   const publicarExpiradas = async (lista) => {
-    for (const e of lista || []) await eventos.publicar('reserva_expirada', { reserva: e.id, cidr: e.cidr, pool: e.pool_id, solicitante: e.solicitante });
+    for (const e of lista || [])
+      await eventos.publicar('reserva_expirada', { reserva: e.id, cidr: e.cidr, pool: e.pool_id, solicitante: e.solicitante, grupo: e.grupo ?? undefined });
   };
 
   /** Reserva un rango. Idempotente con Idempotency-Key. */

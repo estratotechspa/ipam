@@ -26,4 +26,25 @@ function validarNombres(e) {
   return { ok: true, proyecto: salida.proyecto, subred: salida.subred };
 }
 
-module.exports = { validarNombres };
+// Nombres de recursos de GCP (proyecto, VPC, subred): RFC 1035, en minúsculas. Los espacios de los bordes se recortan y las mayúsculas se
+// pasan a minúsculas; un espacio, un guion bajo u otro símbolo DENTRO del nombre se rechaza (GCP no lo acepta).
+const RFC1035 = /^[a-z]([-a-z0-9]{0,61}[a-z0-9])?$/;
+
+/**
+ * Normaliza y valida un nombre de GCP. Vacío → null (opcional). Devuelve el error con código estable `<campo>_invalido`.
+ * @param {unknown} v @param {string} campo
+ * @returns {{ok: true, valor: string|null} | {ok: false, error: string, mensaje: string}}
+ */
+function validarNombreGcp(v, campo) {
+  if (vacio(v)) return { ok: true, valor: null };
+  const t = String(v).trim().toLowerCase();
+  if (!RFC1035.test(t))
+    return {
+      ok: false,
+      error: `${campo}_invalido`,
+      mensaje: `${campo} «${String(v).slice(0, 80)}» no cumple el formato de nombres de GCP (RFC 1035): minúsculas, números y guiones, empieza con letra, no termina en guion, hasta 63 caracteres y sin espacios.`,
+    };
+  return { ok: true, valor: t };
+}
+
+module.exports = { validarNombres, validarNombreGcp, RFC1035 };

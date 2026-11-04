@@ -5,7 +5,7 @@ El chart está en [`mvp/chart/ipam`](../../mvp/chart/ipam) y no depende de ningu
 ```bash
 # Genérico (cualquier clúster)
 helm upgrade --install ipam mvp/chart/ipam -n ipam --create-namespace \
-  --set image.repository=REGISTRY/ipam --set image.tag=0.4.0 \
+  --set image.repository=REGISTRY/ipam --set image.tag=0.5.0 \
   --set secrets.existingSecret=ipam-secrets          # Secret creado por ti (ver docs/ops/DESPLIEGUE.md)
 
 # Con los ajustes de tu nube (-f se suma al chart; los --set ganan sobre el archivo)

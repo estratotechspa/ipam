@@ -2,7 +2,8 @@
 'use strict';
 // Reglas de un bloque base (pool): datos válidos y que no se solape con NINGÚN otro pool, sea cual sea su ambiente o proveedor
 // (los rangos no se repiten entre dev, qa, lab, pre y prod).
-const { parse, overlap } = require('./cidr');
+const { parse, overlap, contenido } = require('./cidr');
+const { validarNombreGcp } = require('./nombres');
 
 const AMBIENTES = ['dev', 'qa', 'lab', 'pre', 'prod'];
 const ID = /^[a-z0-9][a-z0-9-]{1,62}$/;
@@ -37,8 +38,49 @@ function validarPoolNuevo(e) {
   const lim = validarLimitesMascara(e, c.len);
   if (!lim.ok) return lim;
   const { ok: _ok, ...limites } = lim;
-  return { ok: /** @type {true} */ (true), datos: { id, tipo: t.tipo, ambiente, proveedor: t.proveedor, cidr: String(e.cidr).trim(), ...limites } };
+  const ident = validarIdentidad(e);
+  if (!ident.ok) return ident;
+  return {
+    ok: /** @type {true} */ (true),
+    datos: { id, tipo: t.tipo, ambiente, proveedor: t.proveedor, cidr: String(e.cidr).trim(), ...limites, ...ident.datos },
+  };
 }
+
+/**
+ * Identidad de VPC de un pool (todo opcional): proyecto y vpc con formato de GCP (en minúsculas) y el id del pool padre.
+ * @param {Record<string, unknown>} e
+ */
+function validarIdentidad(e) {
+  const proyecto = validarNombreGcp(e.proyecto, 'proyecto');
+  if (!proyecto.ok) return proyecto;
+  const vpc = validarNombreGcp(e.vpc, 'vpc');
+  if (!vpc.ok) return vpc;
+  if (proyecto.valor && !vpc.valor) return malo('vpc_requerida', 'Si indicas el proyecto, indica también la vpc (el pool es la VPC).');
+  let padre = null;
+  if (e.padre_id !== undefined && e.padre_id !== null && String(e.padre_id).trim() !== '') {
+    padre = String(e.padre_id).trim().toLowerCase();
+    if (!ID.test(padre)) return malo('padre_invalido', 'padre_id debe ser el id de un pool existente.');
+  }
+  return { ok: /** @type {true} */ (true), datos: { proyecto: proyecto.valor, vpc: vpc.valor, padre_id: padre } };
+}
+
+/** Ids de los ancestros de un pool (padre, abuelo…), del más cercano al más lejano. Corta si hubiera un ciclo. */
+function ancestros(padreId, pools) {
+  const porId = new Map(pools.map((p) => [p.id, p]));
+  const salida = [];
+  for (let id = padreId; id && porId.has(id) && !salida.includes(id); id = porId.get(id).padre_id) salida.push(id);
+  return salida;
+}
+
+/** ¿El CIDR del hijo cabe dentro del del padre? @param {string} hijo @param {string} padre */
+function cabeEnPadre(hijo, padre) {
+  const h = parse(hijo);
+  const p = parse(padre);
+  return Boolean(h && p && contenido(h, p));
+}
+
+/** Los hijos directos de un pool, y su espacio, para quien necesite saber qué parte de un pool ya está repartida. */
+const hijosDe = (id, pools) => pools.filter((p) => p.padre_id === id);
 
 /**
  * Límites de máscara de un pool: por defecto, mínima (bloque más grande) y máxima (bloque más chico). Todos opcionales; nulo los quita.
@@ -66,19 +108,23 @@ function validarLimitesMascara(e, largoPool) {
 }
 
 /**
- * Primer pool existente que choca con `nuevo` (mismo proveedor, sin distinguir mayúsculas, y mismo ambiente). Ignora el propio id.
- * @param {{id: string, ambiente: string, proveedor: string, cidr: string}} nuevo
- * @param {Array<{id: string, ambiente: string, proveedor: string, cidr: string}>} pools
+ * Primer pool existente con el que `nuevo` NO puede convivir: un pool solo puede solaparse con sus ancestros (el bloque del que sale)
+ * y con sus descendientes (lo que sale de él). Con cualquier otro pool, del ambiente o proveedor que sea, hay solapamiento.
+ * @param {{id: string, cidr: string, padre_id?: string|null}} nuevo
+ * @param {Array<{id: string, cidr: string, padre_id?: string|null}>} pools
  */
 function chocaConPool(nuevo, pools) {
   const c = parse(nuevo.cidr);
   if (!c) return null;
+  const mios = new Set(ancestros(nuevo.padre_id ?? null, pools));
   return (
     pools.find((p) => {
       const pc = parse(p.cidr);
-      return p.id !== nuevo.id && pc && overlap(pc, c);
+      if (p.id === nuevo.id || !pc || !overlap(pc, c)) return false;
+      if (mios.has(p.id)) return false; // es mi ancestro
+      return !ancestros(p.padre_id ?? null, pools).includes(nuevo.id); // es mi descendiente
     }) || null
   );
 }
 
-module.exports = { validarPoolNuevo, validarTexto, validarLimitesMascara, chocaConPool };
+module.exports = { validarPoolNuevo, validarTexto, validarLimitesMascara, validarIdentidad, chocaConPool, ancestros, cabeEnPadre, hijosDe };

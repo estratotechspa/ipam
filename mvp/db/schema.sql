@@ -414,3 +414,65 @@ alter table pools add column if not exists mascara_maxima int check (mascara_max
 
 insert into esquema_version (version, descripcion) values (17, 'limites de mascara por pool')
   on conflict (version) do nothing;
+
+-- ============================================================================
+-- 0.5.0 · el pool es la VPC: identidad (proveedor, proyecto, vpc) y pools anidados (el bloque de la VPC sale de un pool padre).
+-- ============================================================================
+alter table pools add column if not exists proyecto text check (char_length(proyecto) <= 63);
+alter table pools add column if not exists vpc text check (char_length(vpc) <= 63);
+alter table pools add column if not exists padre_id text references pools(id);
+create index if not exists pools_padre_idx on pools (padre_id) where padre_id is not null;
+-- (proveedor, proyecto, vpc) es único; sin proyecto cuenta como proyecto vacío. Los pools sin vpc no participan.
+create unique index if not exists pools_vpc_unica_idx on pools (lower(proveedor), coalesce(proyecto, ''), vpc) where vpc is not null;
+
+-- El rango «vpc» de una reserva en grupo es el bloque de una VPC nueva (al confirmar nace un pool hijo; no es una asignación).
+do $$
+declare t text;
+begin
+  foreach t in array array['reservas','asignaciones'] loop
+    if not exists (select 1 from pg_constraint where conrelid = t::regclass and contype = 'c' and pg_get_constraintdef(oid) like '%principal%' and pg_get_constraintdef(oid) like '%vpc%') then
+      execute format('alter table %I drop constraint if exists %I', t, t || '_rango_check');
+      execute format('alter table %I add constraint %I check (rango in (''principal'',''pods'',''servicios'',''vpc''))', t, t || '_rango_check');
+    end if;
+  end loop;
+end $$;
+
+-- Garantías en la base (además de las del caso de uso): el hijo cabe en su padre, el padre no reparte lo que ya tiene asignado
+-- y nadie asigna ni reserva dentro de lo que ya es de un pool hijo. «ipam.migrando_pools» lo fija solo el script de migración de
+-- asignaciones existentes a pools hijos (mueve las filas dentro de una transacción).
+create or replace function pool_hijo_valido() returns trigger language plpgsql as $$
+declare padre record;
+begin
+  if new.padre_id is null then return new; end if;
+  select cidr, ambiente, proveedor into padre from pools where id = new.padre_id;
+  if not found or not (new.cidr <<= padre.cidr) or new.cidr = padre.cidr then
+    raise exception 'El pool % (%) no cabe dentro de su padre %', new.id, new.cidr, new.padre_id using errcode = '23514';
+  end if;
+  if coalesce(current_setting('ipam.migrando_pools', true), '') <> 'on' and (tg_op = 'INSERT' or new.cidr is distinct from old.cidr or new.padre_id is distinct from old.padre_id) then
+    if exists (select 1 from asignaciones a where a.pool_id = new.padre_id and a.cidr && new.cidr)
+       or exists (select 1 from reservas r where r.pool_id = new.padre_id and r.estado = 'reservada' and r.expira_en > now() and r.cidr && new.cidr) then
+      raise exception 'El bloque % ya tiene segmentos asignados o reservados en el pool %', new.cidr, new.padre_id using errcode = '23P01';
+    end if;
+  end if;
+  return new;
+end $$;
+drop trigger if exists trg_pool_hijo_valido on pools;
+create trigger trg_pool_hijo_valido before insert or update of cidr, padre_id on pools
+  for each row execute function pool_hijo_valido();
+
+create or replace function ocupado_por_hijo() returns trigger language plpgsql as $$
+begin
+  if exists (select 1 from pools h where h.padre_id = new.pool_id and h.cidr && new.cidr) then
+    raise exception 'El segmento % cae dentro de un pool hijo de %', new.cidr, new.pool_id using errcode = '23P01';
+  end if;
+  return new;
+end $$;
+drop trigger if exists trg_asignacion_fuera_de_hijos on asignaciones;
+create trigger trg_asignacion_fuera_de_hijos before insert or update of pool_id, cidr on asignaciones
+  for each row execute function ocupado_por_hijo();
+drop trigger if exists trg_reserva_fuera_de_hijos on reservas;
+create trigger trg_reserva_fuera_de_hijos before insert on reservas
+  for each row when (new.estado = 'reservada') execute function ocupado_por_hijo();
+
+insert into esquema_version (version, descripcion) values (18, 'el pool es la VPC: proyecto, vpc y pool padre; rango vpc en reservas')
+  on conflict (version) do nothing;

@@ -10,7 +10,7 @@ variable "region" {
 }
 
 variable "imagen" {
-  description = "Imagen del IPAM (registro configurable: Artifact Registry, GHCR, GitLab Registry…). Ejemplo: us-central1-docker.pkg.dev/PROYECTO/ipam/ipam:0.4.0"
+  description = "Imagen del IPAM (registro configurable: Artifact Registry, GHCR, GitLab Registry…). Ejemplo: us-central1-docker.pkg.dev/PROYECTO/ipam/ipam:0.5.0"
   type        = string
 }
 

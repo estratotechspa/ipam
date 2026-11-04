@@ -17,6 +17,7 @@ const GRUPOS = {
       'GET /reservas/grupo',
       'POST /reservas/grupo/:id/renovar',
       'GET /reservas/grupo/:id',
+      'GET /reservas/grupo/:id/eventos',
       'DELETE /reservas/grupo/:id',
     ],
   },

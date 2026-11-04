@@ -40,7 +40,16 @@ function montar(app, { casos, audita, validacion }) {
     const r = await pools.crear(req.body);
     if (!r.ok) return enviarFallo(res, r, { legado: false });
     const p = r.pool;
-    await audita(req, 'crear_pool', { pool: p.id, cidr: p.cidr, ambiente: p.ambiente, proveedor: p.proveedor, tipo: p.tipo });
+    await audita(req, 'crear_pool', {
+      pool: p.id,
+      cidr: p.cidr,
+      ambiente: p.ambiente,
+      proveedor: p.proveedor,
+      tipo: p.tipo,
+      proyecto: p.proyecto,
+      vpc: p.vpc,
+      padre: p.padre_id,
+    });
     res.status(201).json(p);
   });
   api(app, 'patch', '/pools/:id', requiere('admin'), validacion.cuerpo('PoolEditar'), async (req, res) => {
@@ -48,9 +57,12 @@ function montar(app, { casos, audita, validacion }) {
     if (!r.ok) return enviarFallo(res, r, { legado: false });
     await audita(req, 'editar_pool', {
       pool: r.pool.id,
-      antes: { tipo: r.antes.tipo, proveedor: r.antes.proveedor },
+      antes: { tipo: r.antes.tipo, proveedor: r.antes.proveedor, proyecto: r.antes.proyecto, vpc: r.antes.vpc, padre: r.antes.padre_id },
       tipo: r.pool.tipo,
       proveedor: r.pool.proveedor,
+      proyecto: r.pool.proyecto,
+      vpc: r.pool.vpc,
+      padre: r.pool.padre_id,
     });
     res.json(r.pool);
   });
