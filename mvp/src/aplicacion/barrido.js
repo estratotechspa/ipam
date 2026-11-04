@@ -15,7 +15,7 @@ function crearBarrido({ repo, eventos, intervaloMs, instancia }) {
       return { expiradas, contadoresBorrados };
     });
     if (r.ejecutado)
-      for (const e of r.expiradas) await eventos.publicar('reserva_expirada', { reserva: e.id, cidr: e.cidr, pool: e.pool_id, solicitante: e.solicitante });
+      for (const e of r.expiradas) await eventos.publicar('reserva_expirada', { reserva: e.id, cidr: e.cidr, pool: e.pool_id, solicitante: e.solicitante, grupo: e.grupo ?? undefined });
     return r;
   }
   return { barrer };

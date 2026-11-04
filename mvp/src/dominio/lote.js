@@ -3,11 +3,13 @@
 // Reserva en grupo (lote): validación del pedido y comparación de pedidos repetidos. Reglas PURAS (sin base de datos ni red).
 // Un pedido es UN grupo: todos sus rangos se reservan, se aprueban y se liberan juntos, aunque sean de varias subredes.
 const R = require('./reserva');
-const { validarNombres } = require('./nombres');
+const { validarNombreGcp } = require('./nombres');
 const { AMBIENTES, normalizarAmbiente } = require('./ambiente');
 
-const USOS = ['nodos', 'pods', 'servicios'];
-const RANGO_DE = { nodos: 'principal', pods: 'pods', servicios: 'servicios' };
+// «vpc» no es un rango de clúster: es el bloque de una VPC nueva (al confirmarlo, IPAM crea el pool hijo con esa identidad).
+const USOS = ['nodos', 'pods', 'servicios', 'vpc'];
+const RANGO_DE = { nodos: 'principal', pods: 'pods', servicios: 'servicios', vpc: 'vpc' };
+const ID_POOL = /^[a-z0-9][a-z0-9-]{1,62}$/;
 // Una subred de GCP no admite más chico que /29. El tamaño por defecto, el mínimo y el máximo de cada pool los define el admin (pool).
 const MASCARA_MIN = 8;
 const MASCARA_MAX = 29;
@@ -34,7 +36,7 @@ function validarRango(r) {
     return malo('mascara_invalida', `La máscara de «${uso}» debe ser un entero entre ${MASCARA_MIN} y ${MASCARA_MAX}.`);
   const nombre = textoOpcional(r.nombre, 80, 'nombre');
   if (!nombre.ok) return nombre;
-  const subred = textoOpcional(r.subred, 80, 'subred');
+  const subred = validarNombreGcp(r.subred, 'subred');
   if (!subred.ok) return subred;
   return { ok: true, rango: { uso, mascara: pedida, nombre: nombre.valor, subred: subred.valor } };
 }
@@ -58,10 +60,16 @@ function normalizarLote(e, claveHeader, config) {
     return malo('ambiente_invalido', `El ambiente debe ser uno de: ${AMBIENTES.join(', ')} (prd = prod).`);
   const rangos = validarRangos(e.rangos);
   if (!rangos.ok) return rangos;
-  const nom = validarNombres(e);
-  if (!nom.ok) return malo(nom.error, nom.mensaje);
-  if (e.vpc !== undefined && e.vpc !== null && (typeof e.vpc !== 'string' || e.vpc.trim().length > 120))
-    return malo('vpc_invalido', 'La VPC admite hasta 120 caracteres.');
+  // Proyecto, VPC y subred son nombres de GCP: se normalizan (minúsculas, sin espacios en los bordes) y se validan (RFC 1035).
+  const proyecto = validarNombreGcp(e.proyecto, 'proyecto');
+  if (!proyecto.ok) return malo(proyecto.error, proyecto.mensaje);
+  const subredPedido = validarNombreGcp(e.subred, 'subred');
+  if (!subredPedido.ok) return malo(subredPedido.error, subredPedido.mensaje);
+  if (e.vpc !== undefined && e.vpc !== null && typeof e.vpc !== 'string') return malo('vpc_invalido', 'La VPC debe ser un texto.');
+  const vpc = validarNombreGcp(e.vpc, 'vpc');
+  if (!vpc.ok) return malo(vpc.error, vpc.mensaje);
+  const bloque = validarBloqueVpc(e, rangos.rangos, proyecto.valor, vpc.valor);
+  if (!bloque.ok) return bloque;
   if (!vacio(e.grupo) && !UUID.test(String(e.grupo))) return malo('grupo_invalido', 'grupo debe ser el identificador (UUID) de un grupo existente.');
   const ttl = R.validarTtl(e.ttl_horas, { defecto: config.reservas.ttlHoras, max: config.reservas.ttlMaxHoras });
   if (!ttl.ok) return malo(ttl.error, ttl.mensaje);
@@ -69,14 +77,15 @@ function normalizarLote(e, claveHeader, config) {
   if (!t.ok) return malo(t.error, t.mensaje);
   const k = R.validarClaveIdem(claveHeader);
   if (!k.ok) return malo(k.error, k.mensaje);
-  const rangosConSubred = rangos.rangos.map((r) => ({ ...r, subred: r.subred ?? nom.subred }));
+  const rangosConSubred = rangos.rangos.map((r) => ({ ...r, subred: r.subred ?? subredPedido.valor }));
   return {
     ok: true,
     d: {
       ambiente,
       rangos: rangosConSubred,
-      proyecto: nom.proyecto,
-      vpc: (e.vpc || '').trim(),
+      proyecto: proyecto.valor,
+      vpc: vpc.valor || '',
+      padre: bloque.padre,
       ticket: t.ticket,
       ttlHoras: ttl.horas,
       clave: k.clave,
@@ -84,6 +93,27 @@ function normalizarLote(e, claveHeader, config) {
       versionTabla: vacio(e.version_tabla) ? null : String(e.version_tabla).slice(0, 64),
     },
   };
+}
+
+/**
+ * Reglas del rango «vpc» (bloque de una VPC nueva): va solo, una vez, con proyecto, vpc y máscara, y no se agrega a un grupo.
+ * `padre` (opcional) es el pool del que sale el bloque; si falta, el pool de «ambiente + nodos».
+ */
+function validarBloqueVpc(e, rangos, proyecto, vpc) {
+  const bloques = rangos.filter((r) => r.uso === 'vpc');
+  const padre = vacio(e.padre) ? null : String(e.padre).trim().toLowerCase();
+  if (!bloques.length) return padre ? malo('padre_sin_vpc', '`padre` solo se usa al reservar el bloque de una VPC (uso «vpc»).') : { ok: true, padre: null };
+  if (rangos.length !== 1)
+    return malo(
+      'vpc_no_se_mezcla',
+      'El bloque de la VPC se reserva solo y una vez: pide los nodos, pods y servicios en otro lote, cuando el bloque esté confirmado.',
+    );
+  if (!vpc) return malo('vpc_requerida', 'Para reservar el bloque de una VPC indica `vpc`.');
+  if (!proyecto) return malo('proyecto_requerido', 'Para reservar el bloque de una VPC indica el `proyecto`.');
+  if (bloques[0].mascara === null) return malo('falta_tamano', 'Indica la `mascara` del bloque de la VPC (p. ej. 20).');
+  if (!vacio(e.grupo)) return malo('vpc_no_se_mezcla', 'El bloque de la VPC no se agrega a un grupo existente.');
+  if (padre && !ID_POOL.test(padre)) return malo('padre_invalido', '`padre` debe ser el id de un pool existente.');
+  return { ok: true, padre };
 }
 
 const largoDe = (/** @type {string} */ cidr) => Number(String(cidr).split('/')[1]);
