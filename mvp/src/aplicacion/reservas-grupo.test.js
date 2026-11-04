@@ -22,7 +22,7 @@ const PEDIDO = {
   rangos: [{ uso: 'nodos', mascara: 24 }, { uso: 'pods' }, { uso: 'servicios' }],
 };
 
-async function entorno({ cuota = 10, mapear = true } = {}) {
+async function entorno({ cuota = 10, mapear = true, exigir = [] } = {}) {
   const reloj = {
     t: new Date('2026-11-03T12:00:00Z'),
     ahora() {
@@ -35,7 +35,7 @@ async function entorno({ cuota = 10, mapear = true } = {}) {
   const repo = crearRepositorioMemoria({ reloj, pools: POOLS });
   const publicados = [];
   const eventos = { publicar: async (tipo, d) => void publicados.push({ tipo, ...d }) };
-  const config = { reservas: { ttlHoras: 72, ttlMaxHoras: 168, exigeAprobador: false }, limite: { cuotaReservasPorToken: cuota } };
+  const config = { reservas: { ttlHoras: 72, ttlMaxHoras: 168, exigeAprobador: false, exigirPoolVpc: exigir }, limite: { cuotaReservasPorToken: cuota } };
   const g = { ...crearReservasGrupo({ repo, eventos, config }), ...crearGestionGrupo({ repo, eventos, config }) };
   const uso = crearPoolUso({ repo });
   if (mapear) {
@@ -397,4 +397,125 @@ test('simulación con contexto: cuota, libre de cada pool y versión de la tabla
   await uso.borrar('dev', 'servicios');
   const r = await g.reservarLote(ADMIN, { ...nuevo, version_tabla: v });
   assert.deepEqual([r.ok, r.error], [false, 'version_tabla_cambiada']);
+});
+
+const BLOQUE = { ambiente: 'dev', proyecto: 'proy-x', vpc: 'vpc-x', rangos: [{ uso: 'vpc', mascara: 20 }] };
+
+test('el pool de la VPC: el bloque se reserva sin crear nada y, al confirmar, nace el pool hijo; los nodos salen de él', async () => {
+  const { g, repo, publicados } = await entorno();
+  const r = await g.reservarLote(AGENTE, BLOQUE);
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.deepEqual([r.grupo.rangos[0].rango, r.grupo.rangos[0].pool_id, r.grupo.rangos[0].cidr], ['vpc', 'dev-nodos', '172.31.0.0/20']);
+  assert.equal(await repo.obtenerPool('vpc-x'), undefined, 'reservar no crea el pool');
+  const c = await g.confirmarGrupo(ADMIN, r.grupo.grupo, {});
+  assert.equal(c.ok, true, JSON.stringify(c));
+  assert.deepEqual(
+    c.pools_creados.map((p) => [p.id, p.padre_id, p.proyecto, p.vpc, p.cidr]),
+    [['vpc-x', 'dev-nodos', 'proy-x', 'vpc-x', '172.31.0.0/20']],
+  );
+  assert.ok(
+    publicados.some((e) => e.id === 'vpc-x' && e.grupo === r.grupo.grupo),
+    'se publica pool_creado',
+  ); // (el arnés mezcla el tipo del pool con el del evento)
+  const nodos = await g.reservarLote(AGENTE, { ambiente: 'dev', proyecto: 'proy-x', vpc: 'vpc-x', rangos: [{ uso: 'nodos', mascara: 24 }] });
+  assert.equal(nodos.grupo.rangos[0].pool_id, 'vpc-x');
+  assert.equal((await repo.ocupados('dev-nodos')).includes('172.31.0.0/20'), true, 'el bloque cuenta como ocupado en el padre');
+  const sim = await g.reservarLote(
+    AGENTE,
+    { ambiente: 'dev', vpc: 'vpc-x', proyecto: 'proy-x', rangos: [{ uso: 'nodos', mascara: 24 }, { uso: 'pods' }] },
+    undefined,
+    { simular: true },
+  );
+  assert.deepEqual(
+    sim.rangos.map((x) => [x.pool, x.criterio]),
+    [
+      ['vpc-x', 'vpc'],
+      ['dev-pods', 'pool_uso'],
+    ],
+  );
+  // Liberar el grupo del bloque con una subred dentro se rechaza; sin ella, retira el pool.
+  const rechazo = await g.liberarGrupo(ADMIN, r.grupo.grupo);
+  assert.deepEqual([rechazo.ok, rechazo.error], [false, 'pool_en_uso']);
+  assert.notEqual(await repo.obtenerPool('vpc-x'), undefined);
+  await g.liberarGrupo(AGENTE, nodos.grupo.grupo);
+  assert.equal((await g.liberarGrupo(ADMIN, r.grupo.grupo)).pools_eliminados.length, 1);
+  assert.equal(await repo.obtenerPool('vpc-x'), undefined, 'vacío, el pool se retira con su bloque');
+});
+
+test('el bloque de la VPC expirado o liberado no crea pool; confirmar uno expirado se rechaza', async () => {
+  const { g, repo, reloj } = await entorno();
+  const a = await g.reservarLote(AGENTE, BLOQUE);
+  await g.liberarGrupo(AGENTE, a.grupo.grupo);
+  assert.equal(await repo.obtenerPool('vpc-x'), undefined);
+  const b = await g.reservarLote(AGENTE, { ...BLOQUE, vpc: 'vpc-y' });
+  reloj.avanzar(80);
+  const c = await g.confirmarGrupo(ADMIN, b.grupo.grupo, {});
+  assert.deepEqual([c.ok, c.error], [false, 'reserva_no_vigente']);
+  assert.equal(await repo.obtenerPool('vpc-y'), undefined);
+});
+
+test('exigir_pool_vpc por ambiente: sin pool, vpc_sin_pool; apagado, pool-uso como siempre; otro ambiente no se afecta', async () => {
+  const { g } = await entorno({ exigir: ['dev'] });
+  const r = await g.reservarLote(AGENTE, { ambiente: 'dev', vpc: 'sin-pool', proyecto: 'p', rangos: [{ uso: 'nodos', mascara: 24 }] });
+  assert.deepEqual([r.ok, r.error], [false, 'vpc_sin_pool']);
+  assert.equal((await g.reservarLote(AGENTE, { ambiente: 'dev', rangos: [{ uso: 'nodos', mascara: 24 }] })).error, 'vpc_requerida');
+  assert.equal((await g.reservarLote(AGENTE, { ambiente: 'dev', vpc: 'sin-pool', rangos: [{ uso: 'pods' }] })).ok, true, 'solo los nodos se exigen por VPC');
+  const apagado = await entorno({ exigir: [] });
+  const ok = await apagado.g.reservarLote(AGENTE, { ambiente: 'dev', vpc: 'sin-pool', proyecto: 'p', rangos: [{ uso: 'nodos', mascara: 24 }] });
+  assert.deepEqual([ok.ok, ok.grupo.rangos[0].pool_id], [true, 'dev-nodos']);
+  const todos = await entorno({ exigir: ['todos'] });
+  assert.equal((await todos.g.reservarLote(AGENTE, { ambiente: 'dev', vpc: 'sin-pool', rangos: [{ uso: 'nodos', mascara: 24 }] })).error, 'vpc_sin_pool');
+});
+
+test('vpc_incoherente: una VPC con otro proyecto en el mismo ambiente; vpc_ambigua si dos pools la comparten y no se indica el proyecto', async () => {
+  const { g, repo } = await entorno();
+  await g.reservarLote(AGENTE, { ambiente: 'dev', vpc: 'vpc-z', proyecto: 'uno', rangos: [{ uso: 'pods' }] });
+  const mal = await g.reservarLote(AGENTE, { ambiente: 'dev', vpc: 'vpc-z', proyecto: 'dos', rangos: [{ uso: 'servicios' }] });
+  assert.deepEqual([mal.ok, mal.error, mal.proyectos_existentes], [false, 'vpc_incoherente', ['uno']]);
+  assert.equal((await g.reservarLote(AGENTE, { ambiente: 'dev', vpc: 'vpc-z', proyecto: 'uno', rangos: [{ uso: 'servicios' }] })).ok, true);
+  await repo.insertarPoolSiNoExiste({
+    id: 'z-uno',
+    tipo: 'VPC',
+    ambiente: 'dev',
+    proveedor: 'GCP',
+    cidr: '172.31.16.0/20',
+    vpc: 'otra',
+    proyecto: 'uno',
+    padre_id: 'dev-nodos',
+  });
+  await repo.insertarPoolSiNoExiste({
+    id: 'z-dos',
+    tipo: 'VPC',
+    ambiente: 'dev',
+    proveedor: 'GCP',
+    cidr: '172.31.32.0/20',
+    vpc: 'otra',
+    proyecto: 'dos',
+    padre_id: 'dev-nodos',
+  });
+  const amb = await g.reservarLote(AGENTE, { ambiente: 'dev', vpc: 'otra', rangos: [{ uso: 'nodos', mascara: 24 }] });
+  assert.deepEqual([amb.error, amb.opciones.length], ['vpc_ambigua', 2]);
+});
+
+test('el bloque de la VPC: va solo, con proyecto y máscara; el padre es de su ambiente y la VPC no se repite', async () => {
+  const { g } = await entorno();
+  assert.equal((await g.reservarLote(AGENTE, { ...BLOQUE, rangos: [{ uso: 'vpc', mascara: 20 }, { uso: 'pods' }] })).error, 'vpc_no_se_mezcla');
+  assert.equal((await g.reservarLote(AGENTE, { ...BLOQUE, proyecto: undefined })).error, 'proyecto_requerido');
+  assert.equal((await g.reservarLote(AGENTE, { ...BLOQUE, rangos: [{ uso: 'vpc' }] })).error, 'falta_tamano');
+  assert.equal((await g.reservarLote(AGENTE, { ...BLOQUE, padre: 'qa-todo' })).error, 'pool_de_otro_ambiente');
+  assert.equal((await g.reservarLote(AGENTE, { ...BLOQUE, rangos: [{ uso: 'vpc', mascara: 18 }] })).error, 'mascara_invalida', 'no más grande que el padre');
+  const bien = await g.reservarLote(AGENTE, { ...BLOQUE, padre: 'dev-nodos' }, 'k-1');
+  assert.equal(bien.ok, true, JSON.stringify(bien));
+  assert.equal((await g.reservarLote(AGENTE, { ...BLOQUE, padre: 'dev-nodos' }, 'k-1')).repetida, true, 'la repetición idempotente devuelve el mismo grupo');
+  assert.equal((await g.reservarLote(OTRO, BLOQUE)).error, 'vpc_duplicada');
+});
+
+test('B1: el dueño ve los eventos de su grupo; otro token no', async () => {
+  const { g, repo } = await entorno();
+  const r = await g.reservarLote(AGENTE, PEDIDO);
+  await repo.registrarEvento('grupo_reservado', { grupo: r.grupo.grupo });
+  assert.equal((await g.eventosDeGrupo(AGENTE, r.grupo.grupo)).eventos.length, 1);
+  assert.equal((await g.eventosDeGrupo(ADMIN, r.grupo.grupo)).ok, true);
+  assert.equal((await g.eventosDeGrupo(OTRO, r.grupo.grupo)).error, 'no_es_dueno');
+  assert.equal((await g.eventosDeGrupo(AGENTE, 'no-uuid')).error, 'no_encontrado');
 });

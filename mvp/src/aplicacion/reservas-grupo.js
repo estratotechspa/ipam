@@ -91,7 +91,7 @@ function destinoDe(r, pool, criterio, motivo) {
  * A1: el bloque de una VPC nueva sale de un pool padre (`padre` del pedido o, por defecto, el pool de «ambiente + nodos») y no puede
  * repetir la identidad de una VPC que ya tiene pool o un bloque reservado. Aquí no se crea nada: el pool nace al confirmar un admin.
  */
-async function resolverBloqueVpc(repo, d) {
+async function resolverBloqueVpc(repo, d, { repeticion = false } = {}) {
   const r = d.rangos[0];
   let padreId = d.padre;
   if (!padreId) {
@@ -111,12 +111,15 @@ async function resolverBloqueVpc(repo, d) {
   const base = parse(padre.cidr);
   if (!base || r.mascara <= base.len)
     return malo('mascara_invalida', `El bloque de la VPC (/${r.mascara}) debe ser más chico que el pool ${padre.id} (${padre.cidr}).`);
-  const incoherente = await revisarCoherenciaVpc(repo, d);
+  // Una petición repetida (misma Idempotency-Key) devuelve el grupo que ya existe: su propia reserva no cuenta como duplicada.
+  const incoherente = repeticion ? null : await revisarCoherenciaVpc(repo, d);
   if (incoherente) return incoherente;
-  const ya = (await repo.poolesPorVpc({ ambiente: d.ambiente, vpc: d.vpc, proyecto: d.proyecto })).find(
-    (p) => (p.proyecto ?? '') === d.proyecto && p.proveedor.toLowerCase() === padre.proveedor.toLowerCase(),
-  );
-  const pendiente = ya ? null : await repo.reservaDeVpcPendiente({ proyecto: d.proyecto, vpc: d.vpc });
+  const ya = repeticion
+    ? null
+    : (await repo.poolesPorVpc({ ambiente: d.ambiente, vpc: d.vpc, proyecto: d.proyecto })).find(
+        (p) => (p.proyecto ?? '') === d.proyecto && p.proveedor.toLowerCase() === padre.proveedor.toLowerCase(),
+      );
+  const pendiente = ya || repeticion ? null : await repo.reservaDeVpcPendiente({ proyecto: d.proyecto, vpc: d.vpc });
   if (ya || pendiente)
     return fallo('conflicto', 'vpc_duplicada', {
       mensaje: ya
@@ -137,8 +140,8 @@ async function resolverBloqueVpc(repo, d) {
 }
 
 /** Resuelve el pool de cada rango: nodos por VPC si hay pool, el resto con la tabla ambiente + uso → pool; y comprueba que la máscara quepa. */
-async function resolverPools(repo, d, config) {
-  if (d.rangos.some((r) => r.uso === 'vpc')) return resolverBloqueVpc(repo, d);
+async function resolverPools(repo, d, config, opciones) {
+  if (d.rangos.some((r) => r.uso === 'vpc')) return resolverBloqueVpc(repo, d, opciones);
   const incoherente = await revisarCoherenciaVpc(repo, d);
   if (incoherente) return incoherente;
   let eleccion = null; // la elección por VPC es la misma para todos los rangos de nodos del pedido
@@ -307,7 +310,8 @@ function crearReservasGrupo({ repo, eventos, config }) {
     const n = normalizarLote(entrada || {}, claveHeader, config);
     if (!n.ok) return malo(n.error, n.mensaje);
     const d = n.d;
-    const dest = await resolverPools(repo, d, config);
+    const repeticion = Boolean(d.clave && (await repo.reservaPorClave(actor.nombre, `${d.clave}:0`)));
+    const dest = await resolverPools(repo, d, config, { repeticion });
     if (!dest.ok) return dest;
     const idsPools = [...new Set(dest.destinos.map((x) => x.pool.id))].sort();
     const version = await repo.versionPoolUso();

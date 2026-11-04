@@ -25,6 +25,7 @@ Tipos: *texto*, *entero*, *booleano* (`true`/`false`) y *lista* (valores separad
 | `AUTH_LOCAL` | booleano | false | Habilita cuentas locales con contraseña (solo en modo Basic): el admin las crea, desactiva, elimina y restablece desde la pestaña Usuarios. APP_USER/APP_PASS sigue siendo el administrador de emergencia. Para uso real, prefiere OIDC.  |
 | `RETENCION_DIAS` | entero | 365 | Días que se conservan los eventos. `npm run purgar` (usuario migrador) borra lo anterior; 0 = conservar todo. La auditoría no se purga (es de solo inserción).  |
 | `CONFIRMACION_EXIGE_APROBADOR` | booleano | true | Un token de servicio debe indicar quién aprobó (aprobado_por) y la referencia (MR) al confirmar. Regla human-in-the-loop.  |
+| `EXIGIR_POOL_VPC` | lista | (vacía) | Ambientes (dev, qa, lab, pre, prod; «todos» = todos) donde /reservas/lote exige que la VPC de los nodos tenga su propio pool: sin pool, 422 `vpc_sin_pool`. Apagado por defecto: sin la bandera, una VPC sin pool sigue saliendo del pool de «ambiente + uso» (pool-uso). Ej.: `dev,qa` |
 | `BARREDOR_INTERVALO_SEGUNDOS` | entero | 60 | Cada cuánto corre el barredor (limpia reservas vencidas y contadores).  |
 | `CUOTA_RESERVAS_POR_TOKEN` | entero | 20 | Reservas «reservada» vigentes simultáneas por token (se puede fijar otra al crearlo).  |
 | `LIMITE_ALMACEN` | texto | postgres | Dónde se cuentan las peticiones: «postgres» (varias réplicas) o «memoria» (solo pruebas). Opciones: postgres, memoria. |

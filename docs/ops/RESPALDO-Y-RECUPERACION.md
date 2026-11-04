@@ -33,6 +33,7 @@ Cada versión del esquema es **aditiva e idempotente** (solo agrega columnas, í
 
 | Versión | Reversión (como dueño de las tablas, en el esquema de la aplicación) |
 |---|---|
+| 18 | `drop trigger trg_reserva_fuera_de_hijos on reservas; drop trigger trg_asignacion_fuera_de_hijos on asignaciones; drop trigger trg_pool_hijo_valido on pools; drop function ocupado_por_hijo(), pool_hijo_valido(); drop index pools_vpc_unica_idx, pools_padre_idx; alter table pools drop column padre_id, drop column vpc, drop column proyecto; delete from esquema_version where version = 18;` (el rango `vpc` de `reservas` y `asignaciones` queda permitido en la restricción; si ya hay filas con ese rango, bórralas antes) |
 | 17 | `alter table pools drop column mascara_defecto, drop column mascara_minima, drop column mascara_maxima; delete from esquema_version where version = 17;` |
 | 16 | `alter table reservas drop column nombre; alter table asignaciones drop column nombre; delete from esquema_version where version = 16;` |
 | 15 | `drop table pool_uso; alter table reservas drop column grupo, drop column rango; alter table asignaciones drop column grupo, drop column rango; delete from esquema_version where version = 15;` |
