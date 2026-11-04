@@ -43,6 +43,7 @@ data:
   RESERVA_TTL_MAX_HORAS: {{ .Values.config.reservaTtlMaxHoras | quote }}
   CONFIRMACION_EXIGE_APROBADOR: {{ .Values.config.confirmacionExigeAprobador | quote }}
   BARREDOR_INTERVALO_SEGUNDOS: {{ .Values.config.barredorIntervaloSegundos | quote }}
+  EXIGIR_POOL_VPC: {{ .Values.config.exigirPoolVpc | quote }}
   {{- range $k, $val := dict "BRAND_NAME" .Values.branding.name "BRAND_SUBTITLE" .Values.branding.subtitle "BRAND_FOOTER" .Values.branding.footer "BRAND_COLOR" .Values.branding.color "BRAND_COLOR_TOP" .Values.branding.colorTop "BRAND_COLOR_ACCENT" .Values.branding.colorAccent }}
   {{- if $val }}
   {{ $k }}: {{ $val | quote }}
