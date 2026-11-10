@@ -219,3 +219,19 @@ test('resumen para gerencia: semáforo, qué cabe todavía y reparto por proyect
     ],
   );
 });
+
+test('mayor bloque libre y cuántos bloques caben, a partir de la disponibilidad por máscara', async () => {
+  const { mayorBloqueLibre, bloquesQueCaben } = await cargar();
+  const por = [
+    { mascara: 20, bloques_libres: 0 },
+    { mascara: 21, bloques_libres: 1 },
+    { mascara: 22, bloques_libres: 3 },
+    { mascara: 24, bloques_libres: 12 },
+  ];
+  assert.equal(mayorBloqueLibre(por), 21);
+  assert.equal(bloquesQueCaben(por, 22), 3);
+  assert.equal(bloquesQueCaben(por, 20), 0);
+  assert.equal(bloquesQueCaben(por, 26), 0); // máscara que no está en la lista
+  assert.equal(mayorBloqueLibre([{ mascara: 24, bloques_libres: 0 }]), null);
+  assert.equal(mayorBloqueLibre(null), null);
+});
