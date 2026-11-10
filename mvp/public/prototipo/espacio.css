@@ -1,0 +1,45 @@
+/* Prototipo «Espacio de direcciones». Usa los tokens de app.css (también en modo oscuro).
+   Ambiente y estado no comparten color: el ambiente se escribe, el estado se dibuja (lleno, rayado, vacío). */
+
+.resumen{font-size:var(--fs-lg);line-height:1.35;max-width:62ch;margin:0 0 var(--sp-5)}
+.cabe-form{max-width:360px;margin:0 0 var(--sp-4)}
+.cabe-form label{margin-top:0}
+
+.leyenda-franja{display:flex;flex-wrap:wrap;gap:var(--sp-2) var(--sp-5);list-style:none;padding:0;margin:0 0 var(--sp-5);color:var(--mut);font-size:var(--fs-xs)}
+.leyenda-franja li{display:inline-flex;align-items:center;gap:var(--sp-2)}
+.muestra-franja{display:inline-block;width:22px;height:14px;flex:none}
+
+/* Una VPC: cabecera, la franja a escala y su detalle */
+.vpc{margin:0 0 var(--sp-5);padding:0 0 var(--sp-4);border-bottom:1px solid var(--line)}
+.vpc-cab{display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--sp-2) var(--sp-4);margin:0 0 var(--sp-2)}
+.vpc-cab h3{margin:0;font-size:var(--fs-lg)}
+.vpc-cab .muted{margin:0}
+.amb{display:inline-block;border:1px solid var(--borde-campo);border-radius:var(--r-sm);padding:0 var(--sp-2);font-size:var(--fs-xs);color:var(--fg)}
+.vpc-dato{margin:0 0 var(--sp-3);max-width:70ch}
+.cidr{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.92em;white-space:nowrap}
+
+/* La franja: 32 columnas de /24. Una VPC más chica ocupa menos ancho, porque la escala es la misma. */
+.franja{display:flex;flex-direction:column;gap:2px;margin:0 0 var(--sp-2)}
+.franja-fila{display:grid;grid-template-columns:repeat(32,minmax(0,1fr));gap:2px}
+.celda-libre{display:block;height:36px;border:1px dashed var(--borde-campo);border-radius:2px;background:transparent}
+.celda-libre.mayor{border:1px solid var(--fg);box-shadow:inset 0 0 0 1px var(--fg)}
+.celda-libre.cabe{background:color-mix(in srgb,var(--blue) 22%,transparent);border:2px solid var(--blue)}
+.pieza{display:block;height:36px;min-width:0;padding:0 6px;border:2px solid transparent;border-radius:2px;font:inherit;font-size:11px;line-height:32px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.pieza.asignado{background:var(--blue);border-color:var(--blue);color:#fff}
+.pieza.reservado{background-color:var(--aviso-bg);background-image:repeating-linear-gradient(45deg,color-mix(in srgb,var(--uso-reservado) 35%,transparent) 0 3px,transparent 3px 8px);border-color:var(--uso-reservado);color:var(--aviso-fg)}
+.pieza:hover{filter:brightness(1.12)}
+.franja-detalle{min-height:1.5em;margin:var(--sp-2) 0 0;font-size:var(--fs-sm)}
+.vpc-cabe{min-height:1.5em;margin:var(--sp-1) 0 var(--sp-3);font-size:var(--fs-sm);font-weight:600}
+.vpc-cabe.no{color:var(--peligro)}
+.vpc details{margin-top:var(--sp-2)}
+.vpc summary{cursor:pointer}
+
+/* Reservas: el tiempo que queda es la primera columna y lo urgente se ve sin leer el resto */
+#reservas td:first-child{font-weight:600}
+#reservas tr.pronto td:first-child{border-left:4px solid var(--aviso);color:var(--aviso)}
+#reservas tr.ya td:first-child{border-left:4px solid var(--peligro);color:var(--peligro)}
+
+@media (max-width:640px){
+  .pieza{font-size:0}
+  .resumen{font-size:var(--fs-md)}
+}

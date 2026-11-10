@@ -3,6 +3,8 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y versionado semántico.
 
 ## [Sin publicar]
+### Prototipo de interfaz
+- **Espacio de direcciones** (`/prototipo/espacio.html`): página aparte con datos de ejemplo, sin llamar a la API ni tocar las pantallas actuales. Muestra cada VPC como una franja a escala (cada cuadro es un /24) con lo asignado, lo reservado y lo libre, marca el **mayor bloque libre** y responde «¿cabe una subred de este tamaño?». Las reservas por vencer se ordenan por el tiempo que queda. El ambiente se escribe y el estado se dibuja, para que el verde y el rojo no signifiquen dos cosas a la vez.
 ### Interfaz de clústeres
 - **Pestaña «Clústeres».** Cada fila es un grupo de rangos reservados juntos (nodos, pods y servicios), con proyecto, subred, ambiente, los CIDR, el estado y cuánto falta para que venza. Se despliega para ver cada rango con su nombre, subred y pool. **Aprobar los N rangos** (solo admin) y **Rechazar y liberar** operan sobre el grupo entero. Filtro por estado y búsqueda.
 - **Segmentos:** nueva columna **Rango** (Nodos, Pods, Servicios y su nombre), también buscable. Un rango de un grupo muestra **Ver el clúster** en lugar de Confirmar y Liberar sueltos (la API los rechaza con `reserva_de_grupo`).
