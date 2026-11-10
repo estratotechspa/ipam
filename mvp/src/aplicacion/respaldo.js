@@ -47,7 +47,9 @@ function crearRespaldo({ repo, reloj, rolesUsuario }) {
     try {
       await repo.transaccion(async (tx) => {
         await tx.bloquear('importar');
-        for (const p of d.pools) r.pools += await tx.insertarPoolSiNoExiste(p);
+        // Los padres antes que los hijos (el bloque más grande primero): el hijo referencia a su padre.
+        const largo = (p) => Number(String(p.cidr).split('/')[1]);
+        for (const p of [...d.pools].sort((x, y) => largo(x) - largo(y))) r.pools += await tx.insertarPoolSiNoExiste(p);
         for (const a of d.asignaciones) {
           const origen = ORIGENES_IMPORTABLES.includes(a.origen) ? a.origen : 'panel';
           if (await tx.insertarAsignacionImportada({ ...a, origen })) r.asignaciones += 1;

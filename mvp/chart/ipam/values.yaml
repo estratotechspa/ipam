@@ -1,6 +1,6 @@
 image:
   repository: ipam-mvp          # p. ej. ghcr.io/estratotechspa/ipam
-  tag: "0.4.0"
+  tag: "0.5.0"
   pullPolicy: IfNotPresent
 imagePullSecrets: []            # [{name: ghcr-pull}] si el registro es privado
 
@@ -33,6 +33,7 @@ config:
   reservaTtlHoras: 72           # vigencia por defecto
   reservaTtlMaxHoras: 168       # máximo que se puede pedir
   confirmacionExigeAprobador: true   # un token debe declarar quién aprobó (aprobado_por) y la referencia al confirmar (human-in-the-loop)
+  exigirPoolVpc: ""            # ambientes donde el lote exige pool propio por VPC (p. ej. "dev,qa" o "todos"); vacío = apagado
   barredorIntervaloSegundos: 60
 
 # Límites de peticiones (por actor y por IP, ventana deslizante de 1 minuto; contadores compartidos por todas las réplicas en PostgreSQL).

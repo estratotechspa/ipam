@@ -187,6 +187,21 @@ const schemas = {
       mascara_minima: { type: ['integer', 'null'], description: 'Bloque más grande que se puede pedir.' },
       mascara_maxima: { type: ['integer', 'null'], description: 'Bloque más chico que se puede pedir.' },
       uso_reservado: { type: 'number', minimum: 0, maximum: 1, description: 'Fracción del pool apartada por reservas vigentes.' },
+      proyecto: {
+        type: ['string', 'null'],
+        maxLength: 63,
+        description: 'Proyecto de GCP de la VPC (RFC 1035, minúsculas). Con `vpc` y el proveedor forma la identidad del pool.',
+      },
+      vpc: {
+        type: ['string', 'null'],
+        maxLength: 63,
+        description: 'Nombre de la VPC (RFC 1035, minúsculas). (proveedor, proyecto, vpc) es único: `vpc_duplicada`.',
+      },
+      padre_id: {
+        type: ['string', 'null'],
+        description: 'Pool del que sale este bloque. El CIDR debe estar dentro del padre (`pool_fuera_del_padre`); lo que ocupa cuenta como usado en el padre.',
+      },
+      hijos: { type: 'integer', description: 'Cantidad de pools hijos (VPC) que salen de este pool. Su espacio cuenta en `uso`.' },
     },
     example: {
       id: 'gke-nodos-qa',
@@ -273,7 +288,7 @@ const schemas = {
     required: ['id', 'tipo', 'ambiente', 'proveedor', 'cidr'],
     additionalProperties: false,
     description:
-      'Bloque base nuevo. No puede solaparse con **ningún** otro pool (los rangos no se repiten entre ambientes ni proveedores). Opcionalmente fija los límites de máscara de lo que se pide en él.',
+      'Bloque base nuevo. No puede solaparse con **ningún** otro pool (los rangos no se repiten entre ambientes ni proveedores), salvo con su padre: con `padre_id` el bloque sale de otro pool (p. ej. el bloque de una VPC) y debe caber en él. Opcionalmente fija los límites de máscara de lo que se pide en él.',
     properties: {
       id: { type: 'string', maxLength: 63, description: 'Nombre: minúsculas, números y guiones (p. ej. lan-sucursal-prod).' },
       tipo: { type: 'string', maxLength: 40, description: 'Nodos, Pods, Servicios, LAN, Gestión…' },
@@ -283,6 +298,20 @@ const schemas = {
       mascara_defecto: { type: ['integer', 'null'], description: 'Tamaño que se usa si el pedido no indica máscara (p. ej. 20 para un rango de Pods de /20).' },
       mascara_minima: { type: ['integer', 'null'], description: 'Bloque más grande que se puede pedir (máscara mínima).' },
       mascara_maxima: { type: ['integer', 'null'], description: 'Bloque más chico que se puede pedir (máscara máxima; p. ej. 29 en una subred de GCP).' },
+      proyecto: {
+        type: ['string', 'null'],
+        maxLength: 63,
+        description: 'Proyecto de GCP de la VPC (RFC 1035, minúsculas). Con `vpc` y el proveedor forma la identidad del pool.',
+      },
+      vpc: {
+        type: ['string', 'null'],
+        maxLength: 63,
+        description: 'Nombre de la VPC (RFC 1035, minúsculas). (proveedor, proyecto, vpc) es único: `vpc_duplicada`.',
+      },
+      padre_id: {
+        type: ['string', 'null'],
+        description: 'Pool del que sale este bloque. El CIDR debe estar dentro del padre (`pool_fuera_del_padre`); lo que ocupa cuenta como usado en el padre.',
+      },
     },
     example: { id: 'lan-sucursal-prod', tipo: 'LAN', ambiente: 'prod', proveedor: 'On-prem', cidr: '10.40.0.0/16' },
   },
@@ -291,13 +320,27 @@ const schemas = {
     required: ['tipo', 'proveedor'],
     additionalProperties: false,
     description:
-      'Se editan tipo, proveedor y los límites de máscara: cambiar el CIDR o el ambiente dejaría segmentos fuera de su pool. Los límites solo cambian si vienen en el pedido (nulo los quita).',
+      'Se editan tipo, proveedor, los límites de máscara y la identidad de VPC (proyecto, vpc, padre_id): cambiar el CIDR o el ambiente dejaría segmentos fuera de su pool. Los límites y la identidad solo cambian si vienen en el pedido (nulo los quita).',
     properties: {
       tipo: { type: 'string', maxLength: 40 },
       proveedor: { type: 'string', maxLength: 40 },
       mascara_defecto: { type: ['integer', 'null'] },
       mascara_minima: { type: ['integer', 'null'] },
       mascara_maxima: { type: ['integer', 'null'] },
+      proyecto: {
+        type: ['string', 'null'],
+        maxLength: 63,
+        description: 'Proyecto de GCP de la VPC (RFC 1035, minúsculas). Con `vpc` y el proveedor forma la identidad del pool.',
+      },
+      vpc: {
+        type: ['string', 'null'],
+        maxLength: 63,
+        description: 'Nombre de la VPC (RFC 1035, minúsculas). (proveedor, proyecto, vpc) es único: `vpc_duplicada`.',
+      },
+      padre_id: {
+        type: ['string', 'null'],
+        description: 'Pool del que sale este bloque. El CIDR debe estar dentro del padre (`pool_fuera_del_padre`); lo que ocupa cuenta como usado en el padre.',
+      },
     },
     example: { tipo: 'LAN', proveedor: 'On-prem' },
   },
@@ -318,7 +361,10 @@ const schemas = {
     properties: {
       id: { type: 'string', pattern: '^\\d+$', description: 'Identificador numérico (como texto).' },
       grupo: { type: ['string', 'null'], format: 'uuid', description: 'Grupo de rangos pedidos juntos (clúster GKE). Nulo si se pidió suelto.' },
-      rango: { enum: ['principal', 'pods', 'servicios', null], description: 'Para qué sirve el rango dentro de su grupo (principal = nodos).' },
+      rango: {
+        enum: ['principal', 'pods', 'servicios', 'vpc', null],
+        description: 'Para qué sirve el rango dentro de su grupo (principal = nodos; vpc = bloque de una VPC).',
+      },
       nombre: { type: ['string', 'null'], maxLength: 80, description: 'Nombre del rango dentro de su grupo (p. ej. el del rango secundario de la subred).' },
       codigo: {
         type: 'string',
@@ -420,7 +466,10 @@ const schemas = {
       vlan: { type: ['integer', 'null'], minimum: 1, maximum: 4094, description: 'VLAN (opcional).' },
       vlan_nombre: { type: ['string', 'null'], maxLength: 80, description: 'Nombre de la VLAN (opcional).' },
       grupo: { type: ['string', 'null'], format: 'uuid', description: 'Grupo de rangos pedidos juntos (clúster GKE). Nulo si se pidió suelto.' },
-      rango: { enum: ['principal', 'pods', 'servicios', null], description: 'Para qué sirve el rango dentro de su grupo (principal = nodos).' },
+      rango: {
+        enum: ['principal', 'pods', 'servicios', 'vpc', null],
+        description: 'Para qué sirve el rango dentro de su grupo (principal = nodos; vpc = bloque de una VPC).',
+      },
       nombre: { type: ['string', 'null'], maxLength: 80, description: 'Nombre del rango dentro de su grupo (p. ej. el del rango secundario de la subred).' },
       solicitante: { type: 'string' },
       ticket: { type: 'string' },
@@ -451,7 +500,11 @@ const schemas = {
     additionalProperties: false,
     required: ['uso'],
     properties: {
-      uso: { enum: ['nodos', 'pods', 'servicios'], description: 'Para qué es el rango; el pool sale de la tabla ambiente + uso.' },
+      uso: {
+        enum: ['nodos', 'pods', 'servicios', 'vpc'],
+        description:
+          'Para qué es el rango. Nodos, pods y servicios: el pool sale de la VPC del pedido si tiene pool (los nodos) o de la tabla ambiente + uso. **vpc**: el bloque de una VPC nueva; va solo, con `proyecto`, `vpc` y `mascara`, sale del pool `padre` (por defecto el de ambiente + nodos) y, al confirmarlo un admin, IPAM crea el pool hijo.',
+      },
       mascara: {
         type: 'integer',
         description:
@@ -485,9 +538,19 @@ const schemas = {
         format: 'uuid',
         description: 'Opcional: agrega estos rangos a un grupo que ya existe (mismo dueño y ambiente, sin reservar nodos de nuevo).',
       },
-      proyecto: { type: ['string', 'null'], maxLength: 120 },
-      subred: { type: ['string', 'null'], maxLength: 80 },
-      vpc: { type: 'string', maxLength: 120 },
+      proyecto: {
+        type: ['string', 'null'],
+        maxLength: 63,
+        description: 'Proyecto de GCP. Se normaliza (minúsculas) y se valida (RFC 1035): `proyecto_invalido`.',
+      },
+      subred: { type: ['string', 'null'], maxLength: 63, description: 'Subred. Se normaliza y se valida como nombre de GCP: `subred_invalido`.' },
+      vpc: {
+        type: 'string',
+        maxLength: 63,
+        description:
+          'VPC. Se normaliza y se valida como nombre de GCP (`vpc_invalido`). Si existe un pool con esa identidad (vpc y proyecto), los nodos salen de ese pool; si no, 422 `vpc_sin_pool` en los ambientes con `EXIGIR_POOL_VPC` y, en los demás, del pool de ambiente + uso como antes. Una misma VPC con otro proyecto: 422 `vpc_incoherente`.',
+      },
+      padre: { type: 'string', maxLength: 63, description: 'Solo con uso `vpc`: pool del que sale el bloque. Por defecto, el pool de ambiente + nodos.' },
       ticket: { type: 'string', maxLength: 64 },
       ttl_horas: { type: 'integer', description: 'Vigencia del grupo sin confirmar. Por defecto 72; máximo 168.' },
     },
@@ -528,12 +591,29 @@ const schemas = {
   GrupoConfirmado: {
     type: 'object',
     required: ['grupo', 'repetida'],
-    properties: { grupo: { $ref: '#/components/schemas/Grupo' }, repetida: { type: 'boolean' }, aprobacion: { type: 'object' } },
+    properties: {
+      grupo: { $ref: '#/components/schemas/Grupo' },
+      repetida: { type: 'boolean' },
+      aprobacion: { type: 'object' },
+      pools_creados: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/Pool' },
+        description: 'Pools hijos que nacieron al confirmar el bloque de una VPC.',
+      },
+    },
   },
   GrupoLiberado: {
     type: 'object',
     required: ['grupo', 'asignaciones_borradas'],
-    properties: { grupo: { $ref: '#/components/schemas/Grupo' }, asignaciones_borradas: { type: 'integer' } },
+    properties: {
+      grupo: { $ref: '#/components/schemas/Grupo' },
+      asignaciones_borradas: { type: 'integer' },
+      pools_eliminados: {
+        type: 'array',
+        items: { type: 'object' },
+        description: 'Pools de VPC retirados al liberar un bloque confirmado (solo si estaban vacíos).',
+      },
+    },
   },
   Simulacion: {
     type: 'object',
@@ -555,6 +635,12 @@ const schemas = {
             pool: { type: 'string' },
             cidr: { $ref: '#/components/schemas/Cidr' },
             mascara: { type: 'integer' },
+            criterio: {
+              enum: ['vpc', 'pool_uso', 'padre'],
+              description: 'Por qué salió de ese pool: la VPC tiene pool propio, la tabla ambiente + uso o el pool padre del bloque.',
+            },
+            motivo: { type: 'string', description: 'La explicación de la elección, en español.' },
+            pool_a_crear: { type: 'object', description: 'Solo para uso `vpc`: el pool hijo que nacerá al confirmar (id, proyecto, vpc, padre_id).' },
           },
         },
       },
@@ -1528,6 +1614,18 @@ function rutasDeGrupos(p) {
       extra: { ...e403, ...e404, 409: respuesta('Un rango tiene direcciones IP registradas.', 'Error') },
     }),
   };
+  p['/api/v1/reservas/grupo/{id}/eventos'] = {
+    get: op({
+      tag: 'Reservas',
+      id: 'eventosDeGrupo',
+      summary: 'Historial del grupo (reservado, renovado, confirmado, liberado, expirado)',
+      description:
+        'Rol `agente` o superior. Solo el dueño del grupo o un admin. Es el seguimiento del grupo sin pedir `/eventos`, que sigue siendo solo para admin. Del más antiguo al más nuevo.',
+      params: [ID_GRUPO],
+      ok: { 200: respuesta('Eventos del grupo.', { type: 'array', items: { type: 'object' } }) },
+      extra: { ...e403, ...e404 },
+    }),
+  };
   p['/api/v1/reservas/grupo/{id}/confirmar'] = {
     post: op({
       tag: 'Reservas',
@@ -1680,7 +1778,7 @@ function rutasDeEdicionDePools(p) {
       description: 'Solo si no tiene asignaciones, reservas vigentes ni direcciones IP (409 `pool_en_uso` con el detalle).',
       params: [param('id', 'path', 'Id del pool.')],
       ok: { 200: respuesta('Eliminado.', { type: 'object' }) },
-      extra: { ...e403, ...e404, 409: respuesta('El pool tiene segmentos, reservas o direcciones.', 'Error') },
+      extra: { ...e403, ...e404, 409: respuesta('El pool tiene segmentos, reservas, direcciones o pools hijos (`pool_con_hijos`).', 'Error') },
     }),
   };
 }

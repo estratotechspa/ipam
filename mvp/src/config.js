@@ -141,6 +141,13 @@ def(
   true,
   'Un token de servicio debe indicar quién aprobó (aprobado_por) y la referencia (MR) al confirmar. Regla human-in-the-loop.',
 );
+def(
+  'EXIGIR_POOL_VPC',
+  'lista',
+  [],
+  'Ambientes (dev, qa, lab, pre, prod; «todos» = todos) donde /reservas/lote exige que la VPC de los nodos tenga su propio pool: sin pool, 422 `vpc_sin_pool`. Apagado por defecto: sin la bandera, una VPC sin pool sigue saliendo del pool de «ambiente + uso» (pool-uso).',
+  { ejemplo: 'dev,qa' },
+);
 def('BARREDOR_INTERVALO_SEGUNDOS', 'entero', 60, 'Cada cuánto corre el barredor (limpia reservas vencidas y contadores).', { min: 5, max: 3600 });
 
 // Límites
@@ -364,6 +371,7 @@ const config = {
       ttlHoras: valor('RESERVA_TTL_HORAS'),
       ttlMaxHoras: valor('RESERVA_TTL_MAX_HORAS'),
       exigeAprobador: valor('CONFIRMACION_EXIGE_APROBADOR'),
+      exigirPoolVpc: /** @type {string[]} */ (valor('EXIGIR_POOL_VPC')).map((a) => (a === 'prd' ? 'prod' : a)),
       barredorIntervaloSeg: valor('BARREDOR_INTERVALO_SEGUNDOS'),
     };
   },
@@ -504,6 +512,9 @@ function validarAutenticacion(ctx) {
 
 function validarReservasEventosYTrazas({ errores, intenta }) {
   const r = intenta(() => config.reservas);
+  const AMB_VALIDOS = ['todos', 'dev', 'qa', 'lab', 'pre', 'prod', 'prd'];
+  for (const a of r ? r.exigirPoolVpc : [])
+    if (!AMB_VALIDOS.includes(a)) errores.push(`EXIGIR_POOL_VPC: «${a}» no es un ambiente (${AMB_VALIDOS.join(', ')}).`);
   if (r && r.ttlHoras > r.ttlMaxHoras) errores.push('RESERVA_TTL_HORAS no puede superar RESERVA_TTL_MAX_HORAS.');
   const ev = intenta(() => config.eventos);
   if (ev && ev.publicadores.includes('webhook') && !(ev.webhook.url && ev.webhook.secreto))
