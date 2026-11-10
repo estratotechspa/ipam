@@ -12,7 +12,8 @@ Modelo acordado con Networking: **el pool es la VPC**; su bloque es el segmento 
 - **B1 · Seguimiento.** `GET /reservas/grupo/{id}/eventos` (dueño del grupo o admin) con el historial del grupo; `/eventos` sigue siendo solo admin. Los eventos de expiración ahora llevan el `grupo`.
 - **Compatibilidad.** Sin `vpc`, o con `EXIGIR_POOL_VPC` apagada, el lote se comporta como en 0.4.0. Lo único que puede rechazar pedidos que antes pasaban: `vpc`, `proyecto` o `subred` con mayúsculas internas, espacios o símbolos que no son nombres de GCP, y una `vpc` ya registrada con otro proyecto.
 - Versión del servicio `0.5.0` (API, chart e imagen). Migración de las asignaciones de `dev-gcp-ccla` a pools hijos: [docs/ops/MIGRAR-VPC-A-POOLS.md](docs/ops/MIGRAR-VPC-A-POOLS.md).
-
+### Prototipo de interfaz
+- **Espacio de direcciones** (`/prototipo/espacio.html`): página aparte con datos de ejemplo, sin llamar a la API ni tocar las pantallas actuales. Muestra cada VPC como una franja a escala (cada cuadro es un /24) con lo asignado, lo reservado y lo libre, marca el **mayor bloque libre** y responde «¿cabe una subred de este tamaño?». Las reservas por vencer se ordenan por el tiempo que queda. El ambiente se escribe y el estado se dibuja, para que el verde y el rojo no signifiquen dos cosas a la vez.
 ### Interfaz de clústeres
 - **Pestaña «Clústeres».** Cada fila es un grupo de rangos reservados juntos (nodos, pods y servicios), con proyecto, subred, ambiente, los CIDR, el estado y cuánto falta para que venza. Se despliega para ver cada rango con su nombre, subred y pool. **Aprobar los N rangos** (solo admin) y **Rechazar y liberar** operan sobre el grupo entero. Filtro por estado y búsqueda.
 - **Segmentos:** nueva columna **Rango** (Nodos, Pods, Servicios y su nombre), también buscable. Un rango de un grupo muestra **Ver el clúster** en lugar de Confirmar y Liberar sueltos (la API los rechaza con `reserva_de_grupo`).

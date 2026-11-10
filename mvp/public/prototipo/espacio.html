@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Espacio de direcciones (prototipo)</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/app.css">
+<link rel="stylesheet" href="/brand.css">
+<link rel="stylesheet" href="/prototipo/espacio.css">
+</head>
+<body>
+<a class="saltar" href="#contenido">Saltar al contenido</a>
+<header class="top">
+  <h1>IPAM <span class="muted">Prototipo: espacio de direcciones</span></h1>
+  <nav class="nav" aria-label="Volver">
+    <a id="enlace-api" href="/">Volver a IPAM</a>
+  </nav>
+</header>
+
+<main id="contenido" class="wrap" tabindex="-1">
+  <p class="aviso">Prototipo con datos de ejemplo. No consulta la API ni modifica nada.</p>
+
+  <h2 tabindex="-1">Espacio de direcciones</h2>
+  <p id="resumen" class="resumen" role="status"></p>
+
+  <div class="cabe-form">
+    <label for="tam">Quiero reservar una subred de tamaño</label>
+    <select id="tam" aria-describedby="tam-ayuda">
+      <option value="">Elegir un tamaño</option>
+    </select>
+    <p class="ayuda" id="tam-ayuda">Las franjas marcan dónde cabe. Cada cuadro es un /24 (256 direcciones).</p>
+  </div>
+
+  <ul class="leyenda-franja" aria-label="Leyenda">
+    <li><span class="celda-libre muestra-franja"></span> libre</li>
+    <li><span class="pieza asignado muestra-franja"></span> asignado</li>
+    <li><span class="pieza reservado muestra-franja"></span> reservado, sin confirmar</li>
+    <li><span class="celda-libre mayor muestra-franja"></span> mayor bloque libre</li>
+  </ul>
+
+  <section id="vpcs" aria-label="VPC"></section>
+
+  <section aria-labelledby="h-reservas">
+    <h3 id="h-reservas">Reservas por vencer</h3>
+    <p class="muted">Una reserva sin confirmar expira sola y su rango puede volver a quedar disponible.</p>
+    <div class="card tablewrap" tabindex="0" role="region" aria-label="Reservas por vencer">
+      <table id="reservas">
+        <thead><tr><th scope="col">Vence en</th><th scope="col">Rango</th><th scope="col">VPC</th><th scope="col">Ticket</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+<script type="module" src="/prototipo/espacio.js"></script>
+</body>
+</html>
