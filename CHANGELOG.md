@@ -3,6 +3,8 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y versionado semántico.
 
 ## [Sin publicar]
+### Decisiones
+- **ADR 0010:** los rangos secundarios (Pods y Services) pueden repetirse entre VPC, pero IPAM no los genera y se evitan en lo posible ([docs/adr/0010](docs/adr/0010-rangos-secundarios-repetidos.md)).
 ### Interfaz: espacio libre y estados
 - **Pools: columna «Mayor libre»** y el selector **«¿Dónde cabe una subred de tamaño?»**. El espacio útil de un pool es su mayor bloque libre, no solo el porcentaje: con un tamaño elegido, cada fila dice cuántos bloques de ese tamaño caben o que no caben. Usa `GET /pools/{id}/disponibilidad` y recuerda la respuesta 60 s para no gastar el límite de lecturas.
 - **El ambiente se escribe, no se pinta.** Las etiquetas dev, qa, pre, prod y lab pasan a un borde neutro; el verde, el ámbar y el rojo quedan para el estado (uso y vencimientos), así un pool de prod casi vacío ya no mezcla señales.
