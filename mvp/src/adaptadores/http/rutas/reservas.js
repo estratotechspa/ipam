@@ -89,15 +89,36 @@ function montar(app, { casos, audita, validacion }) {
   api(app, 'post', '/reservas/grupo/:id/confirmar', requiere('admin'), validacion.cuerpo('ReservaConfirmar', { opcional: true }), async (req, res) => {
     const r = await reservasGrupo.confirmarGrupo(req.actor, req.params.id, req.body || {});
     if (!r.ok) return enviarFallo(res, r);
-    if (!r.repetida)
+    if (!r.repetida) {
       await audita(req, 'confirmar_grupo', { grupo: req.params.id, ticket: r.grupo.ticket, rangos: r.grupo.rangos.map((x) => x.cidr), ...r.aprobacion });
-    return res.json({ grupo: r.grupo, repetida: r.repetida, aprobacion: r.aprobacion });
+      // El bloque de una VPC confirmado crea su pool: queda también en el historial del pool.
+      for (const p of r.pools_creados)
+        await audita(req, 'crear_pool', {
+          pool: p.id,
+          cidr: p.cidr,
+          ambiente: p.ambiente,
+          proveedor: p.proveedor,
+          tipo: p.tipo,
+          proyecto: p.proyecto,
+          vpc: p.vpc,
+          padre: p.padre_id,
+          grupo: req.params.id,
+        });
+    }
+    return res.json({ grupo: r.grupo, repetida: r.repetida, aprobacion: r.aprobacion, pools_creados: r.pools_creados });
+  });
+
+  // B1: el dueño del grupo (o un admin) sigue su historial sin pedir `/eventos`, que es solo para admin.
+  api(app, 'get', '/reservas/grupo/:id/eventos', requiere('agente'), async (req, res) => {
+    const r = await reservasGrupo.eventosDeGrupo(req.actor, req.params.id);
+    return r.ok ? res.json(r.eventos) : enviarFallo(res, r);
   });
 
   api(app, 'delete', '/reservas/grupo/:id', requiere('agente'), async (req, res) => {
     const r = await reservasGrupo.liberarGrupo(req.actor, req.params.id);
     if (!r.ok) return enviarFallo(res, r);
     await audita(req, 'liberar_grupo', { grupo: req.params.id, rangos: r.grupo.rangos.map((x) => x.cidr), asignaciones_borradas: r.asignaciones_borradas });
+    for (const p of r.pools_eliminados) await audita(req, 'eliminar_pool', { pool: p.id, cidr: p.cidr, grupo: req.params.id });
     return res.json({ grupo: r.grupo, asignaciones_borradas: r.asignaciones_borradas });
   });
 

@@ -68,7 +68,7 @@ const RESERVA_VIGENTE = `estado = 'reservada' and expira_en > now()`;
 const SQL_RESERVA_POR_ID = `select ${COLUMNAS_RESERVA} from reservas where id=$1`;
 // Orden estable: los rangos de un grupo nacen en la misma transacción (mismo creado_en) y su id es aleatorio.
 const SQL_GRUPO = `select ${COLUMNAS_RESERVA} from reservas where grupo = $1::uuid
-  order by case rango when 'principal' then 0 when 'pods' then 1 else 2 end, cidr, id`;
+  order by case rango when 'vpc' then -1 when 'principal' then 0 when 'pods' then 1 else 2 end, cidr, id`;
 const SQL_GRUPO_BLOQUEADO = `${SQL_GRUPO} for update`;
 const SQL_RESERVA_POR_ID_BLOQUEADA = `${SQL_RESERVA_POR_ID} for update`; // FOR UPDATE: nadie más cambia esta reserva mientras decidimos
 
@@ -83,15 +83,101 @@ function traducir(e) {
   return e;
 }
 
-const COLUMNAS_POOL = 'id, tipo, ambiente, proveedor, cidr::text, mascara_defecto, mascara_minima, mascara_maxima';
+const COLUMNAS_POOL = 'id, tipo, ambiente, proveedor, cidr::text, mascara_defecto, mascara_minima, mascara_maxima, proyecto, vpc, padre_id';
 const SQL_POOL_POR_ID = `select ${COLUMNAS_POOL} from pools where id=$1`;
 const SQL_POOLS = `select ${COLUMNAS_POOL} from pools order by id`;
+// Los padres antes que los hijos (bloque más grande primero): al restaurar, el padre ya existe.
+const SQL_POOLS_EXPORTAR = `select ${COLUMNAS_POOL} from pools order by masklen(cidr), id`;
 const SQL_POOLS_POR_TIPO = `select ${COLUMNAS_POOL} from pools where ambiente=$1 and tipo=$2 order by id`;
+
+/** Identidad de VPC de los pools y seguimiento de un grupo (0.5.0). `q` = pool o cliente de una transacción. */
+function consultasDeVpc(q) {
+  return {
+    /** Pools con esa vpc (y proyecto, si se indica) en un ambiente: la identidad que el lote usa para elegir el pool de nodos. */
+    async poolesPorVpc({ ambiente, vpc, proyecto = null }) {
+      return (
+        await q(`select ${COLUMNAS_POOL} from pools where ambiente=$1 and vpc=$2 and ($3::text is null or proyecto=$3) order by id`, [ambiente, vpc, proyecto])
+      ).rows;
+    },
+    /** Proyectos con los que ya figura una vpc en un ambiente (pools, asignaciones y reservas vigentes): para detectar vpc_incoherente. */
+    async proyectosDeVpc({ ambiente, vpc }) {
+      return (
+        await q(
+          `select distinct proyecto from (
+             select proyecto from pools where ambiente=$1 and vpc=$2
+             union all select a.proyecto from asignaciones a join pools p on p.id=a.pool_id where p.ambiente=$1 and a.vpc=$2
+             union all select r.proyecto from reservas r join pools p on p.id=r.pool_id where p.ambiente=$1 and r.vpc=$2 and r.estado = 'reservada' and r.expira_en > now()
+           ) x where proyecto is not null order by proyecto`,
+          [ambiente, vpc],
+        )
+      ).rows.map((f) => f.proyecto);
+    },
+    /** Reserva de bloque de VPC aún vigente para esa identidad (aunque no sea el mismo solicitante). */
+    async reservaDeVpcPendiente({ proyecto, vpc }) {
+      return (
+        (
+          await q(
+            `select grupo, solicitante, cidr::text from reservas where rango='vpc' and vpc=$2 and coalesce(proyecto,'')=coalesce($1,'') and ${RESERVA_VIGENTE} limit 1`,
+            [proyecto, vpc],
+          )
+        ).rows[0] || null
+      );
+    },
+    /** Los eventos que mencionan a un grupo (reservado, renovado, confirmado, liberado, expirado), del más antiguo al más nuevo. */
+    async eventosDeGrupo(grupo) {
+      return (await q("select id, ts, tipo, detalle from eventos where detalle->>'grupo' = $1 order by id", [grupo])).rows;
+    },
+  };
+}
+
+/** Qué está ocupado en un pool: asignaciones, reservas vigentes y bloques ya repartidos en pools hijos. */
+function consultasDeOcupacion(q) {
+  return {
+    /** Rangos ocupados de un pool: asignaciones + reservas vigentes + los bloques que ya salieron como pools hijos (VPC). */
+    async ocupados(poolId) {
+      return (
+        await q(
+          `select cidr::text from asignaciones where pool_id=$1
+         union all select cidr::text from reservas where pool_id=$1 and ${RESERVA_VIGENTE}
+         union all select cidr::text from pools where padre_id=$1`,
+          [poolId],
+        )
+      ).rows.map((r) => r.cidr);
+    },
+    /** Primer rango (asignado o reservado) que se solapa con `cidr`, o null. */
+    async conflicto(poolId, cidr) {
+      const a = (
+        await q(
+          `select 'asignacion' as fuente, cidr::text, vpc, solicitante, ticket, creado_en from asignaciones where pool_id=$1 and cidr && $2::cidr limit 1`,
+          [poolId, cidr],
+        )
+      ).rows[0];
+      if (a) return a;
+      const r = (
+        await q(
+          `select 'reserva' as fuente, cidr::text, vpc, solicitante, ticket, creado_en, expira_en from reservas where pool_id=$1 and ${RESERVA_VIGENTE} and cidr && $2::cidr limit 1`,
+          [poolId, cidr],
+        )
+      ).rows[0];
+      if (r) return r;
+      return (
+        (
+          await q(`select 'pool' as fuente, cidr::text, coalesce(vpc, id) as vpc, id as pool_hijo from pools where padre_id=$1 and cidr && $2::cidr limit 1`, [
+            poolId,
+            cidr,
+          ])
+        ).rows[0] || null
+      );
+    },
+  };
+}
 
 /** Consultas compartidas por el repositorio y por las transacciones (`x` = pool o cliente). */
 function consultas(x) {
   const q = (texto, params) => x.query(texto, params);
   return {
+    ...consultasDeVpc(q),
+    ...consultasDeOcupacion(q),
     async obtenerPool(id) {
       return (await q(SQL_POOL_POR_ID, [id])).rows[0];
     },
@@ -110,34 +196,6 @@ function consultas(x) {
     },
     async buscarPools({ ambiente, tipo }) {
       return (await q(SQL_POOLS_POR_TIPO, [ambiente, tipo])).rows;
-    },
-    /** Rangos ocupados de un pool: asignaciones + reservas vigentes. */
-    async ocupados(poolId) {
-      return (
-        await q(
-          `select cidr::text from asignaciones where pool_id=$1
-         union all select cidr::text from reservas where pool_id=$1 and ${RESERVA_VIGENTE}`,
-          [poolId],
-        )
-      ).rows.map((r) => r.cidr);
-    },
-    /** Primer rango (asignado o reservado) que se solapa con `cidr`, o null. */
-    async conflicto(poolId, cidr) {
-      const a = (
-        await q(
-          `select 'asignacion' as fuente, cidr::text, vpc, solicitante, ticket, creado_en from asignaciones where pool_id=$1 and cidr && $2::cidr limit 1`,
-          [poolId, cidr],
-        )
-      ).rows[0];
-      if (a) return a;
-      return (
-        (
-          await q(
-            `select 'reserva' as fuente, cidr::text, vpc, solicitante, ticket, creado_en, expira_en from reservas where pool_id=$1 and ${RESERVA_VIGENTE} and cidr && $2::cidr limit 1`,
-            [poolId, cidr],
-          )
-        ).rows[0] || null
-      );
     },
     async siguienteTicket() {
       return (await q("select 'NET-' || nextval('ticket_seq') as t")).rows[0].t;
@@ -211,7 +269,7 @@ function consultas(x) {
         await q(
           `update reservas set estado = 'expirada', resuelto_en = now()
           where estado = 'reservada' and expira_en <= now() and ($1::text is null or pool_id = $1)
-          returning id, cidr::text, pool_id, solicitante`,
+          returning id, cidr::text, pool_id, solicitante, grupo`,
           [poolId],
         )
       ).rows;
@@ -219,7 +277,7 @@ function consultas(x) {
     async marcarExpirada(id) {
       return (
         await q(
-          `update reservas set estado = 'expirada', resuelto_en = now() where id = $1 and estado = 'reservada' returning id, cidr::text, pool_id, solicitante`,
+          `update reservas set estado = 'expirada', resuelto_en = now() where id = $1 and estado = 'reservada' returning id, cidr::text, pool_id, solicitante, grupo`,
           [id],
         )
       ).rows[0];
@@ -412,8 +470,7 @@ function consultasDeDirecciones(q) {
 
 /** Todo lo que va en el respaldo lógico (pools, asignaciones, roles e IPs fijas). */
 async function exportarDatos(db) {
-  const pools = (await db.query('select id, tipo, ambiente, proveedor, cidr::text, mascara_defecto, mascara_minima, mascara_maxima from pools order by id'))
-    .rows;
+  const pools = (await db.query(SQL_POOLS_EXPORTAR)).rows;
   const asignaciones = (
     await db.query(
       'select pool_id, cidr::text, vpc, proyecto, subred, vlan, vlan_nombre, solicitante, ticket, origen, creado_en, descripcion, responsable, uso from asignaciones order by pool_id, cidr',
@@ -433,11 +490,14 @@ async function exportarDatos(db) {
 /** Edición y baja de pools (dentro de una transacción). */
 function consultasDePools(q) {
   return {
-    async actualizarPool(id, { tipo, proveedor, mascara_defecto = null, mascara_minima = null, mascara_maxima = null }) {
+    async actualizarPool(
+      id,
+      { tipo, proveedor, mascara_defecto = null, mascara_minima = null, mascara_maxima = null, proyecto = null, vpc = null, padre_id = null },
+    ) {
       return (
         await q(
-          'update pools set tipo=$2, proveedor=$3, mascara_defecto=$4, mascara_minima=$5, mascara_maxima=$6 where id=$1 returning id, tipo, ambiente, proveedor, cidr::text, mascara_defecto, mascara_minima, mascara_maxima',
-          [id, tipo, proveedor, mascara_defecto, mascara_minima, mascara_maxima],
+          `update pools set tipo=$2, proveedor=$3, mascara_defecto=$4, mascara_minima=$5, mascara_maxima=$6, proyecto=$7, vpc=$8, padre_id=$9 where id=$1 returning ${COLUMNAS_POOL}`,
+          [id, tipo, proveedor, mascara_defecto, mascara_minima, mascara_maxima, proyecto, vpc, padre_id],
         )
       ).rows[0];
     },
@@ -447,7 +507,8 @@ function consultasDePools(q) {
         await q(
           `select (select count(*) from asignaciones where pool_id=$1)::int as asignaciones,
                   (select count(*) from reservas where pool_id=$1 and ${RESERVA_VIGENTE})::int as reservas_vigentes,
-                  (select count(*) from direcciones_ip where pool_id=$1)::int as direcciones`,
+                  (select count(*) from direcciones_ip where pool_id=$1)::int as direcciones,
+                  (select count(*) from pools where padre_id=$1)::int as hijos`,
           [id],
         )
       ).rows[0];
@@ -612,6 +673,29 @@ function consultasDeAdministracion(db) {
   };
 }
 
+/** Pools con su uso (asignaciones, hijos y reservas). */
+function consultasDeUsoDePools(db) {
+  return {
+    async poolsConUso({ ambiente, tipo } = {}) {
+      // `uso` cuenta también lo repartido en pools hijos (VPC): ese espacio ya no está disponible en el padre.
+      return (
+        await db.query(
+          `select p.id, p.tipo, p.ambiente, p.proveedor, p.cidr::text, p.mascara_defecto, p.mascara_minima, p.mascara_maxima, p.proyecto, p.vpc, p.padre_id,
+                a.n::int as asignaciones, (a.tam + h.tam) / (2^(32-masklen(p.cidr)))::float8 as uso, h.n::int as hijos,
+                r.n::int as reservas_vigentes, r.tam / (2^(32-masklen(p.cidr)))::float8 as uso_reservado
+           from pools p
+           left join lateral (select count(*) as n, coalesce(sum(2^(32-masklen(cidr))),0)::float8 as tam from asignaciones where pool_id = p.id) a on true
+           left join lateral (select count(*) as n, coalesce(sum(2^(32-masklen(cidr))),0)::float8 as tam from pools where padre_id = p.id) h on true
+           left join lateral (select count(*) as n, coalesce(sum(2^(32-masklen(cidr))),0)::float8 as tam from reservas where pool_id = p.id and ${RESERVA_VIGENTE}) r on true
+          where ($1::text is null or p.ambiente = $1) and ($2::text is null or p.tipo = $2)
+          order by p.ambiente desc, p.id`,
+          [ambiente || null, tipo || null],
+        )
+      ).rows;
+    },
+  };
+}
+
 /** @param {import('pg').Pool} db */
 function crearRepositorio(db) {
   const base = consultas(db);
@@ -657,8 +741,20 @@ function crearRepositorio(db) {
       async insertarPoolSiNoExiste(p) {
         return (
           await q(
-            'insert into pools (id,tipo,ambiente,proveedor,cidr,mascara_defecto,mascara_minima,mascara_maxima) values ($1,$2,$3,$4,$5,$6,$7,$8) on conflict (id) do nothing',
-            [p.id, p.tipo, p.ambiente, p.proveedor, p.cidr, p.mascara_defecto ?? null, p.mascara_minima ?? null, p.mascara_maxima ?? null],
+            'insert into pools (id,tipo,ambiente,proveedor,cidr,mascara_defecto,mascara_minima,mascara_maxima,proyecto,vpc,padre_id) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) on conflict (id) do nothing',
+            [
+              p.id,
+              p.tipo,
+              p.ambiente,
+              p.proveedor,
+              p.cidr,
+              p.mascara_defecto ?? null,
+              p.mascara_minima ?? null,
+              p.mascara_maxima ?? null,
+              p.proyecto ?? null,
+              p.vpc ?? null,
+              p.padre_id ?? null,
+            ],
           )
         ).rowCount;
       },
@@ -721,6 +817,7 @@ function crearRepositorio(db) {
   return {
     ...base,
     ...consultasDeDirecciones((texto, params) => db.query(texto, params)),
+    ...consultasDeUsoDePools(db),
     ...consultasDePoolUso((texto, params) => db.query(texto, params)),
     ...consultasDeGrupos((texto, params) => db.query(texto, params)),
     transaccion,
@@ -730,20 +827,6 @@ function crearRepositorio(db) {
     },
     async liberarAsignacion(id) {
       return (await db.query('delete from asignaciones where id=$1 returning id, codigo, cidr::text, ticket, pool_id', [id])).rows[0] || null;
-    },
-    async poolsConUso({ ambiente, tipo } = {}) {
-      return (
-        await db.query(
-          `select p.id, p.tipo, p.ambiente, p.proveedor, p.cidr::text, p.mascara_defecto, p.mascara_minima, p.mascara_maxima, a.n::int as asignaciones, a.tam / (2^(32-masklen(p.cidr)))::float8 as uso,
-                r.n::int as reservas_vigentes, r.tam / (2^(32-masklen(p.cidr)))::float8 as uso_reservado
-           from pools p
-           left join lateral (select count(*) as n, coalesce(sum(2^(32-masklen(cidr))),0)::float8 as tam from asignaciones where pool_id = p.id) a on true
-           left join lateral (select count(*) as n, coalesce(sum(2^(32-masklen(cidr))),0)::float8 as tam from reservas where pool_id = p.id and ${RESERVA_VIGENTE}) r on true
-          where ($1::text is null or p.ambiente = $1) and ($2::text is null or p.tipo = $2)
-          order by p.ambiente desc, p.id`,
-          [ambiente || null, tipo || null],
-        )
-      ).rows;
     },
     async resumen() {
       return (

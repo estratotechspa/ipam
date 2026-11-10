@@ -23,7 +23,7 @@ spec:
       containerConcurrency: 80
       timeoutSeconds: 60
       containers:
-        - image: REGION-docker.pkg.dev/PROYECTO/REPO/ipam:0.4.0
+        - image: REGION-docker.pkg.dev/PROYECTO/REPO/ipam:0.5.0
           ports: [{containerPort: 8080}]
           env:
             - {name: NODE_ENV, value: production}

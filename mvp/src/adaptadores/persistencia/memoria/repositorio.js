@@ -18,6 +18,7 @@ function crearRepositorioMemoria({ reloj = { ahora: () => new Date() }, pools = 
     ticket: 142,
     idAsignacion: 0,
     barredor: null,
+    eventos: [],
   };
   const ahora = () => reloj.ahora();
   const efectivo = (r) => (r.estado === 'reservada' && r.expira_en.getTime() <= ahora().getTime() ? 'expirada' : r.estado);
@@ -40,9 +41,58 @@ function crearRepositorioMemoria({ reloj = { ahora: () => new Date() }, pools = 
       return [...datos.pools.values()].filter((p) => p.ambiente === ambiente && p.tipo === tipo).sort((a, b) => a.id.localeCompare(b.id));
     },
     async ocupados(poolId) {
-      return [...datos.asignaciones.filter((a) => a.pool_id === poolId), ...datos.reservas.filter((r) => r.pool_id === poolId && vigente(r))].map(
-        (x) => x.cidr,
-      );
+      return [
+        ...datos.asignaciones.filter((a) => a.pool_id === poolId),
+        ...datos.reservas.filter((r) => r.pool_id === poolId && vigente(r)),
+        ...[...datos.pools.values()].filter((p) => p.padre_id === poolId),
+      ].map((x) => x.cidr);
+    },
+    async todosLosPools() {
+      return [...datos.pools.values()].sort((a, b) => a.id.localeCompare(b.id));
+    },
+    async insertarPoolSiNoExiste(p) {
+      if (datos.pools.has(p.id)) return 0;
+      datos.pools.set(p.id, { proyecto: null, vpc: null, padre_id: null, mascara_defecto: null, mascara_minima: null, mascara_maxima: null, ...p });
+      return 1;
+    },
+    async actualizarPool(id, cambios) {
+      const p = datos.pools.get(id);
+      Object.assign(p, cambios);
+      return p;
+    },
+    async usoDePool(id) {
+      return {
+        asignaciones: datos.asignaciones.filter((a) => a.pool_id === id).length,
+        reservas_vigentes: datos.reservas.filter((r) => r.pool_id === id && vigente(r)).length,
+        direcciones: 0,
+        hijos: [...datos.pools.values()].filter((p) => p.padre_id === id).length,
+      };
+    },
+    async eliminarPool(id) {
+      datos.reservas = datos.reservas.filter((r) => r.pool_id !== id);
+      return datos.pools.delete(id) ? 1 : 0;
+    },
+    async poolesPorVpc({ ambiente, vpc, proyecto = null }) {
+      return [...datos.pools.values()].filter((p) => p.ambiente === ambiente && p.vpc === vpc && (!proyecto || p.proyecto === proyecto));
+    },
+    async proyectosDeVpc({ ambiente, vpc }) {
+      const amb = (id) => datos.pools.get(id)?.ambiente === ambiente;
+      const todos = [
+        ...[...datos.pools.values()].filter((p) => p.ambiente === ambiente && p.vpc === vpc),
+        ...datos.asignaciones.filter((a) => a.vpc === vpc && amb(a.pool_id)),
+        ...datos.reservas.filter((r) => r.vpc === vpc && vigente(r) && amb(r.pool_id)),
+      ];
+      return [...new Set(todos.map((x) => x.proyecto).filter(Boolean))].sort();
+    },
+    async reservaDeVpcPendiente({ proyecto, vpc }) {
+      const r = datos.reservas.find((x) => x.rango === 'vpc' && x.vpc === vpc && (x.proyecto ?? '') === (proyecto ?? '') && vigente(x));
+      return r ? { grupo: r.grupo, solicitante: r.solicitante, cidr: r.cidr } : null;
+    },
+    async registrarEvento(tipo, detalle) {
+      datos.eventos.push({ id: datos.eventos.length + 1, ts: ahora(), tipo, detalle });
+    },
+    async eventosDeGrupo(grupo) {
+      return datos.eventos.filter((e) => e.detalle && e.detalle.grupo === grupo);
     },
     async conflicto(poolId, cidr) {
       const a = datos.asignaciones.find((x) => x.pool_id === poolId && cruza(x.cidr, cidr));
@@ -50,7 +100,9 @@ function crearRepositorioMemoria({ reloj = { ahora: () => new Date() }, pools = 
       const r = datos.reservas.find((x) => x.pool_id === poolId && vigente(x) && cruza(x.cidr, cidr));
       return r
         ? { fuente: 'reserva', cidr: r.cidr, vpc: r.vpc, solicitante: r.solicitante, ticket: r.ticket, creado_en: r.creado_en, expira_en: r.expira_en }
-        : null;
+        : [...datos.pools.values()]
+            .filter((p) => p.padre_id === poolId && cruza(p.cidr, cidr))
+            .map((p) => ({ fuente: 'pool', cidr: p.cidr, vpc: p.vpc || p.id, pool_hijo: p.id }))[0] || null;
     },
     async siguienteTicket() {
       datos.ticket += 1;
@@ -161,7 +213,7 @@ function crearRepositorioMemoria({ reloj = { ahora: () => new Date() }, pools = 
       return vista(r);
     },
     async reservasDeGrupo(grupo) {
-      const peso = (r) => (r.rango === 'principal' ? 0 : r.rango === 'pods' ? 1 : 2);
+      const peso = (r) => (r.rango === 'vpc' ? -1 : r.rango === 'principal' ? 0 : r.rango === 'pods' ? 1 : 2);
       return datos.reservas
         .filter((r) => r.grupo === grupo)
         .sort((a, b) => peso(a) - peso(b) || a.cidr.localeCompare(b.cidr))
@@ -228,7 +280,7 @@ function crearRepositorioMemoria({ reloj = { ahora: () => new Date() }, pools = 
         if (r.estado === 'reservada' && r.expira_en.getTime() <= ahora().getTime() && (!poolId || r.pool_id === poolId)) {
           r.estado = 'expirada';
           r.resuelto_en = ahora();
-          out.push({ id: r.id, cidr: r.cidr, pool_id: r.pool_id, solicitante: r.solicitante });
+          out.push({ id: r.id, cidr: r.cidr, pool_id: r.pool_id, solicitante: r.solicitante, grupo: r.grupo });
         }
       }
       return out;
@@ -238,7 +290,7 @@ function crearRepositorioMemoria({ reloj = { ahora: () => new Date() }, pools = 
       if (!r) return undefined;
       r.estado = 'expirada';
       r.resuelto_en = ahora();
-      return { id: r.id, cidr: r.cidr, pool_id: r.pool_id, solicitante: r.solicitante };
+      return { id: r.id, cidr: r.cidr, pool_id: r.pool_id, solicitante: r.solicitante, grupo: r.grupo };
     },
     async marcarConfirmada(id, asignacionId) {
       const r = datos.reservas.find((x) => x.id === id);
