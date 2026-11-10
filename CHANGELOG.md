@@ -3,6 +3,11 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y versionado semántico.
 
 ## [Sin publicar]
+### Interfaz: espacio libre y estados
+- **Pools: columna «Mayor libre»** y el selector **«¿Dónde cabe una subred de tamaño?»**. El espacio útil de un pool es su mayor bloque libre, no solo el porcentaje: con un tamaño elegido, cada fila dice cuántos bloques de ese tamaño caben o que no caben. Usa `GET /pools/{id}/disponibilidad` y recuerda la respuesta 60 s para no gastar el límite de lecturas.
+- **El ambiente se escribe, no se pinta.** Las etiquetas dev, qa, pre, prod y lab pasan a un borde neutro; el verde, el ámbar y el rojo quedan para el estado (uso y vencimientos), así un pool de prod casi vacío ya no mezcla señales.
+- **Reservas por vencer:** menos de 12 h en ámbar y negrita; menos de 1 h en rojo con una marca a la izquierda.
+- **Barra superior:** Tokens, Usuarios, API y la sesión quedan a la derecha, separados de lo que se usa a diario.
 ### El pool es la VPC (versión 0.5.0, esquema 18)
 Modelo acordado con Networking: **el pool es la VPC**; su bloque es el segmento del que salen las subredes y IPAM garantiza que cada subred cabe dentro. **Migrar el esquema (versión 18) antes de desplegar**; los clientes actuales no cambian (ver «Compatibilidad»).
 - **C1 · Identidad y pools anidados.** `Pool`, `POST /pools` y `PATCH /pools/{id}` aceptan `proyecto`, `vpc` y `padre_id` (opcionales; `proyecto`/`vpc` se normalizan a minúsculas y siguen el formato de nombres de GCP, RFC 1035). Invariantes con código estable: el hijo cabe en el padre (`422 pool_fuera_del_padre`; también `422 padre_no_existe` y `422 padre_incompatible` si el ambiente o proveedor difieren); los hijos de un padre no se solapan (`409 pool_solapado`; un pool solo puede solaparse con sus ancestros y descendientes); `(proveedor, proyecto, vpc)` es único (`409 vpc_duplicada`); el padre no tiene ya segmentos ni reservas en ese bloque (`409 pool_rango_ocupado`); un pool con hijos no se borra (`409 pool_con_hijos`). Lo que ocupan los hijos **cuenta como usado en el padre** (`ocupados`, disponibilidad, libres y `uso`). La base lo respalda con disparadores. `POST/PATCH /pools` siguen siendo solo admin.

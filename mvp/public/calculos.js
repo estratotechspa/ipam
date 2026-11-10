@@ -36,6 +36,15 @@ export function nivelUso(uso) {
   if (uso <= 0.9) return 'medio';
   return 'alto';
 }
+// ---------- Espacio libre de un pool ----------
+// A partir de «por_mascara» de GET /pools/{id}/disponibilidad: la máscara del mayor bloque libre (la más corta con algún bloque libre) o null.
+export function mayorBloqueLibre(porMascara) {
+  const libres = (porMascara || []).filter((x) => x.bloques_libres > 0).map((x) => x.mascara);
+  return libres.length ? Math.min(...libres) : null;
+}
+// Cuántos bloques libres de esa máscara quedan (0 si no cabe o la máscara no está en la lista).
+export const bloquesQueCaben = (porMascara, mascara) => (porMascara || []).find((x) => x.mascara === mascara)?.bloques_libres || 0;
+
 export const porcentaje = (uso, decimales = 1) => `${(uso * 100).toFixed(decimales).replace('.', ',')} %`;
 
 // Totales del tablero a partir de /api/v1/pools (una sola consulta en el servidor).

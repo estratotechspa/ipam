@@ -17,6 +17,7 @@ export function tictac() {
     const seg = Math.max(0, Math.round((Number(t.dataset.fin) - Date.now()) / 1000));
     t.textContent = seg ? restante(seg) : 'vencida';
     t.classList.toggle('poco', seg > 0 && seg < 3600);
+    t.classList.toggle('pronto', seg >= 3600 && seg < 43200);
   });
 }
 

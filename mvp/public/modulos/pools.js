@@ -6,6 +6,7 @@ import { barraUsoHtml, pct } from './uso.js';
 import { fichaAsignacion, fichaPool, segmentosDePool } from './fichas.js';
 import { show } from './navegacion.js';
 import { confirmar, vincularCidr } from './ui.js';
+import { llenarLibres, selectorCabe } from './libre-pool.js';
 
 let ULTIMA_CARGA = 0; // una carga vieja no debe pisar a una nueva ni rehacer la pantalla mientras se escribe en el buscador
 export async function renderPools() {
@@ -31,14 +32,15 @@ export async function renderPools() {
   <div id="pool-nuevo"></div><div id="pools-msg" aria-live="polite"></div>
   <p class="muted leyenda"><span><span class="muestra asig"></span> asignado</span> <span><span class="muestra res"></span> reservado</span> <span>La flecha ${I('derecha')} despliega los segmentos de un pool aquí mismo; su nombre abre la ficha en el panel lateral.</span></p>
   <div class="barra-pools"><button type="button" class="btn sec pequeno" id="pools-expandir">Expandir todos</button><button type="button" class="btn sec pequeno" id="pools-contraer">Contraer todos</button></div>
-  <div class="card tablewrap" tabindex="0" role="region" aria-label="Pools"><table><thead><tr><th scope="col">Pool</th><th scope="col">Tipo</th><th scope="col">Ambiente</th><th scope="col">Proveedor</th><th scope="col">CIDR base</th><th scope="col">Asig.</th><th scope="col">Reservas</th><th scope="col">Uso</th>${puede('admin') ? '<th scope="col"><span class="sr-only">Acciones</span></th>' : ''}</tr></thead><tbody>
+  <div id="p-cabe-caja"></div>
+  <div class="card tablewrap" tabindex="0" role="region" aria-label="Pools"><table><thead><tr><th scope="col">Pool</th><th scope="col">Tipo</th><th scope="col">Ambiente</th><th scope="col">Proveedor</th><th scope="col">CIDR base</th><th scope="col">Asig.</th><th scope="col">Reservas</th><th scope="col">Uso</th><th scope="col">Mayor libre</th>${puede('admin') ? '<th scope="col"><span class="sr-only">Acciones</span></th>' : ''}</tr></thead><tbody>
   ${pools
     .map(
       (
         p,
       ) => `<tr><td class="celda-pool"><button type="button" class="btn-expandir" data-expandir-pool="${esc(p.id)}" aria-expanded="false" aria-controls="seg-pool-${esc(p.id)}" aria-label="Mostrar los segmentos de ${esc(p.id)}">${I('derecha', 16)}</button><button type="button" class="enlace" data-ficha-pool="${esc(p.id)}">${esc(p.id)}</button></td><td>${esc(p.tipo)}</td><td>${tag(p.ambiente)}</td><td>${esc(p.proveedor)}</td><td><code>${esc(p.cidr)}</code></td><td>${p.asignaciones}</td><td>${p.reservas_vigentes || 0}</td>
-  <td>${barraUsoHtml(p.uso, p.uso_reservado || 0)}</td>${puede('admin') ? `<td class="col-menu"><button type="button" class="btn-menu" data-menu-pool="${esc(p.id)}" aria-haspopup="menu" aria-expanded="false" aria-label="Acciones de ${esc(p.id)}">⋮</button></td>` : ''}</tr>
-  <tr class="detalle-pool" id="seg-pool-${esc(p.id)}" hidden><td colspan="9"></td></tr>`,
+  <td>${barraUsoHtml(p.uso, p.uso_reservado || 0)}</td><td class="celda-libre" data-libre-pool="${esc(p.id)}"><span class="muted">…</span></td>${puede('admin') ? `<td class="col-menu"><button type="button" class="btn-menu" data-menu-pool="${esc(p.id)}" aria-haspopup="menu" aria-expanded="false" aria-label="Acciones de ${esc(p.id)}">⋮</button></td>` : ''}</tr>
+  <tr class="detalle-pool" id="seg-pool-${esc(p.id)}" hidden><td colspan="10"></td></tr>`,
     )
     .join('')}</tbody></table></div>`;
     $('pools').prepend(barraDeBusqueda(todos, pools.length, porFiltro.length, coincidencias, q));
@@ -46,6 +48,8 @@ export async function renderPools() {
       .querySelectorAll('[data-ficha-pool]')
       .forEach((b) => (b.onclick = () => fichaPool(b.dataset.fichaPool)));
     enlazarDespliegue($('pools'), coincidencias, q);
+    $('p-cabe-caja').replaceWith(selectorCabe(() => llenarLibres($('pools'), pools)));
+    llenarLibres($('pools'), pools);
     $('pools')
       .querySelectorAll('[data-menu-pool]')
       .forEach(

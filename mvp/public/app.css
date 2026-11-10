@@ -71,6 +71,9 @@ h2[tabindex="-1"]:focus{outline:none}
 .nav button:hover{opacity:1;border-color:#ffffff66}
 .nav button.on,.nav button[aria-current="page"]{opacity:1;border-color:var(--accent)}
 .nav button[hidden]{display:none}
+/* Lo diario a la izquierda; Tokens, Usuarios y API (administración) y la sesión, a la derecha */
+.nav [data-t="tokens"]:not([hidden]){margin-left:auto}
+.nav [data-t="tokens"][hidden] ~ #enlace-api{margin-left:auto}
 #yo{color:#b9c6df}
 #yo button{margin-left:var(--sp-2);background:transparent;border:1px solid #b9c6df;color:#fff;border-radius:var(--r-md);padding:2px var(--sp-2);cursor:pointer;font:inherit;transition:background var(--t)}
 #yo button:hover{background:#ffffff22}
@@ -107,10 +110,19 @@ td:first-child,td code{white-space:nowrap}
 
 /* Etiquetas */
 .tag{display:inline-block;padding:2px var(--sp-2);border-radius:var(--r-pill);font-size:var(--fs-xs);font-weight:600;line-height:1.4;color:#fff}
-.dev{background:var(--dev-bg);color:var(--dev-fg)}.qa{background:var(--qa-bg);color:var(--qa-fg)}.pre{background:var(--pre-bg);color:var(--pre-fg)}.prod{background:var(--prod-bg);color:var(--prod-fg)}.lab{background:var(--lab-bg);color:var(--lab-fg)}
+/* El ambiente se escribe, no se pinta: verde y rojo quedan para el estado (uso, vencimientos), así un pool de prod casi vacío no mezcla señales. */
+.tag.dev,.tag.qa,.tag.pre,.tag.prod,.tag.lab{background:transparent;color:var(--fg);border:1px solid var(--borde-campo)}
 .tag.reservada{background:#0b5cad}.tag.asignado{background:#1d4ed8}.tag.reservado{background:#8a4b00}.tag.confirmada{background:#1d7a46}.tag.liberada{background:#5b6577}.tag.expirada{background:#a33a3a}
 .tag.activo{background:#1d7a46}.tag.vencido{background:#a33a3a}.tag.revocado{background:#5b6577}.tag.pronto{background:#8a4b00}
 .tag.imp-ok{background:#1d7a46}.tag.imp-omitida{background:#5b6577}.tag.imp-aviso{background:#8a4b00}.tag.imp-error{background:#a33a3a}
+
+/* Mayor libre y «¿dónde cabe?»: el espacio útil de un pool es su mayor bloque libre, no solo el porcentaje */
+.cabe-pools{margin:0 0 var(--sp-3);max-width:360px}
+.cabe-pools label{margin-top:0}
+.celda-libre{white-space:nowrap;font-variant-numeric:tabular-nums}
+.libre-mayor{font-weight:600}
+.libre-si{font-weight:600;color:var(--link)}
+.libre-no{font-weight:600;color:var(--peligro)}
 
 /* Barras de uso: color por umbral (verde < 70 %, ámbar 70–90 %, rojo > 90 %) más el número; lo reservado va aparte */
 .bar{height:8px;background:var(--pista);border-radius:var(--r-sm);overflow:hidden;width:140px;display:inline-flex;flex:none}
@@ -203,7 +215,8 @@ details.plegable{margin-top:var(--sp-4);background:var(--card);border-radius:var
 
 /* ============ Reservas, tokens y diálogos ============ */
 .restante{font-variant-numeric:tabular-nums;white-space:nowrap}
-.restante.poco{font-weight:700;color:var(--aviso)}
+.restante.pronto{font-weight:600;color:var(--aviso)}
+.restante.poco{font-weight:700;color:var(--peligro);border-left:4px solid var(--peligro);padding-left:var(--sp-2)}
 dialog{border:0;border-radius:12px;padding:22px;max-width:520px;width:calc(100% - 32px);background:var(--card);color:var(--fg);box-shadow:0 12px 40px #0006}
 dialog::backdrop{background:#0008}
 dialog h3{margin:0 0 var(--sp-3)}
