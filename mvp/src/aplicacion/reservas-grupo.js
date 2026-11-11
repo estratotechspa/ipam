@@ -1,8 +1,8 @@
 // @ts-check
 'use strict';
-// Reserva en grupo: los rangos de un proyecto con clúster GKE (nodos, pods y servicios) se piden, se aprueban y se liberan juntos.
+// Reserva en grupo: los rangos de un proyecto con clúster GKE (subnet, pods y servicios) se piden, se aprueban y se liberan juntos.
 // Todo o nada: si uno no cabe, no se reserva ninguno. Cada rango sale del pool que la tabla «ambiente + uso → pool» indica.
-const { parse, libres } = require('../dominio/cidr');
+const { parse, libres, overlap } = require('../dominio/cidr');
 const R = require('../dominio/reserva');
 const { RANGO_DE, normalizarLote, mismoLote } = require('../dominio/lote');
 const { ok, fallo } = require('./resultado');
@@ -39,16 +39,15 @@ async function revisarCoherenciaVpc(repo, d) {
 }
 
 /**
- * C2: ¿de qué pool salen los nodos? Si el pedido trae vpc (y proyecto) y existe un pool con esa identidad, de ese pool. Si no existe:
+ * C2: ¿de qué pool sale la subnet? Si el pedido trae vpc (y proyecto) y existe un pool con esa identidad, de ese pool. Si no existe:
  * con la bandera `exigir_pool_vpc` del ambiente → 422 `vpc_sin_pool`; sin ella, del pool de «ambiente + uso» como siempre.
  * Devuelve { pool, criterio, motivo }; `pool: null` = usar pool-uso.
  */
 async function elegirPoolDeNodos(repo, d, config) {
   const exige = exigeVpc(config, d.ambiente);
   if (!d.vpc) {
-    if (exige)
-      return fallo('ambiguo', 'vpc_requerida', { mensaje: `En ${d.ambiente} los nodos se reservan por VPC (EXIGIR_POOL_VPC): indica vpc y proyecto.` });
-    return ok({ pool: null, criterio: 'pool_uso', motivo: 'El pedido no trae vpc: los nodos salen del pool de «ambiente + uso» (pool-uso).' });
+    if (exige) return fallo('ambiguo', 'vpc_requerida', { mensaje: `En ${d.ambiente} la subnet se reserva por VPC (EXIGIR_POOL_VPC): indica vpc y proyecto.` });
+    return ok({ pool: null, criterio: 'pool_uso', motivo: 'El pedido no trae vpc: la subnet sale del pool de «ambiente + uso» (pool-uso).' });
   }
   const pools = await repo.poolesPorVpc({ ambiente: d.ambiente, vpc: d.vpc, proyecto: d.proyecto });
   if (pools.length > 1)
@@ -71,7 +70,7 @@ async function elegirPoolDeNodos(repo, d, config) {
   return ok({
     pool: null,
     criterio: 'pool_uso',
-    motivo: `La VPC «${d.vpc}» no tiene pool propio y EXIGIR_POOL_VPC está apagado para ${d.ambiente}: los nodos salen del pool de «ambiente + uso» (pool-uso).`,
+    motivo: `La VPC «${d.vpc}» no tiene pool propio y EXIGIR_POOL_VPC está apagado para ${d.ambiente}: la subnet sale del pool de «ambiente + uso» (pool-uso).`,
   });
 }
 
@@ -88,18 +87,18 @@ function destinoDe(r, pool, criterio, motivo) {
 }
 
 /**
- * A1: el bloque de una VPC nueva sale de un pool padre (`padre` del pedido o, por defecto, el pool de «ambiente + nodos») y no puede
+ * A1: el bloque de una VPC nueva sale de un pool padre (`padre` del pedido o, por defecto, el pool de «ambiente + subnet») y no puede
  * repetir la identidad de una VPC que ya tiene pool o un bloque reservado. Aquí no se crea nada: el pool nace al confirmar un admin.
  */
 async function resolverBloqueVpc(repo, d, { repeticion = false } = {}) {
   const r = d.rangos[0];
   let padreId = d.padre;
   if (!padreId) {
-    const fila = await repo.obtenerPoolUso(d.ambiente, 'nodos');
+    const fila = await repo.obtenerPoolUso(d.ambiente, 'subnet');
     if (!fila)
       return fallo('ambiguo', 'uso_sin_pool', {
-        mensaje: `No hay un pool para «nodos» en ${d.ambiente} del que sacar el bloque de la VPC. Indica \`padre\` o pide a un admin configurarlo (pool-uso).`,
-        uso: 'nodos',
+        mensaje: `No hay un pool para «subnet» en ${d.ambiente} del que sacar el bloque de la VPC. Indica \`padre\` o pide a un admin configurarlo (pool-uso).`,
+        uso: 'subnet',
         opciones: [],
       });
     padreId = fila.pool_id;
@@ -134,20 +133,20 @@ async function resolverBloqueVpc(repo, d, { repeticion = false } = {}) {
   const x = destinoDe(r, { ...padre, mascara_minima: null, mascara_maxima: null }, 'padre', null);
   if (!x.ok) return x;
   x.destino.pool = padre;
-  x.destino.motivo = `Bloque de la VPC «${d.vpc}»: sale del pool padre ${padre.id}${d.padre ? '' : ' (el de «ambiente + nodos»)'}; al confirmarlo un admin nace el pool «${idPool}».`;
+  x.destino.motivo = `Bloque de la VPC «${d.vpc}»: sale del pool padre ${padre.id}${d.padre ? '' : ' (el de «ambiente + subnet»)'}; al confirmarlo un admin nace el pool «${idPool}».`;
   x.destino.pool_a_crear = { id: idPool, proyecto: d.proyecto, vpc: d.vpc, padre_id: padre.id };
   return ok({ destinos: [x.destino] });
 }
 
-/** Resuelve el pool de cada rango: nodos por VPC si hay pool, el resto con la tabla ambiente + uso → pool; y comprueba que la máscara quepa. */
+/** Resuelve el pool de cada rango: la subnet por VPC si hay pool, el resto con la tabla ambiente + uso → pool; y comprueba que la máscara quepa. */
 async function resolverPools(repo, d, config, opciones) {
   if (d.rangos.some((r) => r.uso === 'vpc')) return resolverBloqueVpc(repo, d, opciones);
   const incoherente = await revisarCoherenciaVpc(repo, d);
   if (incoherente) return incoherente;
-  let eleccion = null; // la elección por VPC es la misma para todos los rangos de nodos del pedido
+  let eleccion = null; // la elección por VPC es la misma para todas las subnets del pedido
   const destinos = [];
   for (const r of d.rangos) {
-    if (r.uso === 'nodos') {
+    if (r.uso === 'subnet') {
       eleccion = eleccion || (await elegirPoolDeNodos(repo, d, config));
       if (!eleccion.ok) return eleccion;
       if (eleccion.pool) {
@@ -166,12 +165,35 @@ async function resolverPools(repo, d, config, opciones) {
       });
     const pool = await repo.obtenerPool(fila.pool_id);
     if (!pool) return fallo('no_encontrado', 'pool_no_existe', { mensaje: `El pool configurado para «${r.uso}» ya no existe.` });
-    const motivo = r.uso === 'nodos' && eleccion ? eleccion.motivo : `Los ${r.uso} salen del pool de «ambiente + uso» (${d.ambiente}/${r.uso}).`;
+    const motivo = r.uso === 'subnet' && eleccion ? eleccion.motivo : `Los ${r.uso} salen del pool de «ambiente + uso» (${d.ambiente}/${r.uso}).`;
     const x = destinoDe(r, pool, 'pool_uso', motivo);
     if (!x.ok) return x;
     destinos.push(x.destino);
   }
   return ok({ destinos });
+}
+
+/** Un CIDR exacto debe caber en el pool de su uso y no pisar nada (asignado, reservado ni de este mismo grupo). null si está bien. */
+function revisarCidrExacto(dest, ocup) {
+  const c = /** @type {NonNullable<ReturnType<typeof parse>>} */ (parse(dest.cidr));
+  const base = /** @type {NonNullable<ReturnType<typeof parse>>} */ (parse(dest.pool.cidr));
+  if (c.start < base.start || c.end > base.end)
+    return malo(
+      'cidr_fuera_del_pool',
+      `${dest.cidr} queda fuera del pool ${dest.pool.id} (${dest.pool.cidr}) que corresponde a «${dest.uso}». No se reservó ningún rango del grupo.`,
+    );
+  const choque = ocup.find((o) => {
+    const x = parse(o);
+    return x && overlap(c, x);
+  });
+  if (choque)
+    return fallo('conflicto', 'solapamiento', {
+      mensaje: `${dest.cidr} se cruza con ${choque} en ${dest.pool.id}. No se reservó ningún rango del grupo.`,
+      uso: dest.uso,
+      conflicto: { cidr: choque },
+      sugeridos: libres(dest.pool.cidr, ocup, c.len, 3),
+    });
+  return null;
 }
 
 /** Elige el primer rango libre de cada destino, contando lo que los rangos anteriores del mismo grupo ya se llevan. */
@@ -181,6 +203,14 @@ async function planificar(tx, destinos) {
   for (const dest of destinos) {
     const propios = apartados.get(dest.pool.id) || [];
     const ocup = [...(await tx.ocupados(dest.pool.id)), ...propios];
+    if (dest.cidr) {
+      // CIDR exacto pedido (solo donde CIDR_MANUAL_AMBIENTES lo permite): IPAM sigue siendo quien decide si es válido y está libre.
+      const falla = revisarCidrExacto(dest, ocup);
+      if (falla) return falla;
+      apartados.set(dest.pool.id, [...propios, dest.cidr]);
+      plan.push({ ...dest, cidr: dest.cidr });
+      continue;
+    }
     const cidr = libres(dest.pool.cidr, ocup, dest.mascara, 1)[0];
     if (!cidr)
       return fallo('conflicto', 'sin_espacio', {

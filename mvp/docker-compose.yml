@@ -26,6 +26,7 @@ services:
       AUTH_LOCAL: ${AUTH_LOCAL:-false}   # true (con APP_USER y APP_PASS): el admin crea cuentas locales desde la pestaña Usuarios
       # La imagen corre con NODE_ENV=production, que exige autenticación. Este valor abierto es SOLO para desarrollo local.
       ALLOW_ANONYMOUS: ${ALLOW_ANONYMOUS:-true}
+      CIDR_MANUAL_AMBIENTES: ${CIDR_MANUAL_AMBIENTES:-dev}   # solo desarrollo local: permite pedir un CIDR exacto en dev (en el POC y en producción va apagado)
       JIRA_WEBHOOK_SECRET: ${JIRA_WEBHOOK_SECRET:-dev-secret-cambiar}
       PUBLIC_URL: ${PUBLIC_URL:-}
       OIDC_ISSUER: ${OIDC_ISSUER:-}

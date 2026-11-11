@@ -22,7 +22,7 @@ const PEDIDO = {
   rangos: [{ uso: 'nodos', mascara: 24 }, { uso: 'pods' }, { uso: 'servicios' }],
 };
 
-async function entorno({ cuota = 10, mapear = true, exigir = [] } = {}) {
+async function entorno({ cuota = 10, mapear = true, exigir = [], cidrManual = [] } = {}) {
   const reloj = {
     t: new Date('2026-11-03T12:00:00Z'),
     ahora() {
@@ -35,7 +35,10 @@ async function entorno({ cuota = 10, mapear = true, exigir = [] } = {}) {
   const repo = crearRepositorioMemoria({ reloj, pools: POOLS });
   const publicados = [];
   const eventos = { publicar: async (tipo, d) => void publicados.push({ tipo, ...d }) };
-  const config = { reservas: { ttlHoras: 72, ttlMaxHoras: 168, exigeAprobador: false, exigirPoolVpc: exigir }, limite: { cuotaReservasPorToken: cuota } };
+  const config = {
+    reservas: { ttlHoras: 72, ttlMaxHoras: 168, exigeAprobador: false, exigirPoolVpc: exigir, cidrManualAmbientes: cidrManual },
+    limite: { cuotaReservasPorToken: cuota },
+  };
   const g = { ...crearReservasGrupo({ repo, eventos, config }), ...crearGestionGrupo({ repo, eventos, config }) };
   const uso = crearPoolUso({ repo });
   if (mapear) {
@@ -83,7 +86,7 @@ test('simular dice qué reservaría sin reservar nada', async () => {
   assert.deepEqual(
     r.rangos.map((x) => [x.uso, x.cidr]),
     [
-      ['nodos', '172.31.0.0/24'],
+      ['subnet', '172.31.0.0/24'],
       ['pods', '10.236.0.0/14'],
       ['servicios', '10.240.0.0/20'],
     ],
@@ -111,7 +114,7 @@ test('si dos usos comparten pool no se pisan entre sí', async () => {
 test('sin pool configurado para un uso: 422 con el motivo y no reserva nada', async () => {
   const { g } = await entorno({ mapear: false });
   const r = await g.reservarLote(AGENTE, PEDIDO);
-  assert.deepEqual([r.ok, r.tipo, r.error, r.uso], [false, 'ambiguo', 'uso_sin_pool', 'nodos']);
+  assert.deepEqual([r.ok, r.tipo, r.error, r.uso], [false, 'ambiguo', 'uso_sin_pool', 'subnet']);
 });
 
 test('validaciones: nodos exigen máscara, usos repetidos o desconocidos, ambiente y TTL', async () => {
@@ -518,4 +521,121 @@ test('B1: el dueño ve los eventos de su grupo; otro token no', async () => {
   assert.equal((await g.eventosDeGrupo(ADMIN, r.grupo.grupo)).ok, true);
   assert.equal((await g.eventosDeGrupo(OTRO, r.grupo.grupo)).error, 'no_es_dueno');
   assert.equal((await g.eventosDeGrupo(AGENTE, 'no-uuid')).error, 'no_encontrado');
+});
+
+// ---- «subnet» (antes «nodos») y CIDR exacto opcional -----------------------------------------------------------
+const PEDIDO_SUBNET = {
+  ambiente: 'dev',
+  proyecto: 'proy-pagos',
+  subred: 'gke-principal',
+  rangos: [
+    { uso: 'subnet', mascara: 25 },
+    { uso: 'pods', mascara: 22 },
+    { uso: 'servicios', mascara: 24 },
+  ],
+};
+
+test('«subnet» es el uso del rango principal y «nodos» sigue funcionando como alias, respondiendo siempre subnet', async () => {
+  const { g, uso } = await entorno({ mapear: false });
+  await uso.guardar('dev', 'subnet', 'dev-nodos');
+  await uso.guardar('dev', 'pods', 'dev-pods');
+  const nuevo = await g.reservarLote(
+    AGENTE,
+    {
+      ...PEDIDO_SUBNET,
+      rangos: [
+        { uso: 'subnet', mascara: 25 },
+        { uso: 'pods', mascara: 22 },
+      ],
+    },
+    undefined,
+    { simular: true },
+  );
+  const alias = await g.reservarLote(
+    AGENTE,
+    {
+      ...PEDIDO_SUBNET,
+      rangos: [
+        { uso: 'nodos', mascara: 25 },
+        { uso: 'pods', mascara: 22 },
+      ],
+    },
+    undefined,
+    { simular: true },
+  );
+  assert.equal(nuevo.ok && alias.ok, true);
+  assert.deepEqual(
+    nuevo.rangos.map((x) => x.uso),
+    ['subnet', 'pods'],
+  );
+  assert.deepEqual(
+    alias.rangos.map((x) => [x.uso, x.cidr]),
+    nuevo.rangos.map((x) => [x.uso, x.cidr]),
+  );
+  assert.equal((await uso.guardar('dev', 'nodos', 'dev-nodos')).fila.uso, 'subnet'); // el alias también al configurar la tabla
+  assert.deepEqual((await uso.listar()).filas.map((f) => f.uso).sort(), ['pods', 'subnet']);
+});
+
+test('subnet /25 y secundarios más chicos: se reservan juntos, cada uno de su pool', async () => {
+  const { g } = await entorno();
+  const r = await g.reservarLote(AGENTE, PEDIDO_SUBNET);
+  assert.equal(r.ok, true);
+  assert.deepEqual(
+    r.grupo.rangos.map((x) => [x.rango, x.cidr.split('/')[1]]),
+    [
+      ['principal', '25'],
+      ['pods', '22'],
+      ['servicios', '24'],
+    ],
+  );
+});
+
+test('CIDR exacto: apagado por defecto (400 cidr_manual_no_permitido) y solo donde un admin lo habilita', async () => {
+  const pedido = { ...PEDIDO_SUBNET, rangos: [{ uso: 'subnet', cidr: '172.31.0.128/25' }] };
+  const apagado = await (await entorno()).g.reservarLote(AGENTE, pedido);
+  assert.deepEqual([apagado.ok, apagado.error], [false, 'cidr_manual_no_permitido']);
+  const soloQa = await (await entorno({ cidrManual: ['qa'] })).g.reservarLote(AGENTE, pedido);
+  assert.equal(soloQa.error, 'cidr_manual_no_permitido'); // habilitado en qa, no en dev
+  const { g, repo } = await entorno({ cidrManual: ['dev'] });
+  const r = await g.reservarLote(AGENTE, pedido);
+  assert.equal(r.ok, true);
+  assert.equal(r.grupo.rangos[0].cidr, '172.31.0.128/25'); // exactamente el pedido, no el primero libre
+  assert.equal((await repo.ocupados('dev-nodos')).includes('172.31.0.128/25'), true);
+  assert.equal((await (await entorno({ cidrManual: ['todos'] })).g.reservarLote(AGENTE, pedido)).ok, true);
+});
+
+test('CIDR exacto: IPAM sigue decidiendo (alineado, dentro del pool de su uso, libre y todo o nada)', async () => {
+  const { g, repo } = await entorno({ cidrManual: ['dev'] });
+  const pide = (rangos) => g.reservarLote(AGENTE, { ...PEDIDO_SUBNET, rangos });
+  assert.equal((await pide([{ uso: 'subnet', cidr: 'nada' }])).error, 'cidr_invalido');
+  assert.equal((await pide([{ uso: 'subnet', cidr: '172.31.0.64/25' }])).error, 'cidr_desalineado');
+  assert.equal((await pide([{ uso: 'subnet', cidr: '172.31.0.0/25', mascara: 24 }])).error, 'mascara_no_coincide');
+  assert.equal((await pide([{ uso: 'subnet', cidr: '10.99.0.0/25' }])).error, 'cidr_fuera_del_pool'); // existe, pero no es del pool de «subnet»
+  const primero = await pide([{ uso: 'subnet', cidr: '172.31.0.0/25' }]);
+  assert.equal(primero.ok, true);
+  const choque = await pide([
+    { uso: 'pods', mascara: 22 },
+    { uso: 'subnet', cidr: '172.31.0.0/24' },
+  ]); // pisa el /25 ya reservado
+  assert.deepEqual([choque.ok, choque.tipo, choque.error], [false, 'conflicto', 'solapamiento']);
+  assert.equal(choque.conflicto.cidr, '172.31.0.0/25');
+  assert.ok(choque.sugeridos.length > 0);
+  assert.equal((await repo.ocupados('dev-pods')).length, 0, 'todo o nada: el /22 de pods que sí cabía no quedó reservado');
+  // dos rangos del mismo grupo que se pisan entre sí
+  const mismo = await pide([
+    { uso: 'subnet', cidr: '172.31.1.0/25' },
+    { uso: 'subnet', cidr: '172.31.1.0/24' },
+  ]);
+  assert.equal(mismo.error, 'solapamiento');
+});
+
+test('CIDR exacto: repetir el pedido con la misma clave devuelve el mismo grupo; con otro CIDR, conflicto', async () => {
+  const { g } = await entorno({ cidrManual: ['dev'] });
+  const pedido = { ...PEDIDO_SUBNET, rangos: [{ uso: 'subnet', cidr: '172.31.2.0/25' }] };
+  const a = await g.reservarLote(AGENTE, pedido, 'clave-cidr-1');
+  const b = await g.reservarLote(AGENTE, pedido, 'clave-cidr-1');
+  assert.equal(b.repetida, true);
+  assert.equal(b.grupo.grupo, a.grupo.grupo);
+  const otro = await g.reservarLote(AGENTE, { ...pedido, rangos: [{ uso: 'subnet', cidr: '172.31.3.0/25' }] }, 'clave-cidr-1');
+  assert.equal(otro.error, 'idempotencia_conflicto');
 });

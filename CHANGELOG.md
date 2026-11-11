@@ -3,6 +3,10 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y versionado semántico.
 
 ## [Sin publicar]
+### Subnet y CIDR exacto en el lote (versión 0.6.0, esquema 19)
+- **`subnet` reemplaza a `nodos`** como uso del rango principal de una subred, en el lote (`/reservas/lote`), en la tabla `pool-uso` y en las etiquetas de la interfaz (Segmentos, Clústeres). **`nodos` se sigue aceptando como alias de entrada**; la API responde siempre `subnet`. El esquema 19 convierte las filas de `pool_uso` (la restricción acepta los dos nombres durante el despliegue). **Migrar antes de desplegar**: la app exige el esquema 19.
+- **CIDR exacto por rango** (`cidr` en cada rango del lote), **solo para pruebas**: apagado por defecto y habilitado por ambiente con `CIDR_MANUAL_AMBIENTES` (p. ej. `dev`; el `docker-compose` local lo trae en `dev`). IPAM sigue decidiendo: alineado, dentro del pool de su uso y libre (`cidr_manual_no_permitido`, `cidr_desalineado`, `cidr_fuera_del_pool`, `mascara_no_coincide`, `409 solapamiento` con sugeridos), todo o nada e idempotente.
+- Versión del servicio `0.6.0` (API, chart e imagen).
 ### Interfaz: vista previa de IP y jerarquía de la red
 - **Primera y última IP al reservar.** Al escribir un CIDR (en Nuevo segmento, Nuevo pool y los demás campos de CIDR) se muestra debajo «Primera IP … · Última IP …». Si no hay CIDR manual y se elige una máscara, se muestra el **primer rango libre que se asignará** con sus primera y última IP (usa `GET /pools/{id}/libres`).
 - **Pestaña «Jerarquía».** Ordena los segmentos como en GCP: proyecto → VPC → subred (con su VLAN) → rangos secundarios de Pods y Servicios, con el estado de cada rango y sus primera y última IP. Busca por proyecto, VPC, subred, VLAN o CIDR. Lo que aún no tiene proyecto, VPC o subred aparece como «(sin …)» al final de su nivel. Los rangos secundarios se ubican con el `rango` y la `subred` que traen las reservas en grupo; el inventario importado no los trae y aparece solo con su rango principal.

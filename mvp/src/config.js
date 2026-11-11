@@ -148,6 +148,13 @@ def(
   'Ambientes (dev, qa, lab, pre, prod; «todos» = todos) donde /reservas/lote exige que la VPC de los nodos tenga su propio pool: sin pool, 422 `vpc_sin_pool`. Apagado por defecto: sin la bandera, una VPC sin pool sigue saliendo del pool de «ambiente + uso» (pool-uso).',
   { ejemplo: 'dev,qa' },
 );
+def(
+  'CIDR_MANUAL_AMBIENTES',
+  'lista',
+  [],
+  'Ambientes (dev, qa, lab, pre, prod; «todos» = todos) donde /reservas/lote acepta un CIDR exacto por rango (`cidr`). Apagado por defecto: IPAM elige siempre el rango y solo se pide el tamaño. Pensado para pruebas en dev; IPAM sigue validando que el CIDR esté dentro del pool de su uso y libre.',
+  { ejemplo: 'dev' },
+);
 def('BARREDOR_INTERVALO_SEGUNDOS', 'entero', 60, 'Cada cuánto corre el barredor (limpia reservas vencidas y contadores).', { min: 5, max: 3600 });
 
 // Límites
@@ -372,6 +379,7 @@ const config = {
       ttlMaxHoras: valor('RESERVA_TTL_MAX_HORAS'),
       exigeAprobador: valor('CONFIRMACION_EXIGE_APROBADOR'),
       exigirPoolVpc: /** @type {string[]} */ (valor('EXIGIR_POOL_VPC')).map((a) => (a === 'prd' ? 'prod' : a)),
+      cidrManualAmbientes: /** @type {string[]} */ (valor('CIDR_MANUAL_AMBIENTES')).map((a) => (a === 'prd' ? 'prod' : a)),
       barredorIntervaloSeg: valor('BARREDOR_INTERVALO_SEGUNDOS'),
     };
   },
@@ -515,6 +523,8 @@ function validarReservasEventosYTrazas({ errores, intenta }) {
   const AMB_VALIDOS = ['todos', 'dev', 'qa', 'lab', 'pre', 'prod', 'prd'];
   for (const a of r ? r.exigirPoolVpc : [])
     if (!AMB_VALIDOS.includes(a)) errores.push(`EXIGIR_POOL_VPC: «${a}» no es un ambiente (${AMB_VALIDOS.join(', ')}).`);
+  for (const a of r ? r.cidrManualAmbientes : [])
+    if (!AMB_VALIDOS.includes(a)) errores.push(`CIDR_MANUAL_AMBIENTES: «${a}» no es un ambiente (${AMB_VALIDOS.join(', ')}).`);
   if (r && r.ttlHoras > r.ttlMaxHoras) errores.push('RESERVA_TTL_HORAS no puede superar RESERVA_TTL_MAX_HORAS.');
   const ev = intenta(() => config.eventos);
   if (ev && ev.publicadores.includes('webhook') && !(ev.webhook.url && ev.webhook.secreto))

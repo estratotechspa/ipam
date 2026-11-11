@@ -476,3 +476,23 @@ create trigger trg_reserva_fuera_de_hijos before insert on reservas
 
 insert into esquema_version (version, descripcion) values (18, 'el pool es la VPC: proyecto, vpc y pool padre; rango vpc en reservas')
   on conflict (version) do nothing;
+
+-- ============================================================================
+-- 0.6.0 · «subnet» reemplaza a «nodos» como uso del rango principal de una subred (pool_uso). «nodos» se sigue aceptando como alias
+-- de entrada en la API; en la base queda «subnet». La restricción acepta los dos nombres para no romper a una versión anterior
+-- que escriba «nodos» durante un despliegue.
+-- ============================================================================
+do $$
+declare c text;
+begin
+  for c in select conname from pg_constraint where conrelid = 'pool_uso'::regclass and contype = 'c' and pg_get_constraintdef(oid) like '%nodos%' and pg_get_constraintdef(oid) not like '%subnet%' loop
+    execute format('alter table pool_uso drop constraint %I', c);
+  end loop;
+  if not exists (select 1 from pg_constraint where conrelid = 'pool_uso'::regclass and contype = 'c' and pg_get_constraintdef(oid) like '%subnet%') then
+    alter table pool_uso add constraint pool_uso_uso_check check (uso in ('subnet','nodos','pods','servicios'));
+  end if;
+end $$;
+update pool_uso set uso = 'subnet' where uso = 'nodos' and not exists (select 1 from pool_uso x where x.ambiente = pool_uso.ambiente and x.uso = 'subnet');
+
+insert into esquema_version (version, descripcion) values (19, 'subnet reemplaza a nodos en pool_uso; cidr exacto opcional en el lote')
+  on conflict (version) do nothing;

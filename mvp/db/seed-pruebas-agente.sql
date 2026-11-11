@@ -20,8 +20,8 @@ insert into pools (id, tipo, ambiente, proveedor, cidr, mascara_defecto, mascara
 on conflict (id) do nothing;
 
 insert into pool_uso (ambiente, uso, pool_id) values
-  ('lab',  'nodos', 'lab-nodos'),  ('lab',  'pods', 'lab-pods'),  ('lab',  'servicios', 'lab-svc'),
-  ('qa',   'nodos', 'qa-nodos'),   ('qa',   'pods', 'qa-pods'),   ('qa',   'servicios', 'qa-svc'),
-  ('pre',  'nodos', 'pre-nodos'),  ('pre',  'pods', 'pre-pods'),  ('pre',  'servicios', 'pre-svc'),
-  ('prod', 'nodos', 'prod-nodos'), ('prod', 'pods', 'prod-pods'), ('prod', 'servicios', 'prod-svc')
+  ('lab',  'subnet', 'lab-nodos'),  ('lab',  'pods', 'lab-pods'),  ('lab',  'servicios', 'lab-svc'),
+  ('qa',   'subnet', 'qa-nodos'),   ('qa',   'pods', 'qa-pods'),   ('qa',   'servicios', 'qa-svc'),
+  ('pre',  'subnet', 'pre-nodos'),  ('pre',  'pods', 'pre-pods'),  ('pre',  'servicios', 'pre-svc'),
+  ('prod', 'subnet', 'prod-nodos'), ('prod', 'pods', 'prod-pods'), ('prod', 'servicios', 'prod-svc')
 on conflict (ambiente, uso) do nothing;
