@@ -2,7 +2,8 @@
 import { api, errorApi, h, ico, msg, puede } from './base.js';
 import { ASIG, campoRed, cuerpoRed, selectorPoolMascara } from './asignaciones.js';
 import { RES } from './reservas.js';
-import { confirmar, vincularCidr } from './ui.js';
+import { limitesCidr } from '../calculos.js';
+import { confirmar, rangoDeIps, vincularCidr } from './ui.js';
 
 export function formularioNuevoSegmento(pools, estado, recargar) {
   const campo = (etiqueta, control) => h('label', null, etiqueta, control);
@@ -27,6 +28,26 @@ export function formularioNuevoSegmento(pools, estado, recargar) {
     ', sin reserva ni aprobación de otra persona; queda en el historial a tu nombre.',
   );
   const res = h('div', { id: 'ns-res', 'aria-live': 'polite', style: 'flex:1 1 100%' });
+  // Sin CIDR manual, el IPAM entrega el primer rango libre de la máscara elegida: se muestra cuál será antes de reservar.
+  const auto = h('p', { id: 'ns-auto', class: 'campo-msg', 'aria-live': 'polite', style: 'flex:1 1 100%;margin:0' });
+  let consultaAuto = 0;
+  const previsualizarAuto = async () => {
+    const mia = ++consultaAuto;
+    if (cidr.value.trim() || !pool.value || !mascara.value) return auto.replaceChildren();
+    const r = await api(`/api/v1/pools/${encodeURIComponent(pool.value)}/libres?mascara=${encodeURIComponent(mascara.value)}`);
+    if (mia !== consultaAuto) return; // se cambió el pool o la máscara mientras tanto
+    const primero = r.ok ? (Array.isArray(r.data) ? r.data : r.data.libres || [])[0] : null;
+    const lim = primero ? limitesCidr(primero) : null;
+    if (!lim) return auto.replaceChildren(r.ok ? `No quedan rangos /${mascara.value} libres en ${pool.value}.` : '');
+    auto.replaceChildren(
+      ico('info'),
+      ' Se usará el primer rango libre: ',
+      h('code', null, primero),
+      h('br'),
+      ...rangoDeIps(lim),
+      ` · ${lim.direcciones.toLocaleString('es-CL')} direcciones`,
+    );
+  };
   const esReserva = () => !esAdmin || reserva.checked;
   const actualizarModo = () => {
     const r = esReserva();
@@ -38,6 +59,8 @@ export function formularioNuevoSegmento(pools, estado, recargar) {
   reserva.addEventListener('change', actualizarModo);
   const revisarCidr = vincularCidr(cidr, boton, () => (pools.find((x) => x.id === pool.value) || {}).cidr);
   pool.addEventListener('change', revisarCidr);
+  for (const control of [pool, mascara]) control.addEventListener('change', previsualizarAuto);
+  cidr.addEventListener('input', previsualizarAuto);
 
   /** Un solapamiento se explica igual al reservar y al asignar: con quién choca y qué rangos libres hay. */
   const solapamiento = (d, pedido) =>
@@ -138,6 +161,7 @@ export function formularioNuevoSegmento(pools, estado, recargar) {
       campo('VLAN o subred (opcional)', red),
       campo('Ticket', ticket),
       campoTtl,
+      auto,
       definitivo,
       boton,
       res,

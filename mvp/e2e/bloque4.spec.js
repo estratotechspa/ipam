@@ -54,6 +54,25 @@ test('nuevo segmento: validación de CIDR en vivo', async ({ page }) => {
   await expect(page.locator('#ns-cidr')).toHaveAttribute('aria-invalid', 'true');
 });
 
+test('nuevo segmento: vista previa de la primera y la última IP', async ({ page }) => {
+  await irA(page, 'Segmentos');
+  await page.locator('#segmentos summary', { hasText: 'Nuevo segmento' }).click();
+  await page.fill('#ns-cidr', '172.31.137.128/25');
+  const aviso = page.locator('#ns-cidr-msg');
+  await expect(aviso).toContainText('128 direcciones');
+  await expect(aviso).toContainText('Primera IP 172.31.137.128');
+  await expect(aviso).toContainText('Última IP 172.31.137.255');
+});
+
+test('jerarquía: los segmentos se ordenan por proyecto, VPC y subred', async ({ page }) => {
+  await irA(page, 'Jerarquía');
+  await expect(page.getByRole('heading', { name: 'Jerarquía de la red' })).toBeVisible();
+  await expect(page.locator('#jerarquia-cuenta')).toContainText(/\d+ de \d+ segmentos/);
+  await expect(page.locator('#jerarquia-arbol .arbol-proyecto').first()).toBeVisible();
+  await page.fill('#j-buscar', 'zzz-no-existe-zzz');
+  await expect(page.locator('#jerarquia-arbol')).toContainText('Ningún segmento coincide');
+});
+
 test('diálogo de confirmación accesible: foco, Esc cancela, sin diálogos nativos', async ({ page }) => {
   let nativo = 0;
   page.on('dialog', (d) => {

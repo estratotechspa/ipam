@@ -124,6 +124,21 @@ td:first-child,td code{white-space:nowrap}
 .libre-si{font-weight:600;color:var(--link)}
 .libre-no{font-weight:600;color:var(--peligro)}
 
+/* Jerarquía de la red: la sangría y la línea de cada nivel indican a qué proyecto, VPC o subred pertenece cada rango */
+.arbol{display:flex;flex-direction:column;gap:var(--sp-3)}
+.arbol-nodo>summary{cursor:pointer;padding:var(--sp-2) 0;display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap}
+.arbol-proyecto{background:var(--card);border-radius:var(--r-lg);box-shadow:var(--sombra);padding:var(--sp-2) var(--sp-4)}
+.arbol-proyecto>summary{font-size:var(--fs-lg)}
+.arbol-vpc{margin:var(--sp-1) 0 var(--sp-3) var(--sp-4);padding-left:var(--sp-4);border-left:2px solid var(--line)}
+.arbol-lista,.arbol-rangos{list-style:none;margin:0;padding:0}
+.arbol-subred{margin:0 0 var(--sp-3) var(--sp-2);padding-left:var(--sp-4);border-left:2px solid var(--line)}
+.arbol-nombre{display:flex;flex-wrap:wrap;gap:0 var(--sp-1);margin-bottom:var(--sp-1)}
+.arbol-rangos{margin-left:var(--sp-2)}
+.arbol-rango{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-1) var(--sp-3);padding:3px 0}
+.arbol-uso{min-width:min(190px,100%);font-weight:600}
+.arbol-ips{font-variant-numeric:tabular-nums}
+.arbol-sin{font-style:italic;color:var(--mut)}
+
 /* Barras de uso: color por umbral (verde < 70 %, ámbar 70–90 %, rojo > 90 %) más el número; lo reservado va aparte */
 .bar{height:8px;background:var(--pista);border-radius:var(--r-sm);overflow:hidden;width:140px;display:inline-flex;flex:none}
 .bar i{display:block;height:100%;background:var(--blue)}
