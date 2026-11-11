@@ -112,7 +112,7 @@ test('versión: la etiqueta vX.Y.Z (sin la v) en un tag; la de package.json con 
     }).IPAM_IMAGEN,
     'mi.registry.interno/ipam',
   );
-  assert.equal(version, '0.5.0');
+  assert.equal(version, '0.6.0');
 });
 
 test('entorno.sh nunca imprime la clave del registry', () => {

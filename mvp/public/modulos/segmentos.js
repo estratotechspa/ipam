@@ -149,7 +149,7 @@ const celdaFecha = (x) => {
   return `<time class="restante" datetime="${esc(x.ref.expira_en)}" data-fin="${fin}" title="Vence ${esc(fechaHora(x.ref.expira_en))}">${restante(x.ref.segundos_restantes)}</time>`;
 };
 
-const NOMBRE_RANGO = { principal: 'Nodos', pods: 'Pods', servicios: 'Servicios' };
+const NOMBRE_RANGO = { principal: 'Subnet', pods: 'Pods', servicios: 'Servicios' };
 const celdaRango = (x) =>
   x.rango ? `<span class="chip-rango rango-${esc(x.rango)}">${NOMBRE_RANGO[x.rango]}</span>${x.nombre ? ' ' + esc(x.nombre) : ''}` : '—';
 

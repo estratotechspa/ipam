@@ -1,4 +1,4 @@
-// Pestaña Clústeres: los rangos reservados juntos (nodos, pods y servicios), vistos como una sola cosa y aprobados o liberados juntos.
+// Pestaña Clústeres: los rangos reservados juntos (subnet, pods y servicios), vistos como una sola cosa y aprobados o liberados juntos.
 import { ETIQUETA_RANGO, agruparPorGrupo } from '../calculos.js';
 import { $, ESTADO, YO, api, errorApi, fail, fmt, get, h, ico, puede } from './base.js';
 import { restante } from './reservas.js';
@@ -175,7 +175,7 @@ export async function renderClusteres() {
       h(
         'p',
         { class: 'muted' },
-        'Cada fila es un grupo de rangos reservados juntos: los nodos de la subred y sus rangos secundarios de Pods y Servicios. Se aprueban o se liberan todos a la vez.',
+        'Cada fila es un grupo de rangos reservados juntos: la subnet y sus rangos secundarios de Pods y Servicios. Se aprueban o se liberan todos a la vez.',
       ),
       h(
         'div',
@@ -217,7 +217,7 @@ export async function renderClusteres() {
                 h(
                   'tr',
                   null,
-                  ['', 'Proyecto / subred', 'Amb.', 'Nodos', 'Pods', 'Servicios', 'Estado', 'Vence'].map((t) => h('th', { scope: 'col' }, t)),
+                  ['', 'Proyecto / subred', 'Amb.', 'Subnet', 'Pods', 'Servicios', 'Estado', 'Vence'].map((t) => h('th', { scope: 'col' }, t)),
                 ),
               ),
               h(

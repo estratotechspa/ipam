@@ -1,10 +1,11 @@
 // @ts-check
 'use strict';
-// Tabla «ambiente + uso → pool»: qué pool corresponde a nodos, pods y servicios en cada ambiente. Solo un admin la cambia (lo exige la ruta).
+// Tabla «ambiente + uso → pool»: qué pool corresponde a subnet, pods y servicios en cada ambiente. Solo un admin la cambia (lo exige la ruta).
 const { ok, fallo } = require('./resultado');
 
 const { AMBIENTES, normalizarAmbiente } = require('../dominio/ambiente');
-const USOS = ['nodos', 'pods', 'servicios'];
+const USOS = ['subnet', 'pods', 'servicios'];
+const canonico = (uso) => (uso === 'nodos' ? 'subnet' : uso); // «nodos» era el nombre anterior de «subnet»
 const malo = (error, mensaje) => fallo('validacion', error, { mensaje });
 
 /** @param {{repo: any}} deps */
@@ -19,7 +20,8 @@ function crearPoolUso({ repo }) {
   async function listar() {
     return ok({ filas: await repo.listarPoolUso() });
   }
-  async function guardar(ambienteEntrada, uso, poolId) {
+  async function guardar(ambienteEntrada, usoEntrada, poolId) {
+    const uso = canonico(usoEntrada);
     const ambiente = normalizarAmbiente(ambienteEntrada);
     const v = validarClave(ambiente, uso);
     if (v) return v;
@@ -28,7 +30,8 @@ function crearPoolUso({ repo }) {
     if (pool.ambiente !== ambiente) return malo('pool_de_otro_ambiente', `El pool ${pool.id} es de ${pool.ambiente}, no de ${ambiente}.`);
     return ok({ fila: await repo.guardarPoolUso(ambiente, uso, pool.id) });
   }
-  async function borrar(ambienteEntrada, uso) {
+  async function borrar(ambienteEntrada, usoEntrada) {
+    const uso = canonico(usoEntrada);
     const ambiente = normalizarAmbiente(ambienteEntrada);
     const v = validarClave(ambiente, uso);
     if (v) return v;

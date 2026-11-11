@@ -369,9 +369,9 @@ test('7 · idempotencia, todo o nada, TTL y renovar siguen funcionando con el po
   assert.ok(reno.cuerpo.segundos_restantes > 7200);
 });
 
-test('8 · el OpenAPI refleja los campos nuevos y la versión es 0.5.0', opts, async () => {
+test('8 · el OpenAPI refleja los campos nuevos y la versión es 0.6.0', opts, async () => {
   const api = await (await fetch(`${url}/api/v1/openapi.json`)).json();
-  assert.equal(api.info.version, '0.5.0');
+  assert.equal(api.info.version, '0.6.0');
   const sc = api.components.schemas;
   for (const n of ['Pool', 'PoolCrear', 'PoolEditar']) for (const c of ['proyecto', 'vpc', 'padre_id']) assert.ok(sc[n].properties[c], `${n}.${c}`);
   assert.ok(sc.LoteCrear.properties.padre);

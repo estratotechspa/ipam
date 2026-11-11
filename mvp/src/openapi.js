@@ -363,7 +363,7 @@ const schemas = {
       grupo: { type: ['string', 'null'], format: 'uuid', description: 'Grupo de rangos pedidos juntos (clúster GKE). Nulo si se pidió suelto.' },
       rango: {
         enum: ['principal', 'pods', 'servicios', 'vpc', null],
-        description: 'Para qué sirve el rango dentro de su grupo (principal = nodos; vpc = bloque de una VPC).',
+        description: 'Para qué sirve el rango dentro de su grupo (principal = la subnet; vpc = bloque de una VPC).',
       },
       nombre: { type: ['string', 'null'], maxLength: 80, description: 'Nombre del rango dentro de su grupo (p. ej. el del rango secundario de la subred).' },
       codigo: {
@@ -468,7 +468,7 @@ const schemas = {
       grupo: { type: ['string', 'null'], format: 'uuid', description: 'Grupo de rangos pedidos juntos (clúster GKE). Nulo si se pidió suelto.' },
       rango: {
         enum: ['principal', 'pods', 'servicios', 'vpc', null],
-        description: 'Para qué sirve el rango dentro de su grupo (principal = nodos; vpc = bloque de una VPC).',
+        description: 'Para qué sirve el rango dentro de su grupo (principal = la subnet; vpc = bloque de una VPC).',
       },
       nombre: { type: ['string', 'null'], maxLength: 80, description: 'Nombre del rango dentro de su grupo (p. ej. el del rango secundario de la subred).' },
       solicitante: { type: 'string' },
@@ -501,14 +501,20 @@ const schemas = {
     required: ['uso'],
     properties: {
       uso: {
-        enum: ['nodos', 'pods', 'servicios', 'vpc'],
+        enum: ['subnet', 'nodos', 'pods', 'servicios', 'vpc'],
         description:
-          'Para qué es el rango. Nodos, pods y servicios: el pool sale de la VPC del pedido si tiene pool (los nodos) o de la tabla ambiente + uso. **vpc**: el bloque de una VPC nueva; va solo, con `proyecto`, `vpc` y `mascara`, sale del pool `padre` (por defecto el de ambiente + nodos) y, al confirmarlo un admin, IPAM crea el pool hijo.',
+          'Para qué es el rango. **subnet** (el rango principal de una subred; **nodos** se acepta como alias y se responde como subnet), pods y servicios: el pool sale de la VPC del pedido si tiene pool (la subnet) o de la tabla ambiente + uso. **vpc**: el bloque de una VPC nueva; va solo, con `proyecto`, `vpc` y `mascara`, sale del pool `padre` (por defecto el de ambiente + nodos) y, al confirmarlo un admin, IPAM crea el pool hijo.',
       },
       mascara: {
         type: 'integer',
         description:
           'Tamaño (24 = /24), de 8 a 29. Si falta, se usa `mascara_defecto` del pool; si el pool no la tiene, 400 `falta_tamano`. Debe respetar `mascara_minima` y `mascara_maxima` del pool.',
+      },
+      cidr: {
+        type: 'string',
+        description:
+          'Opcional, solo para pruebas: pide este rango exacto en vez de que IPAM elija. Solo en los ambientes de `CIDR_MANUAL_AMBIENTES` (si no, 400 `cidr_manual_no_permitido`). IPAM comprueba que esté alineado, dentro del pool de ese uso y libre (409 `solapamiento`, con alternativas; 400 `cidr_fuera_del_pool`). Si trae también `mascara`, deben coincidir. Sigue siendo todo o nada.',
+        example: '172.31.140.0/25',
       },
       nombre: { type: 'string', maxLength: 80, description: 'Nombre del rango (p. ej. el del rango secundario: «pods-a»).' },
       subred: {
@@ -536,7 +542,7 @@ const schemas = {
       grupo: {
         type: 'string',
         format: 'uuid',
-        description: 'Opcional: agrega estos rangos a un grupo que ya existe (mismo dueño y ambiente, sin reservar nodos de nuevo).',
+        description: 'Opcional: agrega estos rangos a un grupo que ya existe (mismo dueño y ambiente, sin reservar la subnet de nuevo).',
       },
       proyecto: {
         type: ['string', 'null'],
@@ -548,9 +554,9 @@ const schemas = {
         type: 'string',
         maxLength: 63,
         description:
-          'VPC. Se normaliza y se valida como nombre de GCP (`vpc_invalido`). Si existe un pool con esa identidad (vpc y proyecto), los nodos salen de ese pool; si no, 422 `vpc_sin_pool` en los ambientes con `EXIGIR_POOL_VPC` y, en los demás, del pool de ambiente + uso como antes. Una misma VPC con otro proyecto: 422 `vpc_incoherente`.',
+          'VPC. Se normaliza y se valida como nombre de GCP (`vpc_invalido`). Si existe un pool con esa identidad (vpc y proyecto), la subnet sale de ese pool; si no, 422 `vpc_sin_pool` en los ambientes con `EXIGIR_POOL_VPC` y, en los demás, del pool de ambiente + uso como antes. Una misma VPC con otro proyecto: 422 `vpc_incoherente`.',
       },
-      padre: { type: 'string', maxLength: 63, description: 'Solo con uso `vpc`: pool del que sale el bloque. Por defecto, el pool de ambiente + nodos.' },
+      padre: { type: 'string', maxLength: 63, description: 'Solo con uso `vpc`: pool del que sale el bloque. Por defecto, el pool de ambiente + subnet.' },
       ticket: { type: 'string', maxLength: 64 },
       ttl_horas: { type: 'integer', description: 'Vigencia del grupo sin confirmar. Por defecto 72; máximo 168.' },
     },
@@ -558,7 +564,7 @@ const schemas = {
       ambiente: 'dev',
       proyecto: 'proy-pagos',
       subred: 'gke-principal',
-      rangos: [{ uso: 'nodos', mascara: 24 }, { uso: 'pods' }, { uso: 'servicios' }],
+      rangos: [{ uso: 'subnet', mascara: 25 }, { uso: 'pods' }, { uso: 'servicios' }],
     },
   },
   Grupo: {
@@ -660,7 +666,7 @@ const schemas = {
   PoolUso: {
     type: 'object',
     required: ['ambiente', 'uso', 'pool_id'],
-    properties: { ambiente: { $ref: '#/components/schemas/Ambiente' }, uso: { enum: ['nodos', 'pods', 'servicios'] }, pool_id: { type: 'string' } },
+    properties: { ambiente: { $ref: '#/components/schemas/Ambiente' }, uso: { enum: ['subnet', 'pods', 'servicios'] }, pool_id: { type: 'string' } },
   },
   PoolUsoGuardar: {
     type: 'object',
@@ -1552,7 +1558,7 @@ function rutasDeGrupos(p) {
       id: 'reservarLote',
       summary: 'Reserva en grupo los rangos de un clúster (todo o nada)',
       description:
-        'Rol `agente` o superior. Pide de 1 a 20 rangos (`nodos`, `pods`, `servicios`, en cualquier cantidad y combinación; cada uno con `nombre` y `subred` opcionales); cada uno sale del pool que la tabla ambiente + uso → pool indica (`GET /pool-uso`). El tamaño por defecto lo define cada pool (`mascara_defecto`). **Todo o nada:** si uno no cabe, no se reserva ninguno (409 `sin_espacio`). Con `?simular=true` solo dice qué reservaría. Idempotente con `Idempotency-Key`. Un pedido es **un solo grupo** (una sola caducidad), aunque sea de varias subredes. Con `grupo` agrega rangos a uno existente. El grupo se aprueba entero (solo admin) o se libera entero; sus rangos no se confirman ni liberan sueltos (409 `reserva_de_grupo`).',
+        'Rol `agente` o superior. Pide de 1 a 20 rangos (`subnet` —alias `nodos`—, `pods`, `servicios`, en cualquier cantidad y combinación; cada uno con `nombre` y `subred` opcionales); cada uno sale del pool que la tabla ambiente + uso → pool indica (`GET /pool-uso`). El tamaño por defecto lo define cada pool (`mascara_defecto`). **Todo o nada:** si uno no cabe, no se reserva ninguno (409 `sin_espacio`). Con `?simular=true` solo dice qué reservaría. Idempotente con `Idempotency-Key`. Un pedido es **un solo grupo** (una sola caducidad), aunque sea de varias subredes. Con `grupo` agrega rangos a uno existente. El grupo se aprueba entero (solo admin) o se libera entero; sus rangos no se confirman ni liberan sueltos (409 `reserva_de_grupo`).',
       params: [CLAVE_IDEM, param('simular', 'query', 'true: devuelve lo que se reservaría, sin reservar.', { type: 'boolean' }, false)],
       body: cuerpo('LoteCrear', schemas.LoteCrear.example),
       ok: {
@@ -1659,7 +1665,7 @@ function rutasDeGrupos(p) {
       description: 'Solo admin. El pool debe ser del mismo ambiente.',
       params: [
         param('ambiente', 'path', 'Ambiente (`prd` = `prod`).', { $ref: '#/components/schemas/AmbienteEntrada' }),
-        param('uso', 'path', 'Uso.', { enum: ['nodos', 'pods', 'servicios'] }),
+        param('uso', 'path', 'Uso (`nodos` se acepta como alias de `subnet`).', { enum: ['subnet', 'nodos', 'pods', 'servicios'] }),
       ],
       body: cuerpo('PoolUsoGuardar', schemas.PoolUsoGuardar.example),
       ok: { 200: respuesta('Guardado.', 'PoolUso') },
@@ -1671,7 +1677,7 @@ function rutasDeGrupos(p) {
       description: 'Solo admin.',
       params: [
         param('ambiente', 'path', 'Ambiente (`prd` = `prod`).', { $ref: '#/components/schemas/AmbienteEntrada' }),
-        param('uso', 'path', 'Uso.', { enum: ['nodos', 'pods', 'servicios'] }),
+        param('uso', 'path', 'Uso (`nodos` se acepta como alias de `subnet`).', { enum: ['subnet', 'nodos', 'pods', 'servicios'] }),
       ],
       ok: { 200: respuesta('Quitado.', { type: 'object' }) },
       extra: { ...e400, ...e403, ...e404 },

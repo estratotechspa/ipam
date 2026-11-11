@@ -199,7 +199,7 @@ export function agruparPorGrupo(reservas) {
     .sort((a, b) => new Date(b.creado_en) - new Date(a.creado_en));
 }
 
-export const ETIQUETA_RANGO = { principal: 'Nodos', pods: 'Pods', servicios: 'Servicios' };
+export const ETIQUETA_RANGO = { principal: 'Subnet', pods: 'Pods', servicios: 'Servicios' };
 
 // ---------- Primera y última dirección de un bloque ----------
 // → { primera, ultima, direcciones } o null si no es un CIDR válido. Son la dirección de red y la última del bloque; sirve de vista previa
