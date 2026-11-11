@@ -1,0 +1,33 @@
+# Lleva las asignaciones de un pool grande a pools hijos por VPC en el POC (Supabase). SOLO manual y protegido por el ambiente «poc».
+# Por defecto SIMULA (no escribe nada y deja el plan en el registro); con «aplicar» escribe, todo o nada. Guía: docs/ops/MIGRAR-VPC-A-POOLS.md.
+name: Migrar VPC POC
+on:
+  workflow_dispatch:
+    inputs:
+      pool:
+        description: Pool grande del que salen las VPC
+        required: true
+        default: dev-gcp-ccla
+      aplicar:
+        description: Aplicar de verdad (si no, solo simula)
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: migrar-poc
+  cancel-in-progress: false
+jobs:
+  migrar-vpc:
+    runs-on: ubuntu-latest
+    environment: poc
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: {node-version: 22}
+      - run: scripts/ci/migrar-vpc.sh
+        env:
+          DATABASE_URL_MIGRACION: ${{ secrets.DATABASE_URL_MIGRACION }}
+          DATABASE_SCHEMA: ipam
+          POOL: ${{ inputs.pool }}
+          APLICAR: ${{ inputs.aplicar }}
