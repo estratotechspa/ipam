@@ -3,6 +3,8 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y versionado semántico.
 
 ## [Sin publicar]
+### Operación
+- **Workflow «Migrar VPC POC»** (manual, ambiente `poc`): simula o aplica `npm run migrar-vpc` en el POC. Por defecto solo simula. Como el repositorio y sus registros pueden ser públicos, **no imprime el plan** (trae proyectos, VPC y rangos): el registro muestra solo cantidades y tipos de problema.
 ### Decisiones
 - **ADR 0010:** los rangos secundarios (Pods y Services) pueden repetirse entre VPC, pero IPAM no los genera y se evitan en lo posible ([docs/adr/0010](docs/adr/0010-rangos-secundarios-repetidos.md)).
 ### Interfaz: espacio libre y estados
