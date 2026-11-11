@@ -1,5 +1,5 @@
 // Piezas de interfaz reutilizables: diálogos accesibles, avisos (toasts), validación de CIDR en vivo y tablas.
-import { validarCidr } from '../calculos.js';
+import { limitesCidr, validarCidr } from '../calculos.js';
 import { $, h, ico } from './base.js';
 
 // ---- Diálogos simples (clave temporal, cambio de contraseña) ----
@@ -52,7 +52,11 @@ export function vincularCidr(input, boton, cidrDePool = () => undefined, { soloB
     const len = Number(input.value.split('/')[1]);
     if (soloBase && v.estado === 'ok' && (len < 8 || len > 30)) v = { estado: 'error', mensaje: 'Un bloque base va de /8 a /30.' };
     aviso.className = 'campo-msg' + (v.estado === 'error' ? ' campo-error' : v.estado === 'ok' ? ' campo-ok' : '');
-    aviso.replaceChildren(...(v.estado === 'vacio' ? [] : [ico(v.estado === 'error' ? 'error' : 'ok'), ' ' + v.mensaje]));
+    const lim = v.estado === 'ok' ? limitesCidr(input.value) : null;
+    aviso.replaceChildren(
+      ...(v.estado === 'vacio' ? [] : [ico(v.estado === 'error' ? 'error' : 'ok'), ' ' + v.mensaje]),
+      ...(lim ? [h('br'), ...rangoDeIps(lim)] : []),
+    );
     if (v.estado === 'error') input.setAttribute('aria-invalid', 'true');
     else input.removeAttribute('aria-invalid');
     boton.disabled = v.estado === 'error';
@@ -60,6 +64,9 @@ export function vincularCidr(input, boton, cidrDePool = () => undefined, { soloB
   input.addEventListener('input', revisar);
   return revisar; // para volver a revisar cuando cambia el pool elegido
 }
+
+/** «Primera IP 10.0.0.0 · Última IP 10.0.0.255»: vista previa del bloque antes de reservarlo. */
+export const rangoDeIps = (lim) => ['Primera IP ', h('code', null, lim.primera), ' · Última IP ', h('code', null, lim.ultima)];
 
 /**
  * Diálogo de confirmación accesible (reemplaza a confirm() y prompt()): usa <dialog> con showModal(), así el foco queda atrapado,

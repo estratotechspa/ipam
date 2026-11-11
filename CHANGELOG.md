@@ -3,6 +3,9 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y versionado semántico.
 
 ## [Sin publicar]
+### Interfaz: vista previa de IP y jerarquía de la red
+- **Primera y última IP al reservar.** Al escribir un CIDR (en Nuevo segmento, Nuevo pool y los demás campos de CIDR) se muestra debajo «Primera IP … · Última IP …». Si no hay CIDR manual y se elige una máscara, se muestra el **primer rango libre que se asignará** con sus primera y última IP (usa `GET /pools/{id}/libres`).
+- **Pestaña «Jerarquía».** Ordena los segmentos como en GCP: proyecto → VPC → subred (con su VLAN) → rangos secundarios de Pods y Servicios, con el estado de cada rango y sus primera y última IP. Busca por proyecto, VPC, subred, VLAN o CIDR. Lo que aún no tiene proyecto, VPC o subred aparece como «(sin …)» al final de su nivel. Los rangos secundarios se ubican con el `rango` y la `subred` que traen las reservas en grupo; el inventario importado no los trae y aparece solo con su rango principal.
 ### Operación
 - **Workflow «Migrar VPC POC»** (manual, ambiente `poc`): simula o aplica `npm run migrar-vpc` en el POC. Por defecto solo simula. Como el repositorio y sus registros pueden ser públicos, **no imprime el plan** (trae proyectos, VPC y rangos): el registro muestra solo cantidades y tipos de problema.
 ### Decisiones

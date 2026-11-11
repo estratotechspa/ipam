@@ -200,3 +200,78 @@ export function agruparPorGrupo(reservas) {
 }
 
 export const ETIQUETA_RANGO = { principal: 'Nodos', pods: 'Pods', servicios: 'Servicios' };
+
+// ---------- Primera y última dirección de un bloque ----------
+// → { primera, ultima, direcciones } o null si no es un CIDR válido. Son la dirección de red y la última del bloque; sirve de vista previa
+// antes de reservar o asignar.
+export function limitesCidr(texto) {
+  const c = parseCidr(texto);
+  if (!c) return null;
+  return { primera: numeroAIp(c.inicio), ultima: numeroAIp(c.fin), direcciones: c.tamano };
+}
+
+// ---------- Jerarquía de la red: proyecto → VPC → subred → rangos secundarios ----------
+export const SIN = { proyecto: '(sin proyecto)', vpc: '(sin VPC)', subred: '(sin subred)' };
+const USOS_SECUNDARIOS = new Set(['pods', 'servicios']);
+
+/**
+ * Ordena segmentos (asignaciones y reservas) en la jerarquía de GCP. Cada elemento trae `cidr` y, si se conocen, `proyecto`, `vpc`,
+ * `subred`, `rango` (`principal`, `pods`, `servicios` o `vpc`) y `nombre`. Sin `rango` (inventario importado) el segmento cuenta como el
+ * rango principal de su subred; un `rango: 'vpc'` es el bloque de la VPC. Lo que no trae proyecto, VPC o subred queda bajo «(sin …)»,
+ * al final, para que se vea qué falta completar.
+ * → [{ nombre, vpcs: [{ nombre, bloques, subredes: [{ nombre, principales, secundarios, direcciones }], direcciones }], subredes, direcciones }]
+ */
+export function armarJerarquia(items) {
+  const proyectos = new Map();
+  const clave = (valor, sin) => String(valor || '').trim() || sin;
+  for (const it of items || []) {
+    const c = parseCidr(it.cidr);
+    if (!c) continue;
+    const el = { ...it, inicio: c.inicio, tamano: c.tamano };
+    const proy = clave(it.proyecto, SIN.proyecto);
+    const vpc = clave(it.vpc, SIN.vpc);
+    if (!proyectos.has(proy)) proyectos.set(proy, new Map());
+    const vpcs = proyectos.get(proy);
+    if (!vpcs.has(vpc)) vpcs.set(vpc, { bloques: [], subredes: new Map() });
+    const nodoVpc = vpcs.get(vpc);
+    if (it.rango === 'vpc') {
+      nodoVpc.bloques.push(el);
+      continue;
+    }
+    const sub = clave(it.subred, SIN.subred);
+    if (!nodoVpc.subredes.has(sub)) nodoVpc.subredes.set(sub, { principales: [], secundarios: [] });
+    nodoVpc.subredes.get(sub)[USOS_SECUNDARIOS.has(it.rango) ? 'secundarios' : 'principales'].push(el);
+  }
+  const porInicio = (a, b) => a.inicio - b.inicio || a.tamano - b.tamano;
+  // Los «(sin …)» van al final; el resto, por nombre.
+  const porNombre = (sin) => (a, b) => (a.nombre === sin) - (b.nombre === sin) || a.nombre.localeCompare(b.nombre, 'es');
+  const suma = (xs) => xs.reduce((n, x) => n + x.tamano, 0);
+  return [...proyectos]
+    .map(([nombre, vpcs]) => {
+      const lista = [...vpcs]
+        .map(([nombreVpc, v]) => {
+          const subredes = [...v.subredes]
+            .map(([nombreSub, s]) => ({
+              nombre: nombreSub,
+              principales: s.principales.sort(porInicio),
+              secundarios: s.secundarios.sort(porInicio),
+              direcciones: suma(s.principales),
+            }))
+            .sort(
+              (a, b) =>
+                (a.nombre === SIN.subred) - (b.nombre === SIN.subred) ||
+                (a.principales[0]?.inicio ?? Infinity) - (b.principales[0]?.inicio ?? Infinity) ||
+                a.nombre.localeCompare(b.nombre, 'es'),
+            );
+          return { nombre: nombreVpc, bloques: v.bloques.sort(porInicio), subredes, direcciones: suma(subredes.map((s) => ({ tamano: s.direcciones }))) };
+        })
+        .sort(porNombre(SIN.vpc));
+      return {
+        nombre,
+        vpcs: lista,
+        subredes: lista.reduce((n, v) => n + v.subredes.length, 0),
+        direcciones: suma(lista.map((v) => ({ tamano: v.direcciones }))),
+      };
+    })
+    .sort(porNombre(SIN.proyecto));
+}

@@ -235,3 +235,49 @@ test('mayor bloque libre y cuántos bloques caben, a partir de la disponibilidad
   assert.equal(mayorBloqueLibre([{ mascara: 24, bloques_libres: 0 }]), null);
   assert.equal(mayorBloqueLibre(null), null);
 });
+
+test('primera y última dirección de un bloque', async () => {
+  const { limitesCidr } = await cargar();
+  assert.deepEqual(limitesCidr('172.31.137.128/25'), { primera: '172.31.137.128', ultima: '172.31.137.255', direcciones: 128 });
+  assert.deepEqual(limitesCidr('10.0.0.0/8'), { primera: '10.0.0.0', ultima: '10.255.255.255', direcciones: 16777216 });
+  assert.deepEqual(limitesCidr('192.168.1.7/32'), { primera: '192.168.1.7', ultima: '192.168.1.7', direcciones: 1 });
+  assert.equal(limitesCidr('no-es-un-cidr'), null);
+  assert.equal(limitesCidr(''), null);
+});
+
+test('jerarquía: proyecto → VPC → subred → rangos secundarios, con lo incompleto al final', async () => {
+  const { armarJerarquia } = await cargar();
+  const j = armarJerarquia([
+    { cidr: '10.0.1.0/24', proyecto: 'hub-b', vpc: 'vpc-1', subred: 'sub-b', rango: 'principal' },
+    { cidr: '10.0.0.0/24', proyecto: 'hub-b', vpc: 'vpc-1', subred: 'sub-a', rango: 'principal' },
+    { cidr: '10.64.0.0/20', proyecto: 'hub-b', vpc: 'vpc-1', subred: 'sub-a', rango: 'pods', nombre: 'pods' },
+    { cidr: '10.96.0.0/24', proyecto: 'hub-b', vpc: 'vpc-1', subred: 'sub-a', rango: 'servicios', nombre: 'services' },
+    { cidr: '10.8.0.0/20', proyecto: 'hub-b', vpc: 'vpc-1', rango: 'vpc' },
+    { cidr: '10.0.2.0/28', proyecto: 'hub-a', vpc: 'vpc-2' }, // importado: sin rango ni subred
+    { cidr: '10.0.3.0/28', vpc: 'vpc-3' }, // sin proyecto
+    { cidr: '10.0.4.0/28', proyecto: 'hub-b', vpc: 'vpc-1', subred: 'sub-c' },
+    { cidr: 'basura', proyecto: 'hub-b' }, // un CIDR inválido se ignora
+  ]);
+  assert.deepEqual(
+    j.map((p) => p.nombre),
+    ['hub-a', 'hub-b', '(sin proyecto)'],
+  );
+  const b = j[1];
+  assert.equal(b.vpcs.length, 1);
+  const v = b.vpcs[0];
+  assert.deepEqual(
+    v.subredes.map((s) => s.nombre),
+    ['sub-a', 'sub-b', 'sub-c'],
+  ); // por dirección, no por nombre
+  assert.deepEqual(
+    v.subredes[0].secundarios.map((x) => x.rango),
+    ['pods', 'servicios'],
+  );
+  assert.equal(v.subredes[0].principales[0].cidr, '10.0.0.0/24');
+  assert.equal(v.bloques.length, 1);
+  assert.equal(v.direcciones, 256 + 256 + 16); // los secundarios y el bloque de la VPC no suman a las subredes
+  assert.equal(b.subredes, 3);
+  assert.equal(j[0].vpcs[0].subredes[0].nombre, '(sin subred)');
+  assert.equal(j[0].vpcs[0].subredes[0].principales.length, 1);
+  assert.equal(j[2].vpcs[0].nombre, 'vpc-3');
+});
