@@ -288,8 +288,9 @@ app.get('/api/v1/jira/solicitudes', (_req, res) => res.json([]));
 app.get('/healthz', (_req, res) => res.json({ ok: true }));
 app.get('/readyz', (_req, res) => res.json({ ok: true, version: '0.6.0' }));
 
-const server = app.listen(PUERTO, () => {
-  console.log(`
+if (require.main === module) {
+  const server = app.listen(PUERTO, () => {
+    console.log(`
 ╔═══════════════════════════════════════════════════════════════════════════╗
 ║                   CYBER NETWORK CONSOLE (DARK OPS IPAM)                   ║
 ╠═══════════════════════════════════════════════════════════════════════════╣
@@ -297,14 +298,17 @@ const server = app.listen(PUERTO, () => {
 ║  Modo: Demostración Interactiva en Memoria (Zero-Setup)                   ║
 ║  UI: Dark Ops Aesthetic / WCAG AA Compliant / Telemetría en Vivo          ║
 ╚═══════════════════════════════════════════════════════════════════════════╝
-  `);
-});
+    `);
+  });
 
-process.on('SIGINT', () => {
-  server.close();
-  process.exit(0);
-});
-process.on('SIGTERM', () => {
-  server.close();
-  process.exit(0);
-});
+  process.on('SIGINT', () => {
+    server.close();
+    process.exit(0);
+  });
+  process.on('SIGTERM', () => {
+    server.close();
+    process.exit(0);
+  });
+}
+
+module.exports = app;
