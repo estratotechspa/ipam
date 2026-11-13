@@ -90,6 +90,7 @@ function normalizarReserva(e, claveHeader, config) {
   if (!nom.ok) return malo(nom.error, nom.mensaje);
   const { pool, ambiente, tipo } = destino;
   const { cidr, mascara } = tamano;
+  const estrategia = ['primero', 'mejor_ajuste', 'biseccion', 'inverso'].includes(e.estrategia) ? e.estrategia : 'primero';
   return ok({
     datos: {
       pool,
@@ -97,6 +98,7 @@ function normalizarReserva(e, claveHeader, config) {
       tipo,
       cidr,
       mascara,
+      estrategia,
       vpc: (e.vpc || '').trim(),
       ticket: t.ticket,
       ttlHoras: ttl.horas,
@@ -185,7 +187,7 @@ async function reservarEnTransaccion(tx, { actor, d, p, config }) {
   await tx.bloquear(`pool:${p.id}`);
   const expiradas = await tx.expirarVencidas(p.id); // limpia lo vencido de ESTE pool antes de calcular qué queda libre
   const ocup = await tx.ocupados(p.id);
-  const objetivo = d.cidr || libres(p.cidr, ocup, d.mascara, 1)[0];
+  const objetivo = d.cidr || libres(p.cidr, ocup, d.mascara, 1, d.estrategia || 'primero')[0];
   if (!objetivo) return { ...fallo('conflicto', 'sin_espacio', { mensaje: `No quedan segmentos /${d.mascara} libres en ${p.id}.` }), expiradas };
   const c = /** @type {NonNullable<ReturnType<typeof parse>>} */ (parse(objetivo));
   const x = await tx.conflicto(p.id, objetivo);

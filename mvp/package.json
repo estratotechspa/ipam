@@ -10,6 +10,7 @@
     "migrar": "node src/cli/migrar.js",
     "purgar": "node src/cli/purgar.js",
     "migrar-vpc": "node src/cli/migrar-vpc.js",
+    "drift": "node src/cli/detectar-drift.js",
     "hash-password": "node scripts/hash-password.js",
     "lint": "eslint .",
     "formato": "prettier --write \"src/**/*.js\" \"e2e/**/*.js\" \"public/**/*.js\" \"scripts/*.js\" \"*.js\" \"../scripts/**/*.js\"",

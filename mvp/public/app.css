@@ -115,6 +115,7 @@ td:first-child,td code{white-space:nowrap}
 .tag.reservada{background:#0b5cad}.tag.asignado{background:#1d4ed8}.tag.reservado{background:#8a4b00}.tag.confirmada{background:#1d7a46}.tag.liberada{background:#5b6577}.tag.expirada{background:#a33a3a}
 .tag.activo{background:#1d7a46}.tag.vencido{background:#a33a3a}.tag.revocado{background:#5b6577}.tag.pronto{background:#8a4b00}
 .tag.imp-ok{background:#1d7a46}.tag.imp-omitida{background:#5b6577}.tag.imp-aviso{background:#8a4b00}.tag.imp-error{background:#a33a3a}
+.tag.sincronizado{background:#1d7a46}.tag.desviacion{background:#a33a3a}.tag.huerfano{background:#8a4b00}.tag.discrepancia{background:#0b5cad}
 
 /* Mayor libre y «¿dónde cabe?»: el espacio útil de un pool es su mayor bloque libre, no solo el porcentaje */
 .cabe-pools{margin:0 0 var(--sp-3);max-width:360px}

@@ -17,7 +17,8 @@ function leerFiltrosAsignaciones(q) {
   const entero = (k, defecto) => (q[k] === undefined ? defecto : typeof q[k] === 'string' && /^\d{1,9}$/.test(q[k]) ? Number(q[k]) : null);
   const limit = entero('limit', LIMITE_MAXIMO);
   const offset = entero('offset', 0);
-  const f = { pool: texto('pool', 100), ambiente: texto('ambiente', 10), q: texto('q', 100), orden: texto('orden', 20), dir: texto('dir', 4) };
+  const antes_id = entero('antes_id', undefined);
+  const f = { pool: texto('pool', 100), ambiente: texto('ambiente', 10), q: texto('q', 100), orden: texto('orden', 20), dir: texto('dir', 4), antes_id };
   if (limit === null || limit < 1 || limit > LIMITE_MAXIMO) return { error: `limit debe ser un entero entre 1 y ${LIMITE_MAXIMO}.` };
   if (offset === null) return { error: 'offset debe ser un entero mayor o igual a 0.' };
   if (f.pool === null || f.q === null) return { error: 'pool o q inválidos (máximo 100 caracteres).' };
@@ -78,7 +79,8 @@ function montar(app, { casos, audita, validacion }) {
   api(app, 'get', '/asignaciones', async (req, res) => {
     const f = leerFiltrosAsignaciones(req.query);
     if (f.error) return error(res, 400, 'parametro_invalido', f.error);
-    const { filas, total } = await admin.asignaciones(f);
+    const { filas, total, siguiente_cursor } = await admin.asignaciones(f);
+    if (siguiente_cursor) res.set('X-Next-Cursor', String(siguiente_cursor));
     res.set('X-Total-Count', String(total));
     res.json(filas);
   });

@@ -324,6 +324,10 @@ create index if not exists reservas_asignacion_idx on reservas (asignacion_id) w
 create index if not exists asignaciones_pool_id_idx on asignaciones (pool_id, id desc);
 -- IPs de un pool (ficha del pool, filtro de la pestaña) y clave foránea pool_id, que no tenía índice propio.
 create index if not exists direcciones_ip_pool_ip on direcciones_ip (pool_id, ip);
+-- Índices para búsqueda frecuente en asignaciones (VPC, ticket, proyecto)
+create index if not exists asignaciones_vpc_idx on asignaciones (vpc);
+create index if not exists asignaciones_ticket_idx on asignaciones (ticket);
+create index if not exists asignaciones_proyecto_idx on asignaciones (proyecto) where proyecto is not null;
 
 -- ============================================================================
 -- Permisos del rol de la aplicación (solo si existe `ipam_app`; ver db/roles.sql)

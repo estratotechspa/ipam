@@ -841,7 +841,7 @@ function crearRepositorio(db) {
      * por una columna de la lista blanca ORDEN_ASIGNACIONES. Devuelve { filas, total } (total = sin paginar, para el encabezado
      * X-Total-Count). Lo único que se concatena son fragmentos FIJOS de esa lista y marcadores $n: nada de lo que envía el cliente.
      */
-    async listarAsignaciones({ pool, ambiente, q: texto, orden = 'fecha', dir, limit = 1000, offset = 0 } = {}) {
+    async listarAsignaciones({ pool, ambiente, q: texto, orden = 'fecha', dir, limit = 1000, offset = 0, antes_id, desde_id } = {}) {
       const donde = [];
       const par = [];
       const agregar = (valor, condicion) => {
@@ -850,17 +850,21 @@ function crearRepositorio(db) {
       };
       if (pool) agregar(pool, 'a.pool_id = $$');
       if (ambiente) agregar(ambiente, 'p.ambiente = $$');
+      if (antes_id) agregar(Number(antes_id), 'a.id < $$');
+      if (desde_id) agregar(Number(desde_id), 'a.id > $$');
       if (texto)
         agregar(
           `%${texto.replace(/[\\%_]/g, '\\$&')}%`,
-          '(a.cidr::text ilike $$ or a.codigo ilike $$ or a.vpc ilike $$ or a.solicitante ilike $$ or a.ticket ilike $$)',
+          '(a.cidr::text ilike $$ or a.codigo ilike $$ or a.vpc ilike $$ or a.solicitante ilike $$ or a.ticket ilike $$ or a.proyecto ilike $$ or a.subred ilike $$ or a.descripcion ilike $$)',
         );
       const desde = `from asignaciones a join pools p on p.id = a.pool_id ${donde.length ? 'where ' + donde.join(' and ') : ''}`;
       const sentido = (dir || (orden === 'fecha' ? 'desc' : 'asc')) === 'asc' ? 'asc' : 'desc';
       const sqlTotal = `select count(*)::int as n ${desde}`; // solo fragmentos fijos y marcadores $n (ver arriba)
       const total = (await db.query(sqlTotal, par)).rows[0].n;
       const sql = `select ${COLUMNAS_ASIGNACION_A}, p.ambiente ${desde} order by ${ORDEN_ASIGNACIONES[orden] || ORDEN_ASIGNACIONES.fecha} ${sentido}, a.id ${sentido} limit $${par.length + 1} offset $${par.length + 2}`;
-      return { filas: (await db.query(sql, [...par, limit, offset])).rows, total };
+      const filas = (await db.query(sql, [...par, limit, offset])).rows;
+      const siguiente_cursor = filas.length === limit ? filas[filas.length - 1].id : null;
+      return { filas, total, siguiente_cursor };
     },
     exportarDatos: () => exportarDatos(db),
     ...consultasDeAdministracion(db),

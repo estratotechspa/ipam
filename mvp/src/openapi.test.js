@@ -4,7 +4,6 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://nadie:nada@127.0.0.1:1/ninguna';
-const { Validator } = require('@seriousme/openapi-schema-validator');
 const { construirOpenApi, schemas } = require('./openapi');
 const { listarRutas } = require('./adaptadores/http/registro');
 const { crearValidador, traducir } = require('./adaptadores/http/validacion');
@@ -25,6 +24,7 @@ function rutasDelContrato() {
 }
 
 test('el documento es un OpenAPI 3.1 válido', async () => {
+  const { Validator } = await import('@seriousme/openapi-schema-validator');
   const r = await new Validator().validate(JSON.parse(JSON.stringify(doc)));
   assert.equal(r.valid, true, JSON.stringify(r.errors, null, 1));
   assert.equal(doc.openapi, '3.1.0');
