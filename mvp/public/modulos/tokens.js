@@ -10,12 +10,21 @@ const GRUPOS = [
   ['direcciones', 'Direcciones IP', 'consultar y registrar IP fijas', false],
 ];
 
+let FILTRO_TOKEN = '';
+
 export async function renderTokens() {
   const raiz = $('tokens');
   try {
     const lista = await get('/api/v1/tokens');
     const estado = h('div', { id: 'tk-msg', 'aria-live': 'polite' });
-    const filas = lista.map((t) =>
+    const inactivos = lista.filter((t) => t.estado !== 'activo');
+    const visibles = lista.filter((t) => {
+      if (FILTRO_TOKEN === 'activos') return t.estado === 'activo';
+      if (FILTRO_TOKEN === 'inactivos') return t.estado !== 'activo';
+      return true;
+    });
+
+    const filas = visibles.map((t) =>
       h(
         'tr',
         null,
@@ -32,24 +41,68 @@ export async function renderTokens() {
           t.estado === 'activo'
             ? h(
                 'button',
-                { class: 'btn peligro', type: 'button', 'aria-label': 'Revocar el token ' + t.nombre, onclick: () => revocarToken(t, estado) },
+                { class: 'btn peligro pequeno', type: 'button', 'aria-label': 'Revocar el token ' + t.nombre, onclick: () => revocarToken(t, estado) },
                 'Revocar',
               )
-            : null,
+            : h(
+                'button',
+                {
+                  class: 'btn sec peligro pequeno',
+                  type: 'button',
+                  'aria-label': 'Eliminar definitivamente el token ' + t.nombre,
+                  onclick: () => eliminarToken(t, estado),
+                },
+                'Eliminar',
+              ),
         ),
       ),
     );
+
+    const botonesCabecera = [
+      h(
+        'select',
+        {
+          id: 'tk-filtro',
+          class: 'pequeno',
+          onchange: (e) => {
+            FILTRO_TOKEN = e.target.value;
+            renderTokens();
+          },
+        },
+        h('option', { value: '', selected: FILTRO_TOKEN === '' }, 'Todos los tokens (' + lista.length + ')'),
+        h('option', { value: 'activos', selected: FILTRO_TOKEN === 'activos' }, 'Solo activos (' + (lista.length - inactivos.length) + ')'),
+        h('option', { value: 'inactivos', selected: FILTRO_TOKEN === 'inactivos' }, 'Solo revocados/vencidos (' + inactivos.length + ')'),
+      ),
+    ];
+
+    if (inactivos.length > 0) {
+      botonesCabecera.push(
+        h(
+          'button',
+          {
+            class: 'btn sec peligro',
+            type: 'button',
+            id: 'tk-purgar',
+            onclick: () => purgarTokens(estado),
+          },
+          'Limpiar revocados (' + inactivos.length + ')',
+        ),
+      );
+    }
+
+    botonesCabecera.push(h('button', { class: 'btn', type: 'button', id: 'tk-nuevo', onclick: () => dialogoToken(estado) }, '+ Crear token'));
+
     raiz.replaceChildren(
       h(
         'div',
         { style: 'display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px' },
         h('h2', { id: 'tk-titulo', tabindex: '-1' }, 'Tokens de servicio'),
-        h('button', { class: 'btn', type: 'button', id: 'tk-nuevo', onclick: () => dialogoToken(estado) }, 'Crear token'),
+        h('div', { style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap' }, ...botonesCabecera),
       ),
       h(
         'p',
         { class: 'muted' },
-        'Credenciales para agentes y sistemas (no para personas). El token se muestra una sola vez al crearlo; aquí solo queda su prefijo. Rotar: crea uno nuevo, actualiza el agente y revoca el anterior.',
+        'Credenciales para agentes y sistemas (no para personas). El token se muestra una sola vez al crearlo; aquí solo queda su prefijo. Los tokens revocados o vencidos se pueden eliminar definitivamente.',
       ),
       estado,
       tabla('Tokens de servicio', ['Nombre', 'Prefijo', 'Rol', 'Alcance', 'Vence', 'Último uso', 'Estado', 'Acciones'], filas, 'Todavía no hay tokens.'),
@@ -62,7 +115,7 @@ export async function renderTokens() {
 export async function revocarToken(t, zona) {
   const revocar = await confirmar({
     titulo: `¿Revocar el token «${t.nombre}»?`,
-    mensaje: 'Los agentes que lo usen dejarán de funcionar de inmediato.',
+    mensaje: 'Los agentes que lo usen dejarán de funcionar de inmediato. Luego podrás eliminarlo definitivamente.',
     confirmar: 'Revocar token',
     peligro: true,
   });
@@ -71,6 +124,34 @@ export async function revocarToken(t, zona) {
   await renderTokens();
   $('tk-titulo').focus();
   msg($('tk-msg'), r.ok ? `Token «${t.nombre}» revocado.` : errorApi(r), r.ok ? 'ok' : 'error');
+}
+
+export async function eliminarToken(t, zona) {
+  const eliminar = await confirmar({
+    titulo: `¿Eliminar definitivamente «${t.nombre}»?`,
+    mensaje: 'El token se borrará de forma permanente de la base de datos.',
+    confirmar: 'Eliminar permanentemente',
+    peligro: true,
+  });
+  if (!eliminar) return;
+  const r = await api('/api/v1/tokens/' + t.id + '?purgar=true', { method: 'DELETE', body: {} });
+  await renderTokens();
+  $('tk-titulo').focus();
+  msg($('tk-msg'), r.ok ? `Token «${t.nombre}» eliminado del sistema.` : errorApi(r), r.ok ? 'ok' : 'error');
+}
+
+export async function purgarTokens(zona) {
+  const limpiar = await confirmar({
+    titulo: '¿Eliminar todos los tokens inactivos?',
+    mensaje: 'Se borrarán de forma definitiva todos los tokens revocados y vencidos.',
+    confirmar: 'Limpiar todos',
+    peligro: true,
+  });
+  if (!limpiar) return;
+  const r = await api('/api/v1/tokens?purgar=revocados', { method: 'DELETE', body: {} });
+  await renderTokens();
+  $('tk-titulo').focus();
+  msg($('tk-msg'), r.ok ? `Se eliminaron ${r.data.eliminados} tokens revocados/vencidos.` : errorApi(r), r.ok ? 'ok' : 'error');
 }
 
 export function dialogoToken(zona) {

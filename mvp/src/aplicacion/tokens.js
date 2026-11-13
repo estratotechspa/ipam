@@ -61,6 +61,19 @@ function crearTokens({ repo, generador, config }) {
     return t ? ok({ token: presentar(t) }) : fallo('no_encontrado', 'no_encontrado', { mensaje: 'El token no existe.' });
   }
 
+  /** Elimina definitivamente un token (solo si ya no se desea en el historial). */
+  async function eliminar(id) {
+    if (!/^[0-9a-f-]{36}$/i.test(String(id))) return fallo('no_encontrado', 'no_encontrado', { mensaje: 'El token no existe.' });
+    const t = await repo.eliminarToken(id);
+    return t ? ok({ token: presentar(t) }) : fallo('no_encontrado', 'no_encontrado', { mensaje: 'El token no existe.' });
+  }
+
+  /** Purga todos los tokens revocados o vencidos del historial. */
+  async function purgar() {
+    const eliminados = await repo.purgarTokensRevocados();
+    return ok({ eliminados });
+  }
+
   /**
    * Autentica un token presentado en `Authorization: Bearer`. Devuelve el actor o el motivo del rechazo.
    * @returns {Promise<{ok: true, actor: {nombre: string, rol: string, tipo: 'token', tokenId: string, cuota: number|null, alcance: string[]|null}} | {ok: false, motivo: 'formato'|'desconocido'|'vencido'|'revocado', nombre?: string}>}
@@ -76,7 +89,7 @@ function crearTokens({ repo, generador, config }) {
     return { ok: true, actor: { nombre: `svc:${t.nombre}`, rol: t.rol, tipo: 'token', tokenId: t.id, cuota: t.cuota_reservas, alcance: t.alcance ?? null } };
   }
 
-  return { crear, listar, revocar, autenticar };
+  return { crear, listar, revocar, eliminar, purgar, autenticar };
 }
 
 module.exports = { crearTokens, presentar };

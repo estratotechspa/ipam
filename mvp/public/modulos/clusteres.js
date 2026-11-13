@@ -4,6 +4,7 @@ import { $, ESTADO, YO, api, errorApi, fail, fmt, get, h, ico, puede } from './b
 import { restante } from './reservas.js';
 import { show } from './navegacion.js';
 import { confirmar, toast } from './ui.js';
+import { dialogoNuevoCluster } from './nuevo-cluster.js';
 
 const ESTADOS = [
   ['', 'Todos'],
@@ -171,11 +172,37 @@ export async function renderClusteres() {
     );
     const recargar = () => renderClusteres();
     sec.replaceChildren(
-      h('div', { class: 'cabecera' }, h('h2', { tabindex: '-1', id: 'clusteres-titulo' }, 'Clústeres GKE')),
       h(
-        'p',
-        { class: 'muted' },
-        'Cada fila es un grupo de rangos reservados juntos: la subnet y sus rangos secundarios de Pods y Servicios. Se aprueban o se liberan todos a la vez.',
+        'div',
+        { class: 'cabecera', style: 'display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px' },
+        h('h2', { tabindex: '-1', id: 'clusteres-titulo' }, 'Clústeres Kubernetes / GKE'),
+        puede('agente')
+          ? h('button', { class: 'btn', type: 'button', id: 'cl-nuevo', onclick: () => dialogoNuevoCluster(pools, recargar) }, '+ Nuevo clúster')
+          : null,
+      ),
+      h(
+        'div',
+        {
+          class: 'card-info-cluster',
+          style: 'background:rgba(30, 41, 59, 0.5);border:1px solid var(--line, #334155);border-radius:8px;padding:14px 18px;margin:8px 0 16px',
+        },
+        h(
+          'div',
+          { style: 'font-weight:600;margin-bottom:6px;color:var(--text, #f8fafc);display:flex;align-items:center;gap:8px' },
+          ico('capas', 16),
+          '¿Cómo funcionan los clústeres en IPAM?',
+        ),
+        h(
+          'p',
+          { class: 'muted', style: 'margin:0;font-size:13px;line-height:1.5' },
+          'Cada clúster requiere 3 rangos simultáneos y coordinados: ',
+          h('b', null, 'Subnet (Nodos)'),
+          ' (rango primario de la VPC donde residen las máquinas y VMs), ',
+          h('b', null, 'Pods'),
+          ' (rango secundario amplio para contenedores) y ',
+          h('b', null, 'Servicios'),
+          ' (rango secundario para ClusterIP virtuales). IPAM los reserva de forma atómica en un solo grupo para garantizar que no existan solapamientos y que quepan juntos en el ambiente.',
+        ),
       ),
       h(
         'div',
@@ -232,7 +259,18 @@ export async function renderClusteres() {
             { class: 'vacio' },
             grupos.length
               ? 'Ningún clúster coincide con el filtro.'
-              : 'Aún no hay clústeres reservados. El agente de redes los pide con la API (POST /api/v1/reservas/lote).',
+              : puede('agente')
+                ? h(
+                    'div',
+                    null,
+                    h('p', null, 'Aún no hay clústeres reservados.'),
+                    h(
+                      'button',
+                      { class: 'btn', type: 'button', style: 'margin-top:8px', onclick: () => dialogoNuevoCluster(pools, recargar) },
+                      '+ Reservar primer clúster',
+                    ),
+                  )
+                : 'Aún no hay clústeres reservados. El agente de redes los pide con la API (POST /api/v1/reservas/lote).',
           ),
       h('p', { class: 'muted' }, `${fmt(visibles.length)} de ${fmt(grupos.length)} grupos.`),
     );

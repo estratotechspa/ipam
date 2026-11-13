@@ -632,6 +632,13 @@ function consultasDeAdministracion(db) {
         ).rows[0] || null
       );
     },
+    async eliminarToken(id) {
+      return (await db.query(`with t as (delete from tokens_servicio where id = $1 returning *) select ${COLUMNAS_TOKEN} from t`, [id])).rows[0] || null;
+    },
+    async purgarTokensRevocados() {
+      const r = await db.query('delete from tokens_servicio where revocado_en is not null or expira_en < now()');
+      return r.rowCount || 0;
+    },
     /** Como máximo una vez por minuto (lo decide la base con una sola sentencia atómica). */
     async tocarUltimoUso(id) {
       await db.query("update tokens_servicio set ultimo_uso = now() where id = $1 and (ultimo_uso is null or ultimo_uso < now() - interval '1 minute')", [id]);

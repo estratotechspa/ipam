@@ -8,7 +8,6 @@ export const ESTADO = {
   busquedaPools: '', // texto del buscador de Pools
   busquedaJerarquia: '', // texto del buscador de Jerarquía
   cabeMascara: 0, // máscara elegida en «¿Dónde cabe una subred?» de Pools (0 = ninguna)
-  ultimoJira: null, // resultado de la última simulación (se muestra tras recargar la pestaña)
   vistaSegmentos: 'todos', // filtro de la pestaña Segmentos: todos | asignados | reservados | historial
   busquedaClusteres: '', // texto del buscador de Clústeres
   estadoClusteres: '', // filtro de estado de Clústeres

@@ -21,7 +21,23 @@ function montar(app, { casos, audita, validacion }) {
     return res.json(r.tokens);
   });
 
+  api(app, 'delete', '/tokens', requiere('admin'), async (req, res) => {
+    if (req.query.purgar === 'revocados') {
+      const r = await tokens.purgar();
+      if (!r.ok) return enviarFallo(res, r);
+      await audita(req, 'purgar_tokens_revocados', { eliminados: r.eliminados });
+      return res.json(r);
+    }
+    return res.status(400).json({ error: 'parametro_requerido' });
+  });
+
   api(app, 'delete', '/tokens/:id', requiere('admin'), async (req, res) => {
+    if (req.query.purgar === 'true' || req.query.eliminar === 'true') {
+      const r = await tokens.eliminar(req.params.id);
+      if (!r.ok) return enviarFallo(res, r);
+      await audita(req, 'eliminar_token', { token: r.token.nombre, id: r.token.id });
+      return res.json(r.token);
+    }
     const r = await tokens.revocar(req.params.id);
     if (!r.ok) return enviarFallo(res, r);
     await audita(req, 'revocar_token', { token: r.token.nombre, id: r.token.id });

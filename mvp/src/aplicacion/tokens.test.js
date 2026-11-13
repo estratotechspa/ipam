@@ -77,6 +77,32 @@ test('revocar es idempotente y un id desconocido da 404', async () => {
   assert.equal((await e.tokens.revocar('zz')).error, 'no_encontrado');
 });
 
+test('eliminar borra el token definitivamente y purgar elimina todos los revocados', async () => {
+  const e = entorno();
+  const t1 = await e.tokens.crear(ADMIN, { nombre: 'tok-1', rol: 'lector' });
+  const t2 = await e.tokens.crear(ADMIN, { nombre: 'tok-2', rol: 'lector' });
+  const t3 = await e.tokens.crear(ADMIN, { nombre: 'tok-3', rol: 'lector' });
+
+  // Eliminar t1
+  const del = await e.tokens.eliminar(t1.meta.id);
+  assert.equal(del.ok, true);
+  assert.equal(del.token.nombre, 'tok-1');
+  const lista1 = await e.tokens.listar();
+  assert.equal(
+    lista1.tokens.some((x) => x.id === t1.meta.id),
+    false,
+  );
+
+  // Revocar t2 y purgar
+  await e.tokens.revocar(t2.meta.id);
+  const p = await e.tokens.purgar();
+  assert.equal(p.ok, true);
+  assert.equal(p.eliminados, 1);
+  const lista2 = await e.tokens.listar();
+  assert.equal(lista2.tokens.length, 1);
+  assert.equal(lista2.tokens[0].nombre, t3.meta.nombre);
+});
+
 test('ultimo_uso se actualiza como máximo una vez por minuto', async () => {
   const e = entorno();
   const { token } = await e.tokens.crear(ADMIN, { nombre: 'uso', rol: 'agente' });

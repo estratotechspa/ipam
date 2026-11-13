@@ -368,6 +368,18 @@ function crearRepositorioMemoria({ reloj = { ahora: () => new Date() }, pools = 
       t.revocado_en = t.revocado_en || ahora();
       return vistaToken(t);
     },
+    async eliminarToken(id) {
+      const idx = datos.tokens.findIndex((x) => x.id === id);
+      if (idx < 0) return null;
+      const [t] = datos.tokens.splice(idx, 1);
+      return vistaToken(t);
+    },
+    async purgarTokensRevocados() {
+      const ahoraTs = ahora();
+      const inicial = datos.tokens.length;
+      datos.tokens = datos.tokens.filter((t) => !t.revocado_en && new Date(t.expira_en) >= ahoraTs);
+      return inicial - datos.tokens.length;
+    },
     async tocarUltimoUso(id) {
       const t = datos.tokens.find((x) => x.id === id);
       if (t && (!t.ultimo_uso || ahora().getTime() - t.ultimo_uso.getTime() > 60_000)) t.ultimo_uso = ahora();

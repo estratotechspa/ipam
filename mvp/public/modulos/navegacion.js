@@ -3,7 +3,6 @@ import { $, ESTADO, puede } from './base.js';
 import { RES } from './reservas.js';
 import { renderPools } from './pools.js';
 import { renderSegmentos } from './segmentos.js';
-import { renderJira } from './jira.js';
 import { renderTokens } from './tokens.js';
 import { renderUsuarios } from './usuarios.js';
 import { renderImportar } from './importar.js';
@@ -34,7 +33,6 @@ export function render(t) {
   ({
     pools: renderPools,
     segmentos: renderSegmentos,
-    jira: renderJira,
     tokens: renderTokens,
     usuarios: renderUsuarios,
     importar: renderImportar,
