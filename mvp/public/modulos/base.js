@@ -82,6 +82,12 @@ export const get = async (u) => {
   return r.data;
 };
 
+export const post = async (u, body) => {
+  const r = await api(u, { body });
+  if (!r.ok) throw new Error(errorApi(r));
+  return r.data;
+};
+
 export const fail = (id, e) => ($(id).innerHTML = `<div class="alert" role="alert">${I('error')} No se pudo cargar: ${esc(e.message)}</div>`);
 
 /* ===== Ayudante para construir DOM sin innerHTML: todo texto entra como nodo de texto (nada de lo que escriba un usuario se interpreta como HTML) ===== */
