@@ -19,6 +19,7 @@ const MATRIZ = {
   'GET /api/v1/pools/{id}/disponibilidad': 'lector',
   'GET /api/v1/resumen': 'lector',
   'GET /api/v1/asignaciones': 'lector',
+  'POST /api/v1/reconciliacion': 'agente',
   'POST /api/v1/solicitudes': 'admin',
   'DELETE /api/v1/asignaciones/{id}': 'admin',
   'POST /api/v1/importaciones/simular': 'admin',

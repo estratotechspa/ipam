@@ -22,8 +22,16 @@ const GRUPOS = {
     ],
   },
   consulta: {
-    descripcion: 'Consultar pools, disponibilidad y asignaciones (para comprobar que no haya solapamientos)',
-    rutas: ['GET /pools', 'GET /pools/:id/libres', 'GET /pools/:id/disponibilidad', 'GET /resumen', 'GET /asignaciones', 'GET /pool-uso'],
+    descripcion: 'Consultar pools, disponibilidad, asignaciones y reconciliación (para comprobar que no haya solapamientos)',
+    rutas: [
+      'GET /pools',
+      'GET /pools/:id/libres',
+      'GET /pools/:id/disponibilidad',
+      'GET /resumen',
+      'GET /asignaciones',
+      'GET /pool-uso',
+      'POST /reconciliacion',
+    ],
   },
   direcciones: {
     descripcion: 'Consultar y registrar direcciones IP fijas',

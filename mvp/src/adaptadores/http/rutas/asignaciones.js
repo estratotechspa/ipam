@@ -85,6 +85,14 @@ function montar(app, { casos, audita, validacion }) {
     res.json(filas);
   });
 
+  api(app, 'post', '/reconciliacion', requiere('agente'), validacion.cuerpo('ReconciliacionSolicitud'), async (req, res) => {
+    const { subredes } = req.body || {};
+    const { filas: asignacionesActuales } = await admin.asignaciones({ limit: 10000 });
+    const { reconciliarSubredes } = require('../../../dominio/reconciliacion');
+    const resultado = reconciliarSubredes(subredes, asignacionesActuales);
+    res.json(resultado);
+  });
+
   api(app, 'get', '/pools/:id/libres', async (req, res) => {
     const r = await asignaciones.sugerirLibres(req.params.id, req.query.mascara);
     return r.ok ? res.json(r.libres) : enviarFallo(res, { ...r, error: r.error }, { legado: false });

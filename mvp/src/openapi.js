@@ -1090,6 +1090,78 @@ const schemas = {
     },
     example: { pools: 0, asignaciones: 1, omitidas: 11, usuarios: 0 },
   },
+  ReconciliacionSolicitud: {
+    type: 'object',
+    required: ['subredes'],
+    properties: {
+      subredes: {
+        type: 'array',
+        items: {
+          type: 'object',
+          required: ['cidr'],
+          properties: {
+            cidr: { $ref: '#/components/schemas/Cidr' },
+            proyecto: { type: 'string' },
+            vpc: { type: 'string' },
+            subred: { type: 'string' },
+            region: { type: 'string' },
+          },
+        },
+      },
+    },
+    example: {
+      subredes: [{ cidr: '10.210.0.0/24', proyecto: 'mi-proyecto', vpc: 'vpc-dev', subred: 'sub-app' }],
+    },
+  },
+  ReconciliacionRespuesta: {
+    type: 'object',
+    required: ['resumen'],
+    properties: {
+      resumen: {
+        type: 'object',
+        required: ['hay_drift', 'porcentaje_alineacion', 'sincronizadas', 'desviaciones_no_registradas', 'huerfanas_en_ipam'],
+        properties: {
+          total_nube: { type: 'integer' },
+          total_ipam: { type: 'integer' },
+          sincronizadas: { type: 'integer' },
+          desviaciones_no_registradas: { type: 'integer' },
+          huerfanas_en_ipam: { type: 'integer' },
+          discrepancias_metadatos: { type: 'integer' },
+          choques_parciales: { type: 'integer' },
+          porcentaje_alineacion: { type: 'number' },
+          hay_drift: { type: 'boolean' },
+        },
+      },
+      sincronizadas: { type: 'array', items: { type: 'object' } },
+      desviaciones_no_registradas: { type: 'array', items: { type: 'object' } },
+      huerfanas_en_ipam: { type: 'array', items: { type: 'object' } },
+      discrepancias_metadatos: { type: 'array', items: { type: 'object' } },
+      choques_parciales: { type: 'array', items: { type: 'object' } },
+    },
+    example: {
+      resumen: {
+        total_nube: 1,
+        total_ipam: 1,
+        sincronizadas: 1,
+        desviaciones_no_registradas: 0,
+        huerfanas_en_ipam: 0,
+        discrepancias_metadatos: 0,
+        choques_parciales: 0,
+        porcentaje_alineacion: 100,
+        hay_drift: false,
+      },
+      sincronizadas: [
+        {
+          nube: { cidr: '10.210.0.0/24', proyecto: 'mi-proyecto', vpc: 'vpc-dev' },
+          ipam: { cidr: '10.210.0.0/24', proyecto: 'mi-proyecto', vpc: 'vpc-dev' },
+        },
+      ],
+      desviaciones_no_registradas: [],
+      huerfanas_en_ipam: [],
+      discrepancias_metadatos: [],
+      choques_parciales: [],
+    },
+  },
 };
 
 // ---------------------------------------------------------------- ayudas para armar operaciones
@@ -1345,6 +1417,16 @@ function rutasDeListaDeAsignaciones(p) {
         },
       },
       extra: { 400: respuesta('Parámetro inválido (limit, offset, ambiente, orden, dir o q).', 'Error') },
+    }),
+  };
+  p['/api/v1/reconciliacion'] = {
+    post: op({
+      tag: 'Asignaciones',
+      summary: 'Reconcilia subredes de nube y detecta desviaciones (drift)',
+      description: 'Compara una lista de subredes descubiertas en la nube con las asignaciones registradas en el IPAM.',
+      body: cuerpo('ReconciliacionSolicitud', schemas.ReconciliacionSolicitud.example),
+      ok: { 200: respuesta('Reporte de reconciliación y estado de drift.', 'ReconciliacionRespuesta') },
+      extra: { ...e400, ...e403 },
     }),
   };
 }
