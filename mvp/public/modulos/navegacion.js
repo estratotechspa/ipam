@@ -10,6 +10,7 @@ import { renderImportar } from './importar.js';
 import { renderIps } from './ips.js';
 import { renderClusteres } from './clusteres.js';
 import { renderJerarquia } from './jerarquia.js';
+import { renderReconciliacion } from './reconciliacion.js';
 
 // Vistas sin botón propio en la barra: se abren desde su pestaña (Importar, desde Pools) y solo las ve un admin.
 export const SUBVISTAS = { importar: 'pools' };
@@ -40,5 +41,6 @@ export function render(t) {
     ips: renderIps,
     clusteres: renderClusteres,
     jerarquia: renderJerarquia,
+    reconciliacion: renderReconciliacion,
   })[t]();
 }
