@@ -126,6 +126,16 @@ Se abre con **Importar segmentos** en la pestaña Pools. Para partir con el inve
 - Puedes **liberar** las tuyas (el admin libera y **confirma** las de todos: confirmar es solo del admin). Las reservas que llegan desde **Jira** (solicitante `jira-webhook`) solo las puede aprobar un **admin**: confirmar equivale a dar la **aprobación manual** para asignar el CIDR. Un token de servicio **no** puede confirmar; la aprobación queda registrada con la cuenta del admin (y, si lo escribe, quién aprobó y dónde consta).
 - Para ver solo lo pendiente, usa el botón **Reservados**; para encontrar las de un agente, escribe su nombre en **Buscar** (por ejemplo `svc:agente-redes`).
 
+### Reconciliación — «detección de Cloud Drift»
+Permite auditar el estado real de la red en la nube contra la verdad del IPAM:
+- **Auditoría de inventario:** pega el arreglo JSON de subredes descubiertas en AWS, GCP o Azure (o pulsa «Cargar ejemplo AWS») y haz clic en **Auditar discrepancias**.
+- **Indicadores en vivo:**
+  - **Sincronizados (verde):** subredes que coinciden en CIDR, VPC y proyecto.
+  - **Desviaciones / Drift (rojo):** choques parciales donde una subred de nube solapa un segmento IPAM.
+  - **Huérfanos en nube (ámbar):** subredes creadas en la nube que no están registradas en el IPAM.
+  - **Discrepancias de metadatos (azul):** mismo CIDR pero con discrepancias en VPC o proyecto.
+- **Tabla de hallazgos:** desglose técnico con etiquetas semánticas y mensajes explicativos para cada recurso.
+
 ### Jira — «integración con tickets»
 Explica y permite probar la conexión con Jira en los dos sentidos: el IPAM puede **crear un ticket** cuando asigna, y un ticket de Jira puede **pedir un segmento** por webhook. **Un ticket nunca asigna directo:** el IPAM crea una **reserva** (24 h) y un **admin debe aprobarla** en la pestaña Segmentos (botón Confirmar); recién ahí nace la asignación y se actualiza el ticket. Si nadie aprueba, la reserva expira sola y el rango vuelve al pool. Con la integración desactivada (lo normal en el POC) el número de ticket lo genera el IPAM (`NET-xxx`). **Simular ticket entrante** sirve para demostrar el flujo sin Jira real. El **registro de eventos** muestra lo que pasó.
 
@@ -152,7 +162,7 @@ Nadie puede desactivarse ni eliminarse a sí mismo. Todo queda registrado en la 
 
 **¿Y la pestaña Auditoría?** Se quitó de la barra: el historial de cada pool y segmento se ve en su **ficha**. La bitácora completa se sigue registrando (es de solo inserción) y un admin la puede consultar por la API (`GET /api/v1/auditoria`, con filtros `pool` y `cidr`) para investigar un incidente; el `request_id` enlaza con los logs.
 
-> **Novedades de la interfaz:** las confirmaciones ahora son un cuadro propio (Esc cancela, Enter acepta) y los avisos aparecen arriba a la derecha; en «Asignar ahora» el segmento se valida mientras escribes; en la ficha de un pool, la pestaña Detalle muestra el mapa de bloques (asignado / reservado / libre); y las barras de uso pasan a ámbar desde 70 % y a rojo por encima de 90 %.
+> **Estilo Cyber Network Console / Dark Ops (0.6.0):** la interfaz adopta una estética técnica de consola de operaciones de alta densidad en modo oscuro profundo (`#080c14`) con acentos cian neón (`#00e5ff`) y contraste estricto WCAG 2.2 AA. Incluye heatmap interactivo de bloques con microanimaciones, panel lateral de inspección (*Cyber Drawer*) con borde cian de alta fidelidad, telemetría de red en vivo, la pestaña **Reconciliación** para auditar Cloud Drift y un servidor demo rápido invocable con `npm run demo`.
 
 ## 4 · Tareas comunes
 **Dar un rango a un proyecto nuevo (flujo automático, el recomendado)**

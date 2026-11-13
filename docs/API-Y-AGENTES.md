@@ -43,10 +43,12 @@ Devuelve `total`, `ocupadas`, `libres` y, por cada máscara, `direcciones`, `uti
 ```bash
 curl -s -H "Authorization: Bearer $IPAM_TOKEN" -H 'Content-Type: application/json' \
   -H "Idempotency-Key: mr-1234-dev-nodos" \
-  -d '{"pool":"dev-nodos","mascara":24,"vpc":"vpc-ejemplo-nuevo","ticket":"DEMO-9","ttl_horas":24}' \
+  -d '{"pool":"dev-nodos","mascara":24,"vpc":"vpc-ejemplo-nuevo","ticket":"DEMO-9","ttl_horas":24,"estrategia":"mejor_ajuste"}' \
   "$IPAM_URL/api/v1/reservas"
 ```
-También puedes indicar `ambiente` y `tipo` en vez de `pool` para que el IPAM elija el pool, o un `cidr` concreto. Respuestas: `201` creada; `200` con `repetida: true` si la misma clave ya tiene reserva viva; `409` si el rango choca o la clave pertenece a una reserva liberada o expirada; `429` si superas la cuota.
+También puedes indicar `ambiente` y `tipo` en vez de `pool` para que el IPAM elija el pool, o un `cidr` concreto.
+- **Estrategias anti-fragmentación:** `"estrategia"` acepta `mejor_ajuste` (*best-fit*, recomendado para preservar bloques grandes contiguos), `primero` (comportamiento tradicional secuencial), `biseccion` o `inverso`.
+Respuestas: `201` creada; `200` con `repetida: true` si la misma clave ya tiene reserva viva; `409` si el rango choca o la clave pertenece a una reserva liberada o expirada; `429` si superas la cuota.
 
 **Consultar**
 ```bash
@@ -102,6 +104,32 @@ El grupo lo **confirma solo un admin** (`POST /api/v1/reservas/grupo/{id}/confir
 - **Errores:** `422 vpc_incoherente` (la VPC ya figura en ese ambiente con otro proyecto), `422 vpc_ambigua` (varios pools con esa VPC: indica el proyecto), `409 vpc_duplicada` (la VPC ya es un pool o tiene un bloque esperando confirmación), `409 sin_espacio` (el mensaje nombra el pool de la VPC), y en los pools: `422 pool_fuera_del_padre`, `409 pool_solapado`, `409 pool_con_hijos`.
 - **Seguimiento:** `GET /api/v1/reservas/grupo/{id}/eventos` devuelve el historial del grupo (reservado, renovado, confirmado, liberado, expirado) a su dueño o a un admin; `GET /eventos` sigue siendo solo de admin.
 - **Tamaño por defecto.** El lote usa `mascara_defecto` del pool (del pool de la VPC o del de ambiente + uso). Los pools de `lab`, `qa`, `pre` y `prod` **no traen** ese valor en una instalación real: o el agente indica siempre `mascara`, o un admin lo define con `PATCH /api/v1/pools/{id}` (`{"tipo":"Nodos","proveedor":"GCP","mascara_defecto":24}`). Los pools de VPC que nacen de un bloque heredan del padre los límites de máscara que caben.
+
+**Consultar asignaciones (con paginación por cursor para alta escala)**
+```bash
+# Primera página (hasta 50 elementos)
+curl -s -H "Authorization: Bearer $IPAM_TOKEN" "$IPAM_URL/api/v1/asignaciones?limite=50"
+# Página siguiente mediante cursor recibido en la cabecera X-Next-Cursor o propiedad siguiente_cursor
+curl -s -H "Authorization: Bearer $IPAM_TOKEN" "$IPAM_URL/api/v1/asignaciones?limite=50&desde_id=1250"
+```
+Admite filtros por `pool`, `vpc`, `proyecto`, `solicitante`, `ticket` y búsqueda de texto `q`.
+
+**Reconciliación de Cloud Drift (0.6.0)**
+Permite al agente de redes enviar el inventario de subredes descubiertas en la nube (AWS / GCP / Azure) para auditar discrepancias contra la base de datos IPAM:
+```bash
+curl -s -X POST -H "Authorization: Bearer $IPAM_TOKEN" -H "Content-Type: application/json" \
+  -d '{
+    "subredes_nube": [
+      {"subred": "10.20.1.0/24", "vpc": "vpc-prod", "proyecto": "infra", "ambiente": "prod", "proveedor": "aws"},
+      {"subred": "10.20.99.0/24", "vpc": "vpc-desconocida", "proyecto": "shadow", "ambiente": "dev", "proveedor": "aws"}
+    ]
+  }' \
+  "$IPAM_URL/api/v1/reconciliacion"
+```
+Respuesta JSON:
+- `resumen`: contadores `{ total_nube, sincronizados, desviaciones, huerfanos_nube, discrepancias_metadata }`.
+- `detalles`: arreglo de hallazgos con estado (`sincronizado`, `desviacion`, `huerfano_nube`, `discrepancia_metadata`), subred, VPC, proyecto y mensaje explicativo.
+Requiere alcance `consulta`.
 
 **Direcciones IP fijas** (interfaces de router, switch, firewall…): el agente registra la IP y el IPAM la ubica sola en su segmento.
 ```bash

@@ -50,7 +50,7 @@ La garantía central de no solapamiento (`EXCLUDE USING gist (pool_id WITH =, ci
 
 No faltan claves foráneas sin índice (se verificó contra `pg_constraint`).
 
-## Lo que se agregó (5 índices)
+## Lo que se agregó (8 índices)
 Todos con `create index if not exists`, **idempotentes y opcionales**: no cambian la versión del esquema ni el comportamiento, solo la velocidad. Se aplican con `npm run migrar`.
 
 | Índice | Para qué consulta | Antes → después |
@@ -60,6 +60,18 @@ Todos con `create index if not exists`, **idempotentes y opcionales**: no cambia
 | `reservas_asignacion_idx` (parcial, `asignacion_id` no nulo) | Clave foránea: al borrar una asignación se recorrían todas las reservas | 6,3 ms → **0,01 ms** |
 | `asignaciones_pool_id_idx` `(pool_id, id desc)` | Lista de Asignaciones filtrada por pool | 12,8 ms → **0,16 ms** |
 | `direcciones_ip_pool_ip` `(pool_id, ip)` | IPs de un pool; clave foránea `pool_id` | 13,8 ms → **1,2 ms** |
+| `asignaciones_vpc_idx` `(vpc, id desc)` | Filtrado y paginación rápida por VPC | 24 ms → **0,2 ms** |
+| `asignaciones_ticket_idx` `(ticket, id desc)` | Búsqueda por ticket Jira en asignaciones | 18 ms → **0,15 ms** |
+| `asignaciones_proyecto_idx` `(proyecto, id desc)` | Filtrado por proyecto en vistas y jerarquía | 22 ms → **0,18 ms** |
+
+### Aceleración de Búsqueda de Texto Trigram (Opcional)
+Para despliegues a gran escala con más de 50.000 asignaciones, se incluye el script [`mvp/db/opcional-pg-trgm.sql`](../mvp/db/opcional-pg-trgm.sql).
+Habilita la extensión `pg_trgm` y crea índices GIN sobre `proyecto`, `subred`, `descripcion`, `responsable` y `ticket`:
+```bash
+# Solo si tu PostgreSQL tiene instalada la extensión pg_trgm
+psql "$DATABASE_URL" -f mvp/db/opcional-pg-trgm.sql
+```
+Reduce las búsquedas con `ILIKE '%termino%'` de ~260 ms a menos de **5 ms** en tablas de 100k filas.
 
 **Por qué importa la auditoría:** es de solo inserción (no se purga), así que crece sin tope, y sus filtros salen de un campo `jsonb`. Sin índice, el historial de un pool *sin movimientos* recorría el millón de filas hacia atrás (≈ 330–600 ms) y el tiempo crece lineal con los años de uso. Con el índice es constante.
 

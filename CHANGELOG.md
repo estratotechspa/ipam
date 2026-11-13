@@ -3,6 +3,19 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y versionado semántico.
 
 ## [Sin publicar]
+### Motor Anti-fragmentación, Reconciliación de Nube y Consola Dark Ops (0.6.0)
+- **Estrategias CIDR anti-fragmentación:** soporte para el parámetro `estrategia` (`primero`, `mejor_ajuste`, `biseccion`, `inverso`) en `POST /api/v1/reservas`. La estrategia `mejor_ajuste` (*best-fit*) previene romper bloques contiguos grandes al elegir el hueco libre más ajustado al tamaño requerido.
+- **Métrica de fragmentación de pools:** cálculo en tiempo real del índice de fragmentación (`0.0` continuo a `1.0` altamente fragmentado) en `GET /api/v1/pools/{id}/disponibilidad`.
+- **Detección y reconciliación de Cloud Drift:** 
+  - Nueva API `POST /api/v1/reconciliacion` documentada en OpenAPI 3.1 para conciliar el inventario descubierto en nube (AWS / GCP / Azure) con el IPAM. Detecta estados `sincronizado`, `desviacion`, `huerfano_nube` y `discrepancia_metadata`.
+  - Nueva herramienta CLI `npm run drift -- --archivo <inventario.json>` para pipelines de auditoría.
+- **Paginación por Cursor y Búsqueda Optimizada:** soporte de cursor (`desde_id`, `antes_id`, cabecera `X-Next-Cursor`) en `GET /api/v1/asignaciones` para alto volumen de registros, e índices B-tree (`asignaciones_vpc_idx`, `asignaciones_ticket_idx`, `asignaciones_proyecto_idx`).
+- **Interfaz Cyber Network Console / Dark Ops:** 
+  - Rediseño estético técnico en modo oscuro profundo (`#080c14`), navy y cian neón (`#00e5ff`) con contraste estricto WCAG 2.2 AA.
+  - Heatmap interactivo de bloques con microanimaciones en hover y panel lateral de inspección (*Cyber Drawer*).
+  - Pestaña **Reconciliación** en la interfaz para auditar y visualizar desviaciones de nube en tiempo real.
+  - Servidor de demostración local inmediato: `npm run demo` (sin requerir base de datos ni Docker).
+
 ### Subnet y CIDR exacto en el lote (versión 0.6.0, esquema 19)
 - **`subnet` reemplaza a `nodos`** como uso del rango principal de una subred, en el lote (`/reservas/lote`), en la tabla `pool-uso` y en las etiquetas de la interfaz (Segmentos, Clústeres). **`nodos` se sigue aceptando como alias de entrada**; la API responde siempre `subnet`. El esquema 19 convierte las filas de `pool_uso` (la restricción acepta los dos nombres durante el despliegue). **Migrar antes de desplegar**: la app exige el esquema 19.
 - **CIDR exacto por rango** (`cidr` en cada rango del lote), **solo para pruebas**: apagado por defecto y habilitado por ambiente con `CIDR_MANUAL_AMBIENTES` (p. ej. `dev`; el `docker-compose` local lo trae en `dev`). IPAM sigue decidiendo: alineado, dentro del pool de su uso y libre (`cidr_manual_no_permitido`, `cidr_desalineado`, `cidr_fuera_del_pool`, `mascara_no_coincide`, `409 solapamiento` con sugeridos), todo o nada e idempotente.
