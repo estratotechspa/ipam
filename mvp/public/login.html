@@ -74,86 +74,110 @@
     </div>
   </section>
 
-  <!-- Panel Derecho: Telemetría y Topología de Red (NOC Visual) -->
-  <aside class="split-panel-telemetria" aria-label="Estado general de infraestructura">
+  <!-- Panel Derecho: Arquitectura y Capacidades de Plataforma (Sin datos sensibles ni telemetría interna) -->
+  <aside class="split-panel-telemetria" aria-label="Plataforma de gestión de red">
     <div class="telemetria-overlay">
       <div class="telemetria-header">
         <div class="chip-live">
           <span class="chip-radar"></span>
-          <span>TELEMETRÍA GLOBAL DE RED</span>
+          <span>ARQUITECTURA DE RED SEGURA</span>
         </div>
-        <span class="telemetria-version">v0.6 · KERNEL IPAM</span>
+        <span class="telemetria-version">ZERO-TRUST · MULTI-CLOUD</span>
       </div>
 
-      <!-- Tarjetas de métricas rápidas -->
-      <div class="metrics-grid">
-        <div class="metric-card">
-          <div class="metric-valor color-exito">99,8 %</div>
-          <div class="metric-label">Disponibilidad de Pools</div>
-          <div class="metric-sub">Multi-Cloud activo</div>
+      <!-- Ilustración conceptual de topología / malla de red -->
+      <div class="network-art-card">
+        <svg class="network-art-svg" viewBox="0 0 400 130" width="100%" height="130" aria-hidden="true" focusable="false">
+          <g stroke="rgba(56, 189, 248, 0.3)" stroke-width="1.5" stroke-dasharray="4 4">
+            <line x1="50" y1="65" x2="150" y2="28" />
+            <line x1="50" y1="65" x2="150" y2="102" />
+            <line x1="150" y1="28" x2="250" y2="28" />
+            <line x1="150" y1="102" x2="250" y2="102" />
+            <line x1="150" y1="28" x2="250" y2="102" />
+            <line x1="250" y1="28" x2="350" y2="65" />
+            <line x1="250" y1="102" x2="350" y2="65" />
+            <line x1="150" y1="28" x2="150" y2="102" />
+          </g>
+          <circle cx="50" cy="65" r="14" fill="rgba(56, 189, 248, 0.12)" stroke="#38bdf8" stroke-width="2"/>
+          <circle cx="50" cy="65" r="5" fill="#38bdf8"/>
+          
+          <circle cx="150" cy="28" r="10" fill="rgba(129, 140, 248, 0.15)" stroke="#818cf8" stroke-width="1.5"/>
+          <circle cx="150" cy="28" r="4" fill="#818cf8"/>
+
+          <circle cx="150" cy="102" r="10" fill="rgba(129, 140, 248, 0.15)" stroke="#818cf8" stroke-width="1.5"/>
+          <circle cx="150" cy="102" r="4" fill="#818cf8"/>
+
+          <circle cx="250" cy="28" r="10" fill="rgba(129, 140, 248, 0.15)" stroke="#818cf8" stroke-width="1.5"/>
+          <circle cx="250" cy="28" r="4" fill="#818cf8"/>
+
+          <circle cx="250" cy="102" r="10" fill="rgba(129, 140, 248, 0.15)" stroke="#818cf8" stroke-width="1.5"/>
+          <circle cx="250" cy="102" r="4" fill="#818cf8"/>
+
+          <circle cx="350" cy="65" r="16" fill="rgba(34, 197, 94, 0.12)" stroke="#22c55e" stroke-width="2"/>
+          <circle cx="350" cy="65" r="6" fill="#22c55e"/>
+        </svg>
+      </div>
+
+      <!-- Tarjetas de pilares de plataforma (Cero exposición de datos) -->
+      <div class="features-preview-card">
+        <div class="feature-item">
+          <div class="feature-icon-wrap icon-cyan">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+              <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+              <line x1="6" y1="6" x2="6.01" y2="6"/>
+              <line x1="6" y1="18" x2="6.01" y2="18"/>
+            </svg>
+          </div>
+          <div class="feature-text">
+            <div class="feature-title">Asignación Determinista & Cero Colisiones</div>
+            <div class="feature-desc">Exclusión atómica de solapamientos a nivel de base de datos relacional para subredes en nubes públicas y centros de datos.</div>
+          </div>
         </div>
-        <div class="metric-card">
-          <div class="metric-valor color-cyan">0</div>
-          <div class="metric-label">Solapamientos</div>
-          <div class="metric-sub">Exclusión atómica DB</div>
+
+        <div class="feature-item">
+          <div class="feature-icon-wrap icon-lila">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+            </svg>
+          </div>
+          <div class="feature-text">
+            <div class="feature-title">Detección de Deriva (Cloud Drift)</div>
+            <div class="feature-desc">Reconciliación continua entre el inventario central y la infraestructura real para evitar discrepancias y Shadow IT.</div>
+          </div>
         </div>
-        <div class="metric-card">
-          <div class="metric-valor color-lila">3</div>
-          <div class="metric-label">Proveedores</div>
-          <div class="metric-sub">AWS · GCP · On-Prem</div>
+
+        <div class="feature-item">
+          <div class="feature-icon-wrap icon-green">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="16 18 22 12 16 6"/>
+              <polyline points="8 6 2 12 8 18"/>
+            </svg>
+          </div>
+          <div class="feature-text">
+            <div class="feature-title">Automatización CI/CD & Terraform</div>
+            <div class="feature-desc">APIs protegidas por tokens con alcance estricto y RBAC para provisión automática de redes por agentes.</div>
+          </div>
         </div>
       </div>
 
-      <!-- Visualización de Bloques y Subredes de Red -->
-      <div class="topology-preview-card">
-        <div class="topology-title">
-          <span>Topología de Segmentos en Tiempo Real</span>
-          <span class="badge-active">MONITOREO</span>
+      <!-- Insignias de Seguridad y Cumplimiento -->
+      <div class="security-badges-bar">
+        <div class="sec-badge">
+          <span class="sec-dot"></span>
+          <span>TLS 1.3 Cifrado</span>
         </div>
-        <div class="pool-telemetry-item">
-          <div class="pool-meta">
-            <span class="pool-name">prod-nodos (GCP / VPC)</span>
-            <span class="pool-cidr">10.204.0.0/16</span>
-          </div>
-          <div class="pista-telemetria">
-            <div class="barra-telemetria bar-green" style="width: 48%"></div>
-          </div>
-          <div class="pool-stats-sub">31.420 / 65.536 direcciones asignadas</div>
+        <div class="sec-badge">
+          <span class="sec-dot"></span>
+          <span>OpenID Connect</span>
         </div>
-
-        <div class="pool-telemetry-item">
-          <div class="pool-meta">
-            <span class="pool-name">prod-pods (Kubernetes / GKE)</span>
-            <span class="pool-cidr">10.64.0.0/12</span>
-          </div>
-          <div class="pista-telemetria">
-            <div class="barra-telemetria bar-blue" style="width: 26%"></div>
-          </div>
-          <div class="pool-stats-sub">274.120 / 1.048.576 direcciones asignadas</div>
+        <div class="sec-badge">
+          <span class="sec-dot"></span>
+          <span>Control RBAC</span>
         </div>
-
-        <div class="pool-telemetry-item">
-          <div class="pool-meta">
-            <span class="pool-name">qa-servicios (Internal DNS / VIPs)</span>
-            <span class="pool-cidr">10.212.0.0/16</span>
-          </div>
-          <div class="pista-telemetria">
-            <div class="barra-telemetria bar-cyan" style="width: 14%"></div>
-          </div>
-          <div class="pool-stats-sub">9.216 / 65.536 direcciones asignadas</div>
-        </div>
-      </div>
-
-      <!-- Banner de Prevención de Deriva -->
-      <div class="drift-shield-card">
-        <div class="drift-shield-icon">
-          <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>
-          </svg>
-        </div>
-        <div class="drift-shield-content">
-          <div class="drift-shield-title">Cloud Drift Detection Engine</div>
-          <div class="drift-shield-text">Auditoría automática contra Shadow IT e inconsistencias de red entre la nube y la base de datos central.</div>
+        <div class="sec-badge">
+          <span class="sec-dot"></span>
+          <span>Auditoría Estricta</span>
         </div>
       </div>
     </div>
