@@ -51,7 +51,7 @@ async function iniciar() {
     YO.modo === 'oidc'
       ? `${esc(YO.nombre)} · <b>${esc(YO.rol)}</b> <button type="button" id="salir">${I('salir')}Salir</button>`
       : YO.modo === 'none'
-        ? `<span class="tag pronto">${I('alerta')} Sin autenticación (demo)</span>`
+        ? `<span class="tag pronto">${I('alerta')} Modo demo</span> <a href="/login?forzar=1" style="color:var(--txt);margin-left:8px;font-size:12px;text-decoration:underline">Pantalla de Login</a>`
         : `${esc(YO.usuario)} · <b>${esc(YO.rol)}</b> <button type="button" id="salir">${I('salir')}Salir</button>`;
   if (YO.local) {
     $('yo').append(' ', h('button', { id: 'mi-clave', type: 'button', onclick: () => dialogoCambioClave() }, ico('llave'), 'Mi contraseña'));

@@ -32,7 +32,7 @@ function montarOidc(app, { repo, auditar, ruta, log }) {
 
   ruta(app, 'get', '/auth/login', async (req, res, next) => {
     try {
-      if (!modoOidc()) return res.redirect('/');
+      if (!modoOidc()) return res.redirect('/login?error=sin_oidc');
       const { lib, config: c } = await cliente();
       const verificador = lib.randomPKCECodeVerifier();
       const state = lib.randomState();
@@ -109,12 +109,10 @@ function montarOidc(app, { repo, auditar, ruta, log }) {
   });
   ruta(app, 'get', '/auth/sesion-cerrada', (_q, res) => paginas.enviar(res, 'sesion_cerrada'));
 
-  // Pantalla de acceso propia: con SSO, quien no tiene sesión llega aquí en vez de saltar directo al proveedor.
+  // Pantalla de acceso: visible siempre salvo que ya haya sesión activa (a menos que se use ?forzar=1 o venga con ?error=).
   ruta(app, 'get', '/login', (req, res) => {
-    if (!modoOidc()) return res.redirect('/');
     const s = S.abrir(S.cookies(req)[S.SESION]);
-    // Ya tiene sesión: a la aplicación. Se ignora `next` a propósito (sin redirecciones hacia un valor que viene de la URL).
-    if (s && s.v === 2 && !req.query.error) return res.redirect('/');
+    if (s && s.v === 2 && !req.query.error && !req.query.forzar) return res.redirect('/');
     res.set('Cache-Control', 'no-store').sendFile(path.join(PUBLICO, 'login.html'));
   });
 }

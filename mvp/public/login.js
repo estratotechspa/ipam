@@ -13,6 +13,7 @@ const AVISOS = {
   fallo: 'No pudimos completar el inicio de sesión con Google. Inténtalo de nuevo; si persiste, usa el acceso de emergencia.',
   dominio: 'El dominio de tu correo de Google no tiene acceso autorizado a este IPAM.',
   sin_rol: 'Tu cuenta de correo no tiene un rol asignado. Pide acceso a un administrador.',
+  sin_oidc: 'Google SSO no está activo en este servidor (faltan las variables de entorno OIDC de Google). Usa el acceso de emergencia o configura OIDC.',
 };
 const AVISO_GENERICO = 'No se pudo iniciar sesión. Inténtalo de nuevo.';
 
