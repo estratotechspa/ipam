@@ -200,15 +200,16 @@ function crearAcceso({ rechazo = () => {}, autenticarToken, auditar = async () =
         local: Boolean(o.sesion.local),
         debeCambiar: Boolean(o.sesion.debeCambiar),
       });
-    } else if (modo === 'none') {
-      fijar('anonimo', 'admin', 'anonimo');
     } else if (modo === 'basic') {
       const ok = await procesarModoBasic(req, res, { usuariosLocales, rechazo, frenoFuerzaBruta, trae, fijar });
       if (!ok) return;
     } else {
-      const o = await sesionOidc(req, res, { revalidador, rechazo, usuariosLocales });
-      if (!o) return; // sesión inválida o revocada: ya se respondió
-      fijar(o.sesion.email, o.rol, 'oidc', o.sesion.nombre);
+      // Sin sesión: cualquier consulta de página redirige siempre a /login; las peticiones API responden 401.
+      rechazo('sin_sesion', req);
+      if (req.path.startsWith('/api/')) {
+        return res.status(401).json({ error: 'no_autenticado', login: '/login' });
+      }
+      return res.redirect('/login?next=' + encodeURIComponent(req.originalUrl || '/'));
     }
     // Defensa CSRF: los cambios desde el navegador exigen una cabecera que un sitio externo no puede enviar sin permiso CORS.
     if (req.path.startsWith('/api/') && !['GET', 'HEAD', 'OPTIONS'].includes(req.method) && req.headers['x-requested-with'] !== 'ipam') {
