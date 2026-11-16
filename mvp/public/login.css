@@ -1,0 +1,480 @@
+/* Estilos de pantalla dividida (Split-Screen) y Cyber Console para el inicio de sesión */
+.split-login-body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  background: var(--bg, #080d1a);
+  color: var(--fg, #e2e8f0);
+  font-family: inherit;
+  display: flex;
+  overflow-x: hidden;
+}
+
+.split-layout {
+  display: flex;
+  width: 100vw;
+  min-height: 100vh;
+}
+
+/* Panel Izquierdo: Formulario y SSO */
+.split-panel-auth {
+  flex: 0 0 460px;
+  min-width: 340px;
+  max-width: 520px;
+  background: var(--top, #0a1020);
+  border-right: 1px solid var(--line, #1e293b);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: var(--sp-5);
+  box-shadow: 10px 0 30px rgba(0, 0, 0, 0.4);
+  z-index: 10;
+}
+
+.auth-card-cyber {
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.auth-card-header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: var(--r-pill, 9999px);
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: #4ade80;
+  font-size: var(--fs-xs, 12px);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.auth-title {
+  margin: var(--sp-1) 0 0 0;
+  font-size: var(--fs-xl, 28px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+}
+
+.auth-subtitle {
+  margin: 0;
+  font-size: var(--fs-sm, 14px);
+  color: var(--mut, #94a3b8);
+  line-height: 1.4;
+}
+
+/* Botón Google SSO */
+.acciones-sso {
+  width: 100%;
+  margin-top: var(--sp-2);
+}
+
+.btn-sso-google {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 16px;
+  background: #ffffff;
+  color: #1f2937;
+  border: 1px solid #d1d5db;
+  border-radius: var(--r-md, 6px);
+  font-size: var(--fs-sm, 14px);
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.btn-sso-google:hover {
+  background: #f8fafc;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(255, 255, 255, 0.2);
+}
+
+.btn-sso-google:active {
+  transform: translateY(0);
+}
+
+.google-svg {
+  flex-shrink: 0;
+}
+
+.sso-label {
+  letter-spacing: -0.01em;
+}
+
+/* Separador Cyber */
+.divider-cyber {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  color: var(--mut, #64748b);
+  font-size: var(--fs-xs, 12px);
+  margin: var(--sp-1) 0;
+}
+
+.divider-cyber::before,
+.divider-cyber::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid var(--line, #1e293b);
+}
+
+.divider-cyber span {
+  padding: 0 var(--sp-3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Formulario Local / Emergencia */
+.form-emergencia {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.campo-grupo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.campo-etiqueta {
+  font-size: var(--fs-xs, 12px);
+  font-weight: 600;
+  color: var(--mut, #cbd5e1);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.campo-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  background: var(--card, #0f172a);
+  border: 1px solid var(--line, #334155);
+  border-radius: var(--r-md, 6px);
+  color: #ffffff;
+  font-size: var(--fs-sm, 14px);
+  font-family: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.campo-input:focus {
+  outline: none;
+  border-color: var(--blue, #38bdf8);
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.25);
+}
+
+.campo-opciones {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: var(--fs-xs, 12px);
+  color: var(--mut, #94a3b8);
+}
+
+.casilla-recordar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.casilla-recordar input {
+  margin: 0;
+  cursor: pointer;
+}
+
+.btn-cyber-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 11px 16px;
+  background: var(--blue, #2563eb);
+  border: 1px solid var(--blue, #2563eb);
+  color: #ffffff;
+  font-size: var(--fs-sm, 14px);
+  font-weight: 600;
+  border-radius: var(--r-md, 6px);
+  cursor: pointer;
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+
+.btn-cyber-submit:hover {
+  filter: brightness(1.15);
+  transform: translateY(-1px);
+}
+
+.alert-inline {
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-md, 6px);
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+  font-size: var(--fs-xs, 12px);
+  line-height: 1.4;
+}
+
+.auth-card-footer {
+  text-align: center;
+  margin-top: var(--sp-2);
+  font-size: var(--fs-xs, 12px);
+}
+
+.auth-card-footer p {
+  margin: 4px 0;
+}
+
+/* Panel Derecho: Telemetría */
+.split-panel-telemetria {
+  flex: 1;
+  background: radial-gradient(circle at 75% 20%, #1e1b4b 0%, #080d1a 60%), #080d1a;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-5);
+  box-sizing: border-box;
+}
+
+.split-panel-telemetria::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(rgba(30, 41, 59, 0.25) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(30, 41, 59, 0.25) 1px, transparent 1px);
+  background-size: 32px 32px;
+  pointer-events: none;
+}
+
+.telemetria-overlay {
+  width: 100%;
+  max-width: 680px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  position: relative;
+  z-index: 1;
+}
+
+.telemetria-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.chip-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  border-radius: var(--r-pill, 9999px);
+  background: rgba(14, 165, 233, 0.12);
+  border: 1px solid rgba(14, 165, 233, 0.3);
+  color: #38bdf8;
+  font-size: var(--fs-xs, 12px);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.chip-radar {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #38bdf8;
+  box-shadow: 0 0 8px #38bdf8;
+}
+
+.telemetria-version {
+  color: var(--mut, #64748b);
+  font-size: var(--fs-xs, 12px);
+  font-family: ui-monospace, monospace;
+}
+
+/* Grid de Métricas */
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.metric-card {
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid var(--line, #1e293b);
+  backdrop-filter: blur(8px);
+  padding: 14px 16px;
+  border-radius: var(--r-lg, 8px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.metric-valor {
+  font-size: var(--fs-xl, 28px);
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.color-exito {
+  color: #4ade80;
+}
+.color-cyan {
+  color: #38bdf8;
+}
+.color-lila {
+  color: #c084fc;
+}
+
+.metric-label {
+  font-size: var(--fs-xs, 12px);
+  font-weight: 600;
+  color: #f1f5f9;
+  margin-top: 4px;
+}
+
+.metric-sub {
+  font-size: var(--fs-xs, 12px);
+  color: var(--mut, #94a3b8);
+}
+
+/* Card de Topología */
+.topology-preview-card {
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid var(--line, #1e293b);
+  backdrop-filter: blur(12px);
+  border-radius: var(--r-lg, 8px);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+}
+
+.topology-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: var(--fs-sm, 14px);
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.badge-active {
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  font-size: var(--fs-xs, 12px);
+  font-weight: 700;
+}
+
+.pool-telemetry-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pool-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--fs-xs, 12px);
+}
+
+.pool-name {
+  color: #cbd5e1;
+  font-weight: 500;
+}
+
+.pool-cidr {
+  color: #38bdf8;
+  font-family: ui-monospace, monospace;
+}
+
+.pista-telemetria {
+  height: 6px;
+  background: rgba(30, 41, 59, 0.8);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.barra-telemetria {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
+.bar-green {
+  background: linear-gradient(90deg, #10b981, #34d399);
+}
+.bar-blue {
+  background: linear-gradient(90deg, #2563eb, #60a5fa);
+}
+.bar-cyan {
+  background: linear-gradient(90deg, #0284c7, #38bdf8);
+}
+
+.pool-stats-sub {
+  font-size: 11px;
+  color: var(--mut, #64748b);
+}
+
+/* Card Escudo de Drift */
+.drift-shield-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(14, 165, 233, 0.06);
+  border: 1px solid rgba(14, 165, 233, 0.2);
+  border-radius: var(--r-lg, 8px);
+  padding: 12px 16px;
+}
+
+.drift-shield-icon {
+  font-size: 22px;
+}
+
+.drift-shield-title {
+  font-size: var(--fs-xs, 12px);
+  font-weight: 700;
+  color: #38bdf8;
+}
+
+.drift-shield-text {
+  font-size: 11px;
+  color: var(--mut, #94a3b8);
+  line-height: 1.35;
+}
+
+/* Responsividad */
+@media (max-width: 900px) {
+  .split-layout {
+    flex-direction: column;
+  }
+  .split-panel-auth {
+    flex: none;
+    max-width: 100%;
+    width: 100%;
+    box-shadow: none;
+    border-right: none;
+    border-bottom: 1px solid var(--line, #1e293b);
+  }
+  .split-panel-telemetria {
+    display: none;
+  }
+}

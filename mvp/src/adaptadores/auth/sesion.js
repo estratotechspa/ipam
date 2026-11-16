@@ -51,6 +51,13 @@ function ponerCookie(req, res, nombre, valor, segundos) {
   res.append('Set-Cookie', c);
 }
 const borrarCookie = (req, res, nombre) => ponerCookie(req, res, nombre, '', 0);
+/**
+ * Huella del administrador de emergencia (APP_USER/APP_PASS), firmada con SESSION_SECRET. Va dentro de la cookie de una
+ * sesión de emergencia: si alguien cambia APP_USER o APP_PASS, la huella deja de coincidir y esas sesiones caen al instante.
+ * La cookie es legible (solo firmada), por eso nunca lleva la clave ni un hash directo de ella.
+ */
+const huellaEmergencia = () =>
+  crypto.createHmac('sha256', config.auth.sesionSecreto).update(`emergencia|${config.auth.appUser}|${config.auth.appPass}`).digest('base64url').slice(0, 22);
 const rutaSegura = (n) => (typeof n === 'string' && n.startsWith('/') && !n.startsWith('//') && !n.startsWith('/\\') ? n : '/');
 
-module.exports = { SESION, LOGIN, sellar, abrir, cookies, ponerCookie, borrarCookie, rutaSegura, esSegura };
+module.exports = { SESION, LOGIN, sellar, abrir, cookies, ponerCookie, borrarCookie, rutaSegura, esSegura, huellaEmergencia };

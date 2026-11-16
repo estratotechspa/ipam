@@ -1305,6 +1305,9 @@ function rutasDeSistema(p) {
       seguridad: publico,
     }),
   };
+}
+
+function rutasDeAutenticacion(p) {
   p['/auth/login'] = {
     get: op({
       tag: 'Sesión',
@@ -1351,6 +1354,61 @@ function rutasDeSistema(p) {
       ok: {
         401: { description: 'Página «Sesión cerrada» con el desafío de Basic.', content: { 'text/html': { schema: { type: 'string' } } } },
         302: { description: 'Sin modo Basic: vuelve a la aplicación.' },
+      },
+      seguridad: publico,
+    }),
+  };
+  p['/auth/opciones'] = {
+    get: op({
+      tag: 'Sesión',
+      summary: 'Opciones de la pantalla de acceso',
+      description: 'Dice si hay SSO, de qué proveedor (Google u OIDC genérico) y si el acceso de emergencia está habilitado. Pública, sin datos sensibles.',
+      ok: {
+        200: respuesta(
+          'Opciones.',
+          {
+            type: 'object',
+            properties: {
+              sso: { type: 'boolean' },
+              proveedor: { type: ['string', 'null'], enum: ['google', 'oidc', null] },
+              emergencia: { type: 'boolean' },
+            },
+          },
+          { sso: true, proveedor: 'google', emergencia: true },
+        ),
+      },
+      seguridad: publico,
+    }),
+  };
+  p['/auth/local'] = {
+    post: op({
+      tag: 'Sesión',
+      summary: 'Acceso de emergencia (APP_USER/APP_PASS) con SSO activo',
+      description:
+        'Solo en modo OIDC y con `APP_USER` y `APP_PASS` configurados. Crea una sesión de **1 hora** con rol admin, auditada (`login` con `metodo: emergencia`). ' +
+        'Exige `X-Requested-With: ipam`. Los fallos cuentan para el freno a la fuerza bruta. Si se cambia `APP_USER` o `APP_PASS`, las sesiones de emergencia abiertas caen.',
+      body: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['usuario', 'clave'],
+              properties: { usuario: { type: 'string', maxLength: 200 }, clave: { type: 'string', maxLength: 200 }, next: { type: 'string' } },
+            },
+          },
+        },
+      },
+      ok: {
+        200: respuesta(
+          'Sesión creada.',
+          { type: 'object', properties: { ok: { type: 'boolean' }, redirect: { type: 'string' } } },
+          { ok: true, redirect: '/' },
+        ),
+        401: respuesta('Usuario o contraseña incorrectos.'),
+        403: respuesta('Falta la cabecera X-Requested-With.'),
+        404: respuesta('Acceso de emergencia no habilitado.'),
+        429: respuesta('Demasiados intentos fallidos.'),
       },
       seguridad: publico,
     }),
@@ -2039,6 +2097,7 @@ function rutasDeJira(p) {
 function rutas() {
   const p = {};
   rutasDeSistema(p);
+  rutasDeAutenticacion(p);
   rutasDePaginas(p);
   rutasDePoolsYAsignaciones(p);
   rutasDeListaDeAsignaciones(p);

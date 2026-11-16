@@ -22,6 +22,7 @@ const PUBLICAS = new Set([
   '/login',
   '/login.html',
   '/login.js',
+  '/login.css',
   '/app.css',
   '/iconos.js',
   '/favicon.svg',
@@ -66,13 +67,24 @@ async function basicValido(cabecera, usuariosLocales) {
 }
 
 /**
+ * Sesión de emergencia (entró con APP_USER/APP_PASS desde la pantalla de acceso, sin el proveedor): vale como admin solo
+ * mientras ese usuario y esa clave sigan configurados. No pasa por la tabla de usuarios: es la puerta de servicio.
+ */
+function rolEmergencia(s) {
+  const a = config.auth;
+  if (!a.appUser || !a.appPass || s.email !== a.appUser) return null;
+  return s.emergencia === S.huellaEmergencia() ? 'admin' : null;
+}
+
+/**
  * Sesión OIDC por cookie, con el rol revalidado en la base. Si no vale (sin cookie, formato anterior, persona dada de baja o
  * eliminada) responde 401 o redirige al login y devuelve null. Sin revalidador (pruebas unitarias) se confía en el rol base.
  */
 async function sesionOidc(req, res, { revalidador, rechazo }) {
   const s = S.abrir(S.cookies(req)[S.SESION]);
   // Las cookies anteriores a la revalidación (sin `v: 2`) obligan a entrar de nuevo.
-  const rol = s && s.v === 2 ? (revalidador ? await revalidador.rol(s) : s.rolBase) : null;
+  const valida = s && s.v === 2;
+  const rol = !valida ? null : s.emergencia ? rolEmergencia(s) : revalidador ? await revalidador.rol(s) : s.rolBase;
   if (rol) return { sesion: s, rol };
   rechazo(s ? 'sesion_revocada' : 'sesion_invalida', req);
   if (s) S.borrarCookie(req, res, S.SESION);

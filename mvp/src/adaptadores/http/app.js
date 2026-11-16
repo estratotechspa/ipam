@@ -8,6 +8,7 @@ const { crearSolicitud } = require('./middleware/solicitud');
 const { crearAcceso } = require('../auth/acceso');
 const { montarOidc } = require('../auth/oidc');
 const { montarBasic } = require('../auth/basic');
+const { montarEmergencia } = require('../auth/emergencia');
 const { crearRevalidador } = require('../auth/revalidacion');
 const { manejadorDeErrores, noEncontrada } = require('./errores');
 const { ruta } = require('./registro');
@@ -111,6 +112,8 @@ function crearApp(deps) {
   marca.montar(app);
   montarOidc(app, { repo, auditar, ruta, log });
   montarBasic(app, { ruta });
+  const frenoFuerzaBruta = { bloqueada: (ip) => limite.bloqueadaPorFallos(ip), fallo: (ip) => limite.registrarFallo(ip) };
+  montarEmergencia(app, { auditar, ruta, frenoFuerzaBruta });
 
   const revalidador = crearRevalidador({ buscar: (e) => repo.usuarioPorEmail(e) });
   app.locals.revalidador = revalidador; // para diagnóstico y pruebas (vaciar la caché de sesiones)
@@ -121,7 +124,7 @@ function crearApp(deps) {
       autenticarToken: (t) => casos.tokens.autenticar(t),
       auditar,
       usuariosLocales: { buscar: (e) => repo.usuarioPorEmail(e), marcarAcceso: (e) => repo.marcarAcceso(e) },
-      frenoFuerzaBruta: { bloqueada: (ip) => limite.bloqueadaPorFallos(ip), fallo: (ip) => limite.registrarFallo(ip) },
+      frenoFuerzaBruta,
     }),
   );
   app.use((req, _res, next) => {
