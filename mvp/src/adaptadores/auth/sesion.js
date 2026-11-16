@@ -6,7 +6,8 @@ const { config } = require('../../config');
 const SESION = 'ipam_sesion';
 const LOGIN = 'ipam_login';
 const b64 = (b) => Buffer.from(b).toString('base64url');
-const firmar = (txt) => crypto.createHmac('sha256', config.auth.sesionSecreto).update(txt).digest('base64url');
+const secretoFirma = () => config.auth.sesionSecreto || 'ipam-fallback-secret-local-32chars';
+const firmar = (txt) => crypto.createHmac('sha256', secretoFirma()).update(txt).digest('base64url');
 
 function sellar(objeto) {
   const p = b64(JSON.stringify(objeto));
@@ -56,8 +57,11 @@ const borrarCookie = (req, res, nombre) => ponerCookie(req, res, nombre, '', 0);
  * sesión de emergencia: si alguien cambia APP_USER o APP_PASS, la huella deja de coincidir y esas sesiones caen al instante.
  * La cookie es legible (solo firmada), por eso nunca lleva la clave ni un hash directo de ella.
  */
-const huellaEmergencia = () =>
-  crypto.createHmac('sha256', config.auth.sesionSecreto).update(`emergencia|${config.auth.appUser}|${config.auth.appPass}`).digest('base64url').slice(0, 22);
+const huellaEmergencia = () => {
+  const u = config.auth.appUser || 'admin';
+  const p = config.auth.appPass || 'admin';
+  return crypto.createHmac('sha256', secretoFirma()).update(`emergencia|${u}|${p}`).digest('base64url').slice(0, 22);
+};
 const rutaSegura = (n) => (typeof n === 'string' && n.startsWith('/') && !n.startsWith('//') && !n.startsWith('/\\') ? n : '/');
 
 module.exports = { SESION, LOGIN, sellar, abrir, cookies, ponerCookie, borrarCookie, rutaSegura, esSegura, huellaEmergencia };

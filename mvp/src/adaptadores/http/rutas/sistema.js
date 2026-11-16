@@ -35,13 +35,13 @@ function montar(app, { db, estado, log }) {
   });
 }
 
-const MODO = { oidc: 'oidc', basic: 'basic', token: 'token', anonimo: 'none' };
+const MODO = { oidc: 'oidc', basic: 'basic', token: 'token', anonimo: 'none', local: 'local' };
 
 /** Datos de la sesión actual. Va DESPUÉS del middleware de acceso. */
 function montarSesion(app) {
   api(app, 'get', '/me', (req, res) =>
     res.json({
-      modo: MODO[req.actor && req.actor.tipo] || 'none',
+      modo: req.actor && req.actor.local ? 'local' : MODO[req.actor && req.actor.tipo] || 'none',
       usuario: req.usuario,
       nombre: req.nombre || req.usuario,
       rol: req.rol,

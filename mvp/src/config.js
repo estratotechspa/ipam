@@ -347,7 +347,7 @@ const config = {
     return {
       modo: issuer ? 'oidc' : user && pass ? 'basic' : 'none',
       permitirAnonimo: valor('ALLOW_ANONYMOUS'),
-      cuentasLocales: issuer ? false : Boolean(user && pass) && valor('AUTH_LOCAL'),
+      cuentasLocales: issuer ? Boolean(valor('AUTH_LOCAL')) : true,
       appUser: user,
       appPass: pass,
       sesionSecreto: texto('SESSION_SECRET'),

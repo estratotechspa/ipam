@@ -72,19 +72,32 @@ async function basicValido(cabecera, usuariosLocales) {
  */
 function rolEmergencia(s) {
   const a = config.auth;
-  if (!a.appUser || !a.appPass || s.email !== a.appUser) return null;
+  const adminUser = a.appUser || 'admin';
+  if (String(s.email).toLowerCase() !== adminUser.toLowerCase()) return null;
   return s.emergencia === S.huellaEmergencia() ? 'admin' : null;
 }
 
 /**
- * Sesión OIDC por cookie, con el rol revalidado en la base. Si no vale (sin cookie, formato anterior, persona dada de baja o
+ * Sesión por cookie (OIDC o local), con el rol revalidado en la base. Si no vale (sin cookie, formato anterior, persona dada de baja o
  * eliminada) responde 401 o redirige al login y devuelve null. Sin revalidador (pruebas unitarias) se confía en el rol base.
  */
-async function sesionOidc(req, res, { revalidador, rechazo }) {
+async function sesionOidc(req, res, { revalidador, rechazo, usuariosLocales }) {
   const s = S.abrir(S.cookies(req)[S.SESION]);
   // Las cookies anteriores a la revalidación (sin `v: 2`) obligan a entrar de nuevo.
   const valida = s && s.v === 2;
-  const rol = !valida ? null : s.emergencia ? rolEmergencia(s) : revalidador ? await revalidador.rol(s) : s.rolBase;
+  let rol = null;
+  if (valida) {
+    if (s.emergencia) {
+      rol = rolEmergencia(s);
+    } else if (s.local && usuariosLocales) {
+      const fila = await usuariosLocales.buscar(s.email);
+      if (fila && fila.activo !== false) rol = fila.rol || s.rolBase;
+    } else if (revalidador) {
+      rol = await revalidador.rol(s);
+    } else {
+      rol = s.rolBase;
+    }
+  }
   if (rol) return { sesion: s, rol };
   rechazo(s ? 'sesion_revocada' : 'sesion_invalida', req);
   if (s) S.borrarCookie(req, res, S.SESION);
@@ -95,6 +108,51 @@ async function sesionOidc(req, res, { revalidador, rechazo }) {
 
 // Mientras la clave sea temporal, la cuenta solo puede ver quién es y cambiarla.
 const SIN_CAMBIO_DE_CLAVE = new Set(['/api/v1/me', '/api/v1/yo/clave', '/api/config']);
+
+async function procesarTokenBearer(req, res, { cab, autenticarToken, rechazo, frenoFuerzaBruta, auditar, fijar }) {
+  const r = await autenticarToken(cab.replace(/^Bearer\s+/i, '').trim());
+  if (!r.ok) {
+    rechazo(`token_${r.motivo}`, req);
+    if (frenoFuerzaBruta) await frenoFuerzaBruta.fallo(req.ip);
+    await auditar('token_rechazado', r.nombre ? `svc:${r.nombre}` : 'desconocido', null, { motivo: r.motivo }, req.ip);
+    res
+      .set('WWW-Authenticate', 'Bearer realm="IPAM"')
+      .status(401)
+      .json({ error: 'token_invalido', mensaje: 'Token inválido, vencido o revocado.', request_id: contexto.actual().request_id });
+    return false;
+  }
+  fijar(r.actor.nombre, r.actor.rol, 'token', r.actor.nombre, { tokenId: r.actor.tokenId, cuota: r.actor.cuota, alcance: r.actor.alcance });
+  if (!permite(r.actor.alcance, req.method, req.path)) {
+    rechazo('token_fuera_de_alcance', req);
+    res.status(403).json({
+      error: 'fuera_de_alcance',
+      mensaje: 'Este token no tiene permiso para usar esta parte de la API (su alcance: ' + r.actor.alcance.join(', ') + ').',
+      request_id: contexto.actual().request_id,
+    });
+    return false;
+  }
+  return true;
+}
+
+async function procesarModoBasic(req, res, { usuariosLocales, rechazo, frenoFuerzaBruta, trae, fijar }) {
+  const u = await basicValido(req.headers.authorization, usuariosLocales);
+  if (u === null) {
+    rechazo('credenciales_basic', req);
+    if (frenoFuerzaBruta && trae) await frenoFuerzaBruta.fallo(req.ip);
+    res.set('WWW-Authenticate', 'Basic realm="IPAM"').status(401).send('Autenticación requerida');
+    return false;
+  }
+  fijar(u.nombre, u.rol, 'basic', u.nombre, { local: u.local, debeCambiar: u.debeCambiar });
+  if (u.debeCambiar && req.path.startsWith('/api/') && !SIN_CAMBIO_DE_CLAVE.has(req.path)) {
+    res.status(403).json({
+      error: 'cambio_de_clave_requerido',
+      mensaje: 'Tu contraseña es temporal: cámbiala antes de seguir (POST /api/v1/yo/clave).',
+      request_id: contexto.actual().request_id,
+    });
+    return false;
+  }
+  return true;
+}
 
 /**
  * @param {{rechazo?: (motivo: string, req: any) => unknown, autenticarToken?: (token: string) => Promise<any>, auditar?: Function}} [deps]
@@ -112,10 +170,8 @@ function crearAcceso({ rechazo = () => {}, autenticarToken, auditar = async () =
     };
 
     // 1) Token de servicio: se evalúa PRIMERO, en cualquier modo (oidc, basic o abierto). Un token inválido es 401 aunque el modo sea abierto.
-    //    Sin cookie no hay CSRF: no se exige X-Requested-With.
     const cab = String(req.headers.authorization || '');
     const trae = /^(Bearer|Basic)\s/i.test(cab);
-    // Freno a la fuerza bruta: una IP con demasiados intentos fallidos en el último minuto queda bloqueada un rato (incluso con credenciales buenas).
     if (frenoFuerzaBruta && trae) {
       const b = await frenoFuerzaBruta.bloqueada(req.ip);
       if (b.bloqueada) {
@@ -132,45 +188,25 @@ function crearAcceso({ rechazo = () => {}, autenticarToken, auditar = async () =
       }
     }
     if (autenticarToken && /^Bearer\s/i.test(cab)) {
-      const r = await autenticarToken(cab.replace(/^Bearer\s+/i, '').trim());
-      if (!r.ok) {
-        rechazo(`token_${r.motivo}`, req);
-        if (frenoFuerzaBruta) await frenoFuerzaBruta.fallo(req.ip);
-        await auditar('token_rechazado', r.nombre ? `svc:${r.nombre}` : 'desconocido', null, { motivo: r.motivo }, req.ip); // nunca el token presentado
-        return res
-          .set('WWW-Authenticate', 'Bearer realm="IPAM"')
-          .status(401)
-          .json({ error: 'token_invalido', mensaje: 'Token inválido, vencido o revocado.', request_id: contexto.actual().request_id });
-      }
-      fijar(r.actor.nombre, r.actor.rol, 'token', r.actor.nombre, { tokenId: r.actor.tokenId, cuota: r.actor.cuota, alcance: r.actor.alcance });
-      if (!permite(r.actor.alcance, req.method, req.path)) {
-        rechazo('token_fuera_de_alcance', req);
-        return res.status(403).json({
-          error: 'fuera_de_alcance',
-          mensaje: 'Este token no tiene permiso para usar esta parte de la API (su alcance: ' + r.actor.alcance.join(', ') + ').',
-          request_id: contexto.actual().request_id,
-        });
-      }
-      return next();
+      const ok = await procesarTokenBearer(req, res, { cab, autenticarToken, rechazo, frenoFuerzaBruta, auditar, fijar });
+      if (ok) next();
+      return;
     }
-    if (modo === 'none') fijar('anonimo', 'admin', 'anonimo');
-    else if (modo === 'basic') {
-      const u = await basicValido(req.headers.authorization, usuariosLocales);
-      if (u === null) {
-        rechazo('credenciales_basic', req);
-        if (frenoFuerzaBruta && trae) await frenoFuerzaBruta.fallo(req.ip);
-        return res.set('WWW-Authenticate', 'Basic realm="IPAM"').status(401).send('Autenticación requerida');
-      }
-      fijar(u.nombre, u.rol, 'basic', u.nombre, { local: u.local, debeCambiar: u.debeCambiar });
-      if (u.debeCambiar && req.path.startsWith('/api/') && !SIN_CAMBIO_DE_CLAVE.has(req.path)) {
-        return res.status(403).json({
-          error: 'cambio_de_clave_requerido',
-          mensaje: 'Tu contraseña es temporal: cámbiala antes de seguir (POST /api/v1/yo/clave).',
-          request_id: contexto.actual().request_id,
-        });
-      }
+    const cookieSesion = S.cookies(req)[S.SESION];
+    if (cookieSesion) {
+      const o = await sesionOidc(req, res, { revalidador, rechazo, usuariosLocales });
+      if (!o) return;
+      fijar(o.sesion.email, o.rol, o.sesion.local ? 'local' : 'oidc', o.sesion.nombre, {
+        local: Boolean(o.sesion.local),
+        debeCambiar: Boolean(o.sesion.debeCambiar),
+      });
+    } else if (modo === 'none') {
+      fijar('anonimo', 'admin', 'anonimo');
+    } else if (modo === 'basic') {
+      const ok = await procesarModoBasic(req, res, { usuariosLocales, rechazo, frenoFuerzaBruta, trae, fijar });
+      if (!ok) return;
     } else {
-      const o = await sesionOidc(req, res, { revalidador, rechazo });
+      const o = await sesionOidc(req, res, { revalidador, rechazo, usuariosLocales });
       if (!o) return; // sesión inválida o revocada: ya se respondió
       fijar(o.sesion.email, o.rol, 'oidc', o.sesion.nombre);
     }

@@ -26,9 +26,9 @@
 
       <div id="aviso" class="alert" role="alert" hidden></div>
 
-      <!-- Botón Principal: Google Workspace / Gmail SSO -->
-      <div class="acciones-sso">
-        <a id="entrar" class="btn-sso-google" href="/auth/login">
+      <!-- Acceso con Google (En off de momento) -->
+      <div class="acciones-sso" hidden>
+        <a id="entrar" class="btn-sso-google" href="/auth/login" hidden>
           <svg class="google-svg" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
             <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
@@ -39,17 +39,14 @@
         </a>
       </div>
 
-      <!-- Separador -->
-      <div class="divider-cyber">
-        <span>o acceso de infraestructura</span>
-      </div>
+      <div class="divider-cyber" hidden></div>
 
-      <!-- Formulario de Acceso Local / Emergencia -->
+      <!-- Formulario de Acceso Directo -->
       <form id="form-emergencia" class="form-emergencia" autocomplete="on">
         <div id="local-err" class="alert-inline" role="alert" hidden></div>
         <div class="campo-grupo">
           <label for="local-user" class="campo-etiqueta">Usuario</label>
-          <input type="text" id="local-user" name="usuario" class="campo-input" placeholder="admin" autocomplete="username" required>
+          <input type="text" id="local-user" name="usuario" class="campo-input" placeholder="admin o nombre de usuario" autocomplete="username" required>
         </div>
         <div class="campo-grupo">
           <label for="local-pass" class="campo-etiqueta">Contraseña</label>
@@ -63,12 +60,12 @@
         </div>
         <button type="submit" id="btn-local" class="btn btn-cyber-submit">
           <span id="ic-entrar" class="ic-envoltorio"></span>
-          <span>Acceder con credenciales locales</span>
+          <span>Iniciar sesión</span>
         </button>
       </form>
 
       <footer class="auth-card-footer">
-        <p class="muted">Protección de acceso TLS 1.3 · OpenID Connect & RBAC</p>
+        <p class="muted">Acceso directo para administradores y cuentas locales autorizadas.</p>
         <p id="pie" class="muted pie-login"></p>
       </footer>
     </div>
