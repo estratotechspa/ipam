@@ -171,7 +171,7 @@ def('LIMITE_ALMACEN', 'texto', 'postgres', 'Dónde se cuentan las peticiones: «
 });
 
 // Módulos de la API
-def('MODULOS_DESACTIVADOS', 'lista', [], 'Módulos de la API que quedan apagados (responden 404): jira, importacion, direcciones, respaldo, excel.', {
+def('MODULOS_DESACTIVADOS', 'lista', ['jira'], 'Módulos de la API que quedan apagados (responden 404): jira, importacion, direcciones, respaldo, excel.', {
   ejemplo: 'jira,importacion',
 });
 

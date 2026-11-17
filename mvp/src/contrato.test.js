@@ -42,7 +42,7 @@ const comoAgente = (extra = {}) => ({ Authorization: `Bearer ${tokenAgente}`, 'C
 test.before(async () => {
   if (!hayBase) return;
   b = await crearBaseAislada();
-  s = await lanzarServicio({ DATABASE_URL: b.url });
+  s = await lanzarServicio({ DATABASE_URL: b.url, MODULOS_DESACTIVADOS: '' });
   url = s.url;
   const t = await (await llamar('POST', '/api/v1/tokens', { nombre: 'agente-contrato', rol: 'agente', cuota_reservas: 2 })).json();
   tokenAgente = t.token;
