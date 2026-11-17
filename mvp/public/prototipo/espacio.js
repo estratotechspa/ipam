@@ -97,9 +97,16 @@ function filaDeFranja(celdas, desde, hasta, ctx) {
   while (i < hasta) {
     const s = celdas[i].segmento;
     if (!s) {
-      const libre = el('span', { class: 'celda-libre', 'data-i': i });
+      const libre = el('span', { class: 'celda-libre', 'data-i': i, style: 'cursor:pointer' });
       if (ctx.mayor && i >= ctx.mayor.ini && i < ctx.mayor.ini + ctx.mayor.tam) libre.classList.add('mayor');
       if (ctx.cabe.has(i)) libre.classList.add('cabe');
+      const bloqueCidr = cidrDeBloque(ctx.base, i, 1);
+      libre.title = `${bloqueCidr} · libre · Clic para reservar`;
+      libre.addEventListener('click', () => {
+        if (confirm(`¿Deseas reservar el bloque ${bloqueCidr} en ${ctx.base.nombre || 'esta VPC'}?`)) {
+          alert(`En el IPAM oficial, este bloque ${bloqueCidr} se reserva de inmediato. Abre la ficha del Pool para gestionarlo con la base de datos.`);
+        }
+      });
       fila.append(libre);
       i++;
       continue;

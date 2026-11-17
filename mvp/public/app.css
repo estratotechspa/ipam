@@ -162,13 +162,16 @@ td:first-child,td code{white-space:nowrap}
 
 /* Mapa de bloques de un pool: libre = vacío, parcial = rayado, ocupado = lleno (Cyber Matrix Heatmap) */
 .mapa{display:grid;grid-template-columns:repeat(var(--cols,16),1fr);gap:2px;max-width:640px}
-.bloque{aspect-ratio:1;min-width:0;border-radius:2px;border:1px solid var(--borde-campo);background:transparent;cursor:pointer;transition:transform var(--t),box-shadow var(--t)}
+.bloque{aspect-ratio:1;min-width:0;border-radius:2px;border:1px solid var(--borde-campo);background:transparent;cursor:pointer;transition:transform var(--t),box-shadow var(--t),border-color var(--t)}
 .bloque:hover{transform:scale(1.2);box-shadow:0 0 10px var(--accent);z-index:2;position:relative}
 .bloque-ocupado{background:var(--blue);border-color:var(--blue)}
 .bloque-parcial{background:repeating-linear-gradient(45deg,var(--blue) 0 3px,transparent 3px 6px);border-color:var(--blue)}
+.bloque-libre-accionable{cursor:pointer;border-color:color-mix(in srgb, var(--exito, #10b981) 60%, transparent)}
+.bloque-libre-accionable:hover,.bloque-libre-accionable:focus-visible{transform:scale(1.25);border-color:var(--exito, #10b981) !important;background:color-mix(in srgb, var(--exito, #10b981) 25%, transparent) !important;box-shadow:0 0 12px var(--exito, #10b981);z-index:4;position:relative;outline:none}
 @media (prefers-color-scheme:dark){
   .bloque-ocupado{background:var(--accent);border-color:var(--accent);box-shadow:0 0 4px color-mix(in srgb,var(--accent) 30%,transparent)}
   .bloque-parcial{background:repeating-linear-gradient(45deg,var(--accent) 0 3px,transparent 3px 6px);border-color:var(--accent)}
+  .bloque-libre-accionable:hover,.bloque-libre-accionable:focus-visible{box-shadow:0 0 14px var(--exito, #34d399)}
 }
 .mapa-detalle{min-height:1.5em;font-size:var(--fs-sm);margin:var(--sp-2) 0;font-family:ui-monospace,monospace}
 .leyenda-mapa{display:flex;flex-wrap:wrap;gap:var(--sp-4);list-style:none;padding:0;margin:0}

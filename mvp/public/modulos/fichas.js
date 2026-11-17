@@ -1,8 +1,8 @@
 // Panel lateral (fichas de pool y de segmento), mapa de bloques e historial.
 import { mapaBloques } from '../calculos.js';
 import { ip2n, n2ip, panelDirecciones } from './ips.js';
-import { ESTADO, fechaHora, fmt, get, h, puede, size, todasLasAsignaciones } from './base.js';
-import { abrirDialogo, tabla, toast } from './ui.js';
+import { ESTADO, api, errorApi, fechaHora, fmt, get, h, puede, size, todasLasAsignaciones } from './base.js';
+import { abrirDialogo, tabla, toast, vincularCidr } from './ui.js';
 import { barraUso, pct } from './uso.js';
 import { resumenPool } from './resumen-pool.js';
 import { accionesPool } from './pools.js';
@@ -113,17 +113,157 @@ export function abrirPanel(titulo, subtitulo, pestanas) {
 /**
  * Mapa de bloques de un pool: hasta 256 cuadros iguales; lleno = ocupado (asignado o reservado), rayado = parcial, vacío = libre.
  * No depende solo del color y su detalle está también en la pestaña «Segmentos» (el mapa se explora con el cursor).
+ * Al hacer clic en un bloque libre, permite reservarlo de inmediato mediante un diálogo interactivo.
  */
 export const TEXTO_BLOQUE = { libre: 'libre', parcial: 'parcialmente ocupado', ocupado: 'ocupado' };
 
-export function mapaDelPool(p, ocupantes) {
+/**
+ * Diálogo emergente para reservar un bloque libre seleccionado en el mapa del espacio.
+ */
+export function dialogoReservarBloque(pool, bloque, alRecargar) {
+  abrirDialogo((dlg, cerrar) => {
+    const esAdmin = puede('admin');
+    const inputCidr = h('input', {
+      id: 'rb-cidr',
+      value: bloque.cidr,
+      required: true,
+      style: 'font-family:ui-monospace,monospace;font-size:var(--fs-sm);width:100%',
+    });
+    const inputProyecto = h('input', { id: 'rb-proyecto', maxlength: 120, placeholder: 'ej. core-backend', style: 'width:100%' });
+    const inputVpc = h('input', { id: 'rb-vpc', maxlength: 120, placeholder: 'ej. vpc-dev', style: 'width:100%' });
+    const inputSubred = h('input', { id: 'rb-subred', maxlength: 120, placeholder: 'ej. subred-servicios', style: 'width:100%' });
+    const inputTicket = h('input', { id: 'rb-ticket', maxlength: 60, placeholder: 'opcional (autogenera NET-xxx)', style: 'width:100%' });
+    const inputTtl = h('input', { id: 'rb-ttl', type: 'number', min: 1, max: 168, value: 72, style: 'width:100%' });
+    const checkAsignarDirecto = esAdmin ? h('input', { id: 'rb-directo', type: 'checkbox' }) : null;
+    const errorMsg = h('p', { class: 'campo-msg campo-error', role: 'alert', hidden: true });
+    const btnCancelar = h('button', { type: 'button', class: 'btn sec', onclick: cerrar }, 'Cancelar');
+    const btnSubmit = h('button', { type: 'submit', class: 'btn' }, 'Reservar');
+
+    const campo = (etiqueta, control) => h('label', { style: 'display:block;margin-top:10px' }, etiqueta, control);
+
+    vincularCidr(inputCidr, btnSubmit, () => pool.cidr);
+
+    if (checkAsignarDirecto) {
+      checkAsignarDirecto.addEventListener('change', () => {
+        const directo = checkAsignarDirecto.checked;
+        btnSubmit.textContent = directo ? 'Asignar ahora' : 'Reservar';
+        btnSubmit.classList.toggle('peligro', directo);
+        inputTtl.closest('label').hidden = directo;
+      });
+    }
+
+    const form = h(
+      'form',
+      {
+        class: 'form-reserva-bloque',
+        style: 'display:flex;flex-direction:column;gap:8px',
+        onsubmit: async (e) => {
+          e.preventDefault();
+          errorMsg.hidden = true;
+          errorMsg.textContent = '';
+          btnSubmit.disabled = true;
+
+          const directo = checkAsignarDirecto && checkAsignarDirecto.checked;
+          const cuerpo = {
+            pool: pool.id,
+            cidr: inputCidr.value.trim(),
+          };
+          if (inputProyecto.value.trim()) cuerpo.proyecto = inputProyecto.value.trim();
+          if (inputVpc.value.trim()) cuerpo.vpc = inputVpc.value.trim();
+          if (inputSubred.value.trim()) cuerpo.subred = inputSubred.value.trim();
+          if (inputTicket.value.trim()) cuerpo.ticket = inputTicket.value.trim();
+
+          try {
+            let r;
+            if (directo) {
+              r = await api('/api/v1/solicitudes', { body: cuerpo });
+            } else {
+              cuerpo.ttl_horas = +inputTtl.value || 72;
+              r = await api('/api/v1/reservas', {
+                body: cuerpo,
+                headers: { 'Idempotency-Key': crypto.randomUUID() },
+              });
+            }
+
+            if (r.ok) {
+              const d = r.data || {};
+              cerrar();
+              toast(
+                directo
+                  ? `Asignado con éxito ${d.cidr} en ${pool.id}`
+                  : `Reserva creada para ${d.cidr} en ${pool.id} por ${cuerpo.ttl_horas} h. Ticket: ${d.ticket || 'NET-' + (d.id || '')}`,
+                'ok',
+              );
+              if (alRecargar) await alRecargar();
+            } else {
+              btnSubmit.disabled = false;
+              errorMsg.hidden = false;
+              errorMsg.textContent = errorApi(r);
+            }
+          } catch (err) {
+            btnSubmit.disabled = false;
+            errorMsg.hidden = false;
+            errorMsg.textContent = err.message || 'Error al procesar la reserva';
+          }
+        },
+      },
+      h('h3', { style: 'margin:0 0 4px' }, 'Reservar espacio libre'),
+      h(
+        'p',
+        { class: 'muted', style: 'margin:0 0 10px;font-size:var(--fs-sm)' },
+        'Bloque seleccionado: ',
+        h('code', null, bloque.cidr),
+        ' en Pool ',
+        h('b', null, pool.id),
+      ),
+      campo('Segmento CIDR', inputCidr),
+      campo('Proyecto (opcional)', inputProyecto),
+      campo('VPC (opcional)', inputVpc),
+      campo('Subred o VLAN (opcional)', inputSubred),
+      campo('Ticket Jira / Referencia (opcional)', inputTicket),
+      campo('Vigencia (horas, máx. 168)', inputTtl),
+      checkAsignarDirecto
+        ? h(
+            'label',
+            { class: 'casilla', style: 'margin-top:10px;display:flex;align-items:center;gap:6px;cursor:pointer' },
+            checkAsignarDirecto,
+            ' Asignar de inmediato sin aprobación (Solo Admin)',
+          )
+        : null,
+      errorMsg,
+      h('div', { class: 'fila-botones', style: 'margin-top:16px' }, btnCancelar, btnSubmit),
+    );
+
+    dlg.append(form);
+  });
+}
+
+export function mapaDelPool(p, ocupantes, alRecargar) {
   const { granularidad, bloques, resumen } = mapaBloques(p.cidr, ocupantes);
   if (!bloques.length) return null;
   const linea = h('p', { class: 'mapa-detalle', 'aria-live': 'polite' }, '\u00a0');
   const celdas = bloques.map((b) => {
     const quien = b.asignaciones.map((a) => `${a.vpc || 'sin VPC'} (${a.cidr}${a.reserva ? ', reserva' : a.ticket ? ', ' + a.ticket : ''})`).join('; ');
+    const esLibre = b.estado === 'libre';
     const texto = `${b.cidr} · ${TEXTO_BLOQUE[b.estado]}${quien ? ' · ' + quien : ''}`;
-    return h('div', { class: `bloque bloque-${b.estado}`, title: texto, onmouseenter: () => (linea.textContent = texto) });
+    const attrs = {
+      class: `bloque bloque-${b.estado}${esLibre ? ' bloque-libre-accionable' : ''}`,
+      title: esLibre ? `${texto} — Clic para reservar` : texto,
+      onmouseenter: () => (linea.textContent = esLibre ? `${b.cidr} · Libre · Haz clic para reservar este bloque` : texto),
+    };
+    if (esLibre) {
+      attrs.role = 'button';
+      attrs.tabIndex = 0;
+      attrs['aria-label'] = `Bloque libre ${b.cidr}. Presiona para reservar.`;
+      attrs.onclick = () => dialogoReservarBloque(p, b, alRecargar);
+      attrs.onkeydown = (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          dialogoReservarBloque(p, b, alRecargar);
+        }
+      };
+    }
+    return h('div', attrs);
   });
   const tam = 2 ** (32 - granularidad);
   return h(
@@ -133,7 +273,7 @@ export function mapaDelPool(p, ocupantes) {
     h(
       'p',
       { class: 'muted' },
-      `Cada cuadro es un bloque /${granularidad} (${fmt(tam)} ${tam === 1 ? 'dirección' : 'direcciones'}). Pasa el cursor para ver quién lo usa; la pestaña «Segmentos» tiene el mismo detalle.`,
+      `Cada cuadro es un bloque /${granularidad} (${fmt(tam)} ${tam === 1 ? 'dirección' : 'direcciones'}). Haz clic en un bloque libre para reservarlo directamente; pasa el cursor para ver quién lo usa.`,
     ),
     h(
       'div',
@@ -150,7 +290,7 @@ export function mapaDelPool(p, ocupantes) {
     h(
       'ul',
       { class: 'leyenda-mapa' },
-      h('li', null, h('span', { class: 'bloque bloque-libre' }), ` Libre (${resumen.libre})`),
+      h('li', null, h('span', { class: 'bloque bloque-libre bloque-libre-accionable' }), ` Libre (${resumen.libre}) · Clic para reservar`),
       h('li', null, h('span', { class: 'bloque bloque-parcial' }), ` Parcial (${resumen.parcial})`),
       h('li', null, h('span', { class: 'bloque bloque-ocupado' }), ` Ocupado (${resumen.ocupado})`),
     ),
@@ -209,40 +349,53 @@ export async function fichaPool(id) {
       {
         nombre: 'Detalle',
         construir: async (cerrar) => {
-          const [d, asig, reservas] = await Promise.all([
-            get('/api/v1/pools/' + encodeURIComponent(id) + '/disponibilidad'),
-            todasLasAsignaciones(),
-            get('/api/v1/reservas?' + new URLSearchParams({ pool: id, estado: 'reservada' })),
-          ]);
-          const mayor = d.por_mascara.find((x) => x.bloques_libres > 0);
-          return h(
-            'div',
-            null,
-            h('p', { class: 'ficha-uso' }, barraUso(p.uso, res), ` ocupado (asignado ${pct(p.uso)} · reservado ${pct(res)})`),
-            resumenPool(p, d, p.uso + res, [...asig.filter((a) => a.pool_id === id), ...reservas.map((x) => ({ ...x, reserva: true }))]),
-            h(
-              'details',
-              { class: 'plegable' },
-              h('summary', null, 'Ver el mapa detallado'),
-              mapaDelPool(p, [...asig.filter((a) => a.pool_id === id), ...reservas.map((x) => ({ ...x, reserva: true }))]),
-            ),
-            datos([
-              ['Pool', p.id],
-              ['CIDR base', h('code', null, p.cidr)],
-              ['Primera dirección', r.primera],
-              ['Última dirección', r.ultima],
-              ['Tipo', p.tipo],
-              ['Ambiente', h('span', { class: 'tag ' + p.ambiente }, p.ambiente)],
-              ['Proveedor', p.proveedor],
-              ['Direcciones', fmt(r.total)],
-              ['Utilizables', fmt(r.utilizables)],
-              ['Libres', `${fmt(d.libres)} (${pct(d.total ? d.libres / d.total : 0)})`],
-              ['Bloque libre más grande', mayor ? `/${mayor.mascara} (${fmt(mayor.direcciones)} direcciones)` : 'sin espacio'],
-              ['Asignaciones', fmt(p.asignaciones)],
-              ['Reservas vigentes', fmt(p.reservas_vigentes || 0)],
-            ]),
-            puede('admin') ? accionesPool(p, cerrar) : null,
-          );
+          const cajaDetalle = h('div', null);
+          const construirDetalle = async () => {
+            const [poolsActuales, d, asig, reservas] = await Promise.all([
+              get('/api/v1/pools'),
+              get('/api/v1/pools/' + encodeURIComponent(id) + '/disponibilidad'),
+              todasLasAsignaciones(),
+              get('/api/v1/reservas?' + new URLSearchParams({ pool: id, estado: 'reservada' })),
+            ]);
+            const poolActualizado = (Array.isArray(poolsActuales) ? poolsActuales.find((x) => x.id === id) : null) || p;
+            const resActual = poolActualizado.uso_reservado || 0;
+            const mayor = d.por_mascara.find((x) => x.bloques_libres > 0);
+            return h(
+              'div',
+              null,
+              h('p', { class: 'ficha-uso' }, barraUso(poolActualizado.uso, resActual), ` ocupado (asignado ${pct(poolActualizado.uso)} · reservado ${pct(resActual)})`),
+              resumenPool(poolActualizado, d, poolActualizado.uso + resActual, [...asig.filter((a) => a.pool_id === id), ...reservas.map((x) => ({ ...x, reserva: true }))]),
+              h(
+                'details',
+                { class: 'plegable', open: true },
+                h('summary', null, 'Mapa del espacio'),
+                mapaDelPool(poolActualizado, [...asig.filter((a) => a.pool_id === id), ...reservas.map((x) => ({ ...x, reserva: true }))], recargarDetalle),
+              ),
+              datos([
+                ['Pool', poolActualizado.id],
+                ['CIDR base', h('code', null, poolActualizado.cidr)],
+                ['Primera dirección', r.primera],
+                ['Última dirección', r.ultima],
+                ['Tipo', poolActualizado.tipo],
+                ['Ambiente', h('span', { class: 'tag ' + poolActualizado.ambiente }, poolActualizado.ambiente)],
+                ['Proveedor', poolActualizado.proveedor],
+                ['Direcciones', fmt(r.total)],
+                ['Utilizables', fmt(r.utilizables)],
+                ['Libres', `${fmt(d.libres)} (${pct(d.total ? d.libres / d.total : 0)})`],
+                ['Bloque libre más grande', mayor ? `/${mayor.mascara} (${fmt(mayor.direcciones)} direcciones)` : 'sin espacio'],
+                ['Asignaciones', fmt(poolActualizado.asignaciones)],
+                ['Reservas vigentes', fmt(poolActualizado.reservas_vigentes || 0)],
+              ]),
+              puede('admin') ? accionesPool(poolActualizado, cerrar) : null,
+            );
+          };
+          const recargarDetalle = async () => {
+            cajaDetalle.replaceChildren(h('p', { class: 'muted' }, 'Actualizando mapa…'));
+            const nuevo = await construirDetalle();
+            cajaDetalle.replaceChildren(nuevo);
+          };
+          cajaDetalle.replaceChildren(await construirDetalle());
+          return cajaDetalle;
         },
       },
       {
