@@ -1,12 +1,12 @@
 'use strict';
 // Lee un Excel (.xlsx) o un CSV con segmentos y lo convierte en filas para la importación. Solo lectura de formato:
 // las reglas de negocio (qué se puede importar) están en dominio/importacion.js.
-const ExcelJS = require('exceljs');
+const readXlsxFile = require('read-excel-file/node');
 const { MAX_FILAS } = require('../../dominio/importacion');
 
 // Nombres de columna aceptados (sin tildes ni mayúsculas): cada campo del IPAM → posibles encabezados del archivo.
 const ALIAS = {
-  cidr: ['cidr', 'prefijo', 'prefix', 'segmento', 'red', 'subred', 'rango', 'direccion ip', 'network'],
+  cidr: ['cidr', 'prefijo', 'prefix', 'segmento', 'segmento (cidr)', 'red', 'subred', 'rango', 'direccion ip', 'network'],
   vpc: ['vpc', 'nombre', 'name', 'inquilino', 'tenant', 'proyecto / vpc', 'proyecto vpc', 'nombre vpc', 'vpc name'],
   proyecto: ['proyecto', 'project', 'nombre proyecto', 'nombre del proyecto', 'project name', 'project id'],
   proveedor: ['proveedor', 'provider', 'nube', 'cloud', 'sitio', 'site', 'origen'],
@@ -78,17 +78,10 @@ function leerCsv(texto) {
 }
 
 async function leerXlsx(buffer) {
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(buffer);
-  const hoja = wb.worksheets[0];
-  if (!hoja) return [];
-  const filas = [];
-  hoja.eachRow({ includeEmpty: false }, (row) => {
-    const celdas = [];
-    for (let c = 1; c <= row.cellCount; c++) celdas.push(textoDeCelda(row.getCell(c).value));
-    filas.push(celdas);
-  });
-  return filas;
+  const sheets = await readXlsxFile(buffer);
+  if (!sheets || sheets.length === 0) return [];
+  const filas = sheets[0].data || [];
+  return filas.map((row) => row.map((celda) => textoDeCelda(celda)));
 }
 
 /**

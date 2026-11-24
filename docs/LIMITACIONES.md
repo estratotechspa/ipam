@@ -24,7 +24,7 @@ El IPAM exige `aprobado_por` y `referencia` para que un agente confirme, y los g
 ## Sobre lo verificado
 - Las pruebas automáticas corren contra PostgreSQL 14, 15, 16 y 17 reales.
 - Los pipelines de GitHub y GitLab, los manifiestos de GKE/EKS/AKS/Cloud Run y los ejemplos de OpenTofu **no se ejecutaron contra cuentas reales**; se validaron sintácticamente y, donde fue posible, en contenedores locales.
-- `exceljs` arrastra una dependencia con un aviso de severidad moderada en `npm audit` (aceptado; la severidad alta bloquea el CI).
+- Se reemplazó `exceljs` por `read-excel-file` y `write-excel-file` (sin avisos de severidad alta ni crítica en escaneos de CI).
 - La integración saliente con Jira (crear y actualizar tickets) **no se probó contra un Jira real**; el webhook de entrada sí se prueba con firma y timestamp. En el POC el módulo `jira` está apagado.
 - El contrato YAML de redes es una **propuesta pendiente de validar** con el equipo dueño de `cd-agents`.
 - La herramienta de escaneo mencionada como «Whisky» está **por confirmar**; hoy se usan Trivy y Checkov.

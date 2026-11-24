@@ -1,7 +1,7 @@
 // Importación masiva de segmentos (Excel/CSV) contra PostgreSQL real, por HTTP. Datos FICTICIOS.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const ExcelJS = require('exceljs');
+const writeXlsxFile = require('write-excel-file/node');
 const { hayBase, crearBaseAislada, lanzarServicio } = require('./pruebas/ayudas');
 
 const opts = { skip: hayBase ? false : 'sin DATABASE_URL' };
@@ -13,10 +13,9 @@ const post = async (ruta, cuerpo) => {
 };
 const csv = (texto) => ({ formato: 'csv', contenido_base64: Buffer.from(texto).toString('base64') });
 async function xlsx(filas) {
-  const wb = new ExcelJS.Workbook();
-  const h = wb.addWorksheet('Segmentos');
-  for (const f of filas) h.addRow(f);
-  return { formato: 'xlsx', contenido_base64: Buffer.from(await wb.xlsx.writeBuffer()).toString('base64') };
+  const data = filas.map((f) => f.map((val) => ({ value: val })));
+  const buffer = await writeXlsxFile([{ data, sheet: 'Segmentos' }]).toBuffer();
+  return { formato: 'xlsx', contenido_base64: buffer.toString('base64') };
 }
 
 test.before(async () => {

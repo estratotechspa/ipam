@@ -35,7 +35,7 @@ fi
 
 titulo "2. dominio/ y aplicacion/ no importan infraestructura"
 # Prohibido: frameworks, drivers, módulos de red/archivos/procesos del sistema, adaptadores, config y process/fetch.
-INFRA='(require|from)[ (]*["'"'"'](express|pg|helmet|exceljs|openid-client|prom-client|ajv|@opentelemetry/[^"'"'"']*|(node:)?(fs|http|https|http2|net|dns|tls|child_process|cluster|worker_threads|crypto|os|stream)(/promises)?|\.\.?/(\.\./)*(adaptadores|config|server|arranque)[^"'"'"']*)["'"'"']'
+INFRA='(require|from)[ (]*["'"'"'](express|pg|helmet|exceljs|(read|write)-excel-file[^"'"'"']*|openid-client|prom-client|ajv|@opentelemetry/[^"'"'"']*|(node:)?(fs|http|https|http2|net|dns|tls|child_process|cluster|worker_threads|crypto|os|stream)(/promises)?|\.\.?/(\.\./)*(adaptadores|config|server|arranque)[^"'"'"']*)["'"'"']'
 for capa in dominio aplicacion; do
   [ -d "$SRC/$capa" ] || continue
   m=$(find "$SRC/$capa" -type f -name '*.js' ! -name '*.test.js' -exec grep -nE "$INFRA" {} + 2>/dev/null || true)

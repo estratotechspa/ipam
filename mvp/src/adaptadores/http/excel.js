@@ -1,130 +1,171 @@
 'use strict';
-// Libro Excel de segmentos, pools e IPs fijas, escrito por streaming (ExcelJS WorkbookWriter): cada fila se escribe al llegar
-// y se descarta, así que la memoria no crece con el tamaño de la base. Los datos llegan por lotes desde el caso de uso.
-const ExcelJS = require('exceljs');
+// Generación del libro Excel de segmentos, pools e IPs fijas usando write-excel-file.
+// Genera las hojas 'Segmentos', 'Pools' y 'Direcciones IP' con encabezados destacados y streaming hacia la respuesta.
+const { pipeline } = require('node:stream/promises');
+const writeXlsxFile = require('write-excel-file/node');
 
-const ENCABEZADO = { font: { bold: true, color: { argb: 'FFFFFFFF' } }, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF12203A' } } };
+const ENCABEZADO = {
+  fontWeight: 'bold',
+  color: '#FFFFFF',
+  backgroundColor: '#12203A',
+};
 
-/** Hoja con la fila de títulos ya escrita; las filas de datos se añaden después con `ws.addRow(…).commit()`. */
-function hoja(wb, nombre, columnas) {
-  const ws = wb.addWorksheet(nombre, { views: [{ state: 'frozen', ySplit: 1 }] });
-  ws.columns = columnas.map(({ key, width, style }) => ({ key, width, style }));
-  const titulos = ws.addRow(columnas.map((c) => c.header));
-  titulos.eachCell((celda) => Object.assign(celda, ENCABEZADO));
-  titulos.commit();
-  ws.autoFilter = { from: 'A1', to: { row: 1, column: columnas.length } };
-  return ws;
+const filaEncabezado = (columnas) => columnas.map((c) => ({ value: c.header, ...ENCABEZADO }));
+
+const COLUMNAS_SEGMENTOS = [
+  { header: 'ID', width: 12 },
+  { header: 'Segmento (CIDR)', width: 20 },
+  { header: 'Máscara', width: 9 },
+  { header: 'Direcciones', width: 13 },
+  { header: 'Pool', width: 20 },
+  { header: 'Tipo', width: 14 },
+  { header: 'Ambiente', width: 10 },
+  { header: 'Proveedor', width: 12 },
+  { header: 'CIDR del pool', width: 18 },
+  { header: 'Proyecto', width: 22 },
+  { header: 'VPC', width: 22 },
+  { header: 'Nombre subred', width: 22 },
+  { header: 'VLAN', width: 8 },
+  { header: 'Nombre VLAN', width: 22 },
+  { header: 'Uso', width: 22 },
+  { header: 'Responsable', width: 20 },
+  { header: 'Descripción', width: 40 },
+  { header: 'Solicitó', width: 16 },
+  { header: 'Origen', width: 10 },
+  { header: 'Ticket', width: 11 },
+  { header: 'Fecha', width: 17 },
+];
+
+const COLUMNAS_POOLS = [
+  { header: 'Pool', width: 20 },
+  { header: 'Tipo', width: 14 },
+  { header: 'Ambiente', width: 10 },
+  { header: 'Proveedor', width: 12 },
+  { header: 'CIDR base', width: 18 },
+  { header: 'Asignaciones', width: 13 },
+  { header: 'Uso', width: 9 },
+];
+
+const COLUMNAS_IPS = [
+  { header: 'IP', width: 16 },
+  { header: 'Dispositivo', width: 20 },
+  { header: 'Interfaz', width: 16 },
+  { header: 'Rol', width: 11 },
+  { header: 'DNS', width: 26 },
+  { header: 'Descripción', width: 30 },
+  { header: 'Segmento', width: 20 },
+  { header: 'ID segmento', width: 13 },
+  { header: 'Pool', width: 20 },
+  { header: 'Excepción (motivo)', width: 28 },
+];
+
+function filaSegmento(r) {
+  const len = Number(r.cidr.split('/')[1]);
+  return [
+    { value: r.codigo || '' },
+    { value: r.cidr || '' },
+    { value: `/${len}` },
+    { value: 2 ** (32 - len), type: Number, format: '#,##0' },
+    { value: r.pool_id || '' },
+    { value: r.tipo || '' },
+    { value: r.ambiente || '' },
+    { value: r.proveedor || '' },
+    { value: r.pool_cidr || '' },
+    { value: r.proyecto || '' },
+    { value: r.vpc || '' },
+    { value: r.subred || '' },
+    { value: r.vlan != null ? String(r.vlan) : '' },
+    { value: r.vlan_nombre || '' },
+    { value: r.uso || '' },
+    { value: r.responsable || '' },
+    { value: r.descripcion || '' },
+    { value: r.solicitante || '' },
+    { value: r.origen || '' },
+    { value: r.ticket || '' },
+    r.creado_en instanceof Date ? { value: r.creado_en, type: Date, format: 'dd-mm-yyyy hh:mm' } : { value: r.creado_en ? String(r.creado_en) : '' },
+  ];
 }
 
-/** Escribe todas las filas de un generador de lotes en la hoja. Devuelve cuántas. */
-async function volcar(ws, lotes, aFila) {
-  let n = 0;
-  for await (const lote of lotes) {
-    for (const r of lote) {
-      ws.addRow(aFila(r)).commit();
-      n++;
-    }
-  }
-  ws.commit();
-  return n;
+function filaPool(p) {
+  return [
+    { value: p.id || '' },
+    { value: p.tipo || '' },
+    { value: p.ambiente || '' },
+    { value: p.proveedor || '' },
+    { value: p.cidr || '' },
+    { value: p.asignaciones != null ? Number(p.asignaciones) : 0, type: Number },
+    { value: p.uso != null ? Number(p.uso) : 0, type: Number, format: '0.0%' },
+  ];
+}
+
+function filaIP(d) {
+  return [
+    { value: d.ip || '' },
+    { value: d.dispositivo || '' },
+    { value: d.interfaz || '' },
+    { value: d.rol || '' },
+    { value: d.dns || '' },
+    { value: d.descripcion || '' },
+    { value: d.segmento || '' },
+    { value: d.segmento_codigo || '' },
+    { value: d.pool_id || '' },
+    { value: d.excepcion || '' },
+  ];
 }
 
 /**
  * @param {import('node:stream').Writable} salida  la respuesta HTTP
  * @param {{pools: () => Promise<any[]>, filas: () => AsyncIterable<any[]>, direcciones: () => AsyncIterable<any[]>}} lector
+ * @param {string} [creador]
  * @returns {Promise<{segmentos: number, direcciones: number}>}
  */
-const COLUMNAS_SEGMENTOS = [
-  { header: 'ID', key: 'id', width: 12 },
-  { header: 'Segmento (CIDR)', key: 'cidr', width: 20 },
-  { header: 'Máscara', key: 'mascara', width: 9 },
-  { header: 'Direcciones', key: 'dir', width: 13, style: { numFmt: '#,##0' } },
-  { header: 'Pool', key: 'pool', width: 20 },
-  { header: 'Tipo', key: 'tipo', width: 14 },
-  { header: 'Ambiente', key: 'amb', width: 10 },
-  { header: 'Proveedor', key: 'prov', width: 12 },
-  { header: 'CIDR del pool', key: 'pcidr', width: 18 },
-  { header: 'Proyecto', key: 'proyecto', width: 22 },
-  { header: 'VPC', key: 'vpc', width: 22 },
-  { header: 'Nombre subred', key: 'subred', width: 22 },
-  { header: 'VLAN', key: 'vlan', width: 8 },
-  { header: 'Nombre VLAN', key: 'vlan_nombre', width: 22 },
-  { header: 'Uso', key: 'uso', width: 22 },
-  { header: 'Responsable', key: 'responsable', width: 20 },
-  { header: 'Descripción', key: 'descripcion', width: 40 },
-  { header: 'Solicitó', key: 'sol', width: 16 },
-  { header: 'Origen', key: 'origen', width: 10 },
-  { header: 'Ticket', key: 'ticket', width: 11 },
-  { header: 'Fecha', key: 'fecha', width: 17, style: { numFmt: 'dd-mm-yyyy hh:mm' } },
-];
-const COLUMNAS_POOLS = [
-  { header: 'Pool', key: 'id', width: 20 },
-  { header: 'Tipo', key: 'tipo', width: 14 },
-  { header: 'Ambiente', key: 'amb', width: 10 },
-  { header: 'Proveedor', key: 'prov', width: 12 },
-  { header: 'CIDR base', key: 'cidr', width: 18 },
-  { header: 'Asignaciones', key: 'n', width: 13 },
-  { header: 'Uso', key: 'uso', width: 9, style: { numFmt: '0.0%' } },
-];
-const COLUMNAS_IPS = [
-  { header: 'IP', key: 'ip', width: 16 },
-  { header: 'Dispositivo', key: 'dispositivo', width: 20 },
-  { header: 'Interfaz', key: 'interfaz', width: 16 },
-  { header: 'Rol', key: 'rol', width: 11 },
-  { header: 'DNS', key: 'dns', width: 26 },
-  { header: 'Descripción', key: 'descripcion', width: 30 },
-  { header: 'Segmento', key: 'segmento', width: 20 },
-  { header: 'ID segmento', key: 'codigo', width: 13 },
-  { header: 'Pool', key: 'pool', width: 20 },
-  { header: 'Excepción (motivo)', key: 'excepcion', width: 28 },
-];
-
 async function escribirLibro(salida, lector, creador) {
-  const wb = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: salida, useStyles: true });
-  wb.creator = creador;
-  const segmentos = await volcar(hoja(wb, 'Segmentos', COLUMNAS_SEGMENTOS), lector.filas(), (r) => {
-    const len = Number(r.cidr.split('/')[1]);
-    return {
-      id: r.codigo,
-      cidr: r.cidr,
-      mascara: `/${len}`,
-      dir: 2 ** (32 - len),
-      pool: r.pool_id,
-      tipo: r.tipo,
-      amb: r.ambiente,
-      prov: r.proveedor,
-      pcidr: r.pool_cidr,
-      proyecto: r.proyecto || '',
-      vpc: r.vpc,
-      subred: r.subred || '',
-      vlan: r.vlan ?? '',
-      vlan_nombre: r.vlan_nombre || '',
-      uso: r.uso || '',
-      responsable: r.responsable || '',
-      descripcion: r.descripcion || '',
-      sol: r.solicitante,
-      origen: r.origen,
-      ticket: r.ticket,
-      fecha: r.creado_en,
-    };
-  });
-  const hp = hoja(wb, 'Pools', COLUMNAS_POOLS);
-  for (const p of await lector.pools())
-    hp.addRow({ id: p.id, tipo: p.tipo, amb: p.ambiente, prov: p.proveedor, cidr: p.cidr, n: p.asignaciones, uso: p.uso }).commit();
-  hp.commit();
-  const direcciones = await volcar(hoja(wb, 'Direcciones IP', COLUMNAS_IPS), lector.direcciones(), (d) => ({
-    ip: d.ip,
-    dispositivo: d.dispositivo || '',
-    interfaz: d.interfaz || '',
-    rol: d.rol,
-    dns: d.dns || '',
-    descripcion: d.descripcion || '',
-    segmento: d.segmento || '',
-    codigo: d.segmento_codigo || '',
-    pool: d.pool_id || '',
-    excepcion: d.excepcion || '',
-  }));
-  await wb.commit(); // cierra el archivo y la respuesta
+  const filasSegmentos = [filaEncabezado(COLUMNAS_SEGMENTOS)];
+  let segmentos = 0;
+  for await (const lote of lector.filas()) {
+    for (const r of lote) {
+      filasSegmentos.push(filaSegmento(r));
+      segmentos++;
+    }
+  }
+
+  const filasPools = [filaEncabezado(COLUMNAS_POOLS)];
+  const pools = await lector.pools();
+  for (const p of pools) {
+    filasPools.push(filaPool(p));
+  }
+
+  const filasDirecciones = [filaEncabezado(COLUMNAS_IPS)];
+  let direcciones = 0;
+  for await (const lote of lector.direcciones()) {
+    for (const d of lote) {
+      filasDirecciones.push(filaIP(d));
+      direcciones++;
+    }
+  }
+
+  const stream = await writeXlsxFile([
+    {
+      sheet: 'Segmentos',
+      columns: COLUMNAS_SEGMENTOS.map((c) => ({ width: c.width })),
+      stickyRowsCount: 1,
+      data: filasSegmentos,
+    },
+    {
+      sheet: 'Pools',
+      columns: COLUMNAS_POOLS.map((c) => ({ width: c.width })),
+      stickyRowsCount: 1,
+      data: filasPools,
+    },
+    {
+      sheet: 'Direcciones IP',
+      columns: COLUMNAS_IPS.map((c) => ({ width: c.width })),
+      stickyRowsCount: 1,
+      data: filasDirecciones,
+    },
+  ]).toStream();
+
+  await pipeline(stream, salida);
   return { segmentos, direcciones };
 }
 
