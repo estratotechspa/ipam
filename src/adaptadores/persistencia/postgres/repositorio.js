@@ -428,7 +428,7 @@ function consultasDeDirecciones(q) {
     async listarDirecciones({ asignacion, pool, q: texto } = {}) {
       return (
         await q(
-          `select ${COLUMNAS_DIRECCION}, a.codigo as segmento_codigo, a.cidr::text as segmento
+          `select ${COLUMNAS_DIRECCION}, a.codigo as segmento_codigo, a.cidr::text as segmento, a.vpc, a.subred, a.proyecto
              from direcciones_ip d left join asignaciones a on a.id = d.asignacion_id
             where ($1::bigint is null or d.asignacion_id = $1)
               and ($2::text is null or d.pool_id = $2)

@@ -39,6 +39,7 @@ function montar(app, { casos, audita, validacion, revalidador }) {
   accionUsuario('/usuarios/:email/desactivar', 'post', 'desactivar_usuario', (req) => admin.cambiarActivo(req.actor, req.params.email, false));
   accionUsuario('/usuarios/:email/activar', 'post', 'activar_usuario', (req) => admin.cambiarActivo(req.actor, req.params.email, true));
   accionUsuario('/usuarios/:email/restablecer-clave', 'post', 'restablecer_clave', (req) => admin.restablecerClave(req.params.email));
+  accionUsuario('/usuarios/:email/clave', 'post', 'fijar_clave_usuario', (req) => admin.fijarClaveUsuario(req.params.email, req.body && req.body.clave));
   accionUsuario('/usuarios/:email', 'delete', 'eliminar_usuario', (req) => admin.eliminarUsuario(req.actor, req.params.email));
   // La propia cuenta local cambia su contraseña (exige la actual).
   api(app, 'post', '/yo/clave', validacion.cuerpo('CambioClave'), async (req, res) => {

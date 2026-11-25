@@ -12,7 +12,7 @@ const CLAVE_MIN = 12;
  *  B) Cuentas locales (AUTH_LOCAL, modo Basic): el admin crea la cuenta con una clave temporal que se muestra una sola vez.
  * @param {{repo: any, rolesUsuario: string[], contrasenas: {hashear: (c: string) => Promise<string>, verificar: (c: string, h: string) => Promise<boolean>, generarTemporal: () => string}, cuentasLocales?: () => boolean}} deps
  */
-function crearAdministracion({ repo, rolesUsuario, contrasenas, cuentasLocales = () => false }) {
+function crearAdministracion({ repo, rolesUsuario, contrasenas, cuentasLocales = () => false, config }) {
   const normalizar = (email) =>
     String(email || '')
       .trim()
@@ -68,17 +68,40 @@ function crearAdministracion({ repo, rolesUsuario, contrasenas, cuentasLocales =
     return ok({ email: e });
   }
 
-  /** Cambio de la contraseña propia (solo cuentas locales): exige la actual y una nueva distinta y larga. */
+  /** Cambio de la contraseña propia (cuentas locales y administradores): exige la actual y una nueva distinta y larga. */
   async function cambiarClavePropia(actor, { actual, nueva }) {
-    if (!actor || !actor.local) return fallo('validacion', 'no_es_local', { mensaje: 'Solo las cuentas locales cambian su contraseña aquí.' });
+    if (!actor) return fallo('validacion', 'no_autenticado', { mensaje: 'No hay sesión activa.' });
     if (typeof nueva !== 'string' || nueva.length < CLAVE_MIN)
       return fallo('validacion', 'clave_corta', { mensaje: `La contraseña nueva debe tener al menos ${CLAVE_MIN} caracteres.` });
     if (nueva === actual) return fallo('validacion', 'clave_repetida', { mensaje: 'La contraseña nueva debe ser distinta de la actual.' });
-    const u = await repo.usuarioPorEmail(normalizar(actor.nombre));
-    if (!u || !u.clave_hash || !(await contrasenas.verificar(String(actual || ''), u.clave_hash)))
-      return fallo('prohibido', 'clave_actual_incorrecta', { mensaje: 'La contraseña actual no coincide.' });
-    await repo.fijarClave(u.email, await contrasenas.hashear(nueva), false);
-    return ok({ email: u.email });
+    const e = normalizar(actor.nombre);
+    const u = await repo.usuarioPorEmail(e);
+    if (u && u.clave_hash) {
+      if (!(await contrasenas.verificar(String(actual || ''), u.clave_hash)))
+        return fallo('prohibido', 'clave_actual_incorrecta', { mensaje: 'La contraseña actual no coincide.' });
+      await repo.fijarClave(u.email, await contrasenas.hashear(nueva), false);
+      return ok({ email: u.email });
+    }
+    if (actor.rol === 'admin' || actor.local) {
+      const passConfig = config && config.auth ? config.auth.appPass : '';
+      if (passConfig && !(await contrasenas.verificar(String(actual || ''), passConfig)))
+        return fallo('prohibido', 'clave_actual_incorrecta', { mensaje: 'La contraseña actual no coincide.' });
+      await repo.crearUsuario({ email: e, nombre: 'Administrador', rol: 'admin', local: true }).catch(() => {});
+      await repo.fijarClave(e, await contrasenas.hashear(nueva), false);
+      return ok({ email: e });
+    }
+    return fallo('validacion', 'no_es_local', { mensaje: 'Solo las cuentas locales cambian su contraseña aquí.' });
+  }
+
+  /** El administrador fija la contraseña de un usuario directamente. */
+  async function fijarClaveUsuario(email, clave) {
+    if (!clave || typeof clave !== 'string' || clave.length < CLAVE_MIN)
+      return fallo('validacion', 'clave_corta', { mensaje: `La contraseña debe tener al menos ${CLAVE_MIN} caracteres.` });
+    const e = normalizar(email);
+    const u = await repo.usuarioPorEmail(e);
+    if (!u) return fallo('no_encontrado', 'no_encontrado', { mensaje: 'El usuario no existe.' });
+    await repo.fijarClave(e, await contrasenas.hashear(clave), false);
+    return ok({ email: e, cambiada: true });
   }
 
   return {
@@ -99,6 +122,7 @@ function crearAdministracion({ repo, rolesUsuario, contrasenas, cuentasLocales =
     cambiarActivo,
     restablecerClave,
     eliminarUsuario,
+    fijarClaveUsuario,
     cambiarClavePropia,
   };
 }

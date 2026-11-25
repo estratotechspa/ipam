@@ -1,7 +1,7 @@
 // Direcciones IP fijas: pestaña, formularios y tablas (también dentro de las fichas).
-import { $, api, errorApi, fail, get, h, ico, msg, puede } from './base.js';
+import { $, api, errorApi, fail, get, h, ico, msg, puede, todasLasAsignaciones } from './base.js';
 import { abrirDialogo, confirmar, tabla, toast } from './ui.js';
-import { fichaAsignacion } from './fichas.js';
+import { fichaAsignacion, fichaPool } from './fichas.js';
 
 /* ===== Direcciones IP fijas (interfaces de router, switch, firewall…) ===== */
 export const ROLES_IP = [
@@ -38,13 +38,48 @@ export const valoresIp = (c) => Object.fromEntries(Object.entries(c).map(([k, el
  * Formulario para registrar una IP fija. `pool` fijo (fichas) o elegible (pestaña Direcciones IP).
  * @param {{prefijo: string, pool?: string, pools?: any[], alGuardar: Function}} o
  */
-export function formularioDireccion({ prefijo, pool, pools, alGuardar }) {
+export function formularioDireccion({ prefijo, pool, pools, asignaciones, alGuardar }) {
   const ip = h('input', { id: prefijo + '-ip', required: true, placeholder: '10.20.0.1' });
   const c = camposIp(prefijo);
+  const asigs = asignaciones || [];
+  const selSubred = h(
+    'select',
+    {
+      id: prefijo + '-subred',
+      onchange: (e) => {
+        const opt = e.target.selectedOptions && e.target.selectedOptions[0];
+        if (opt && opt.dataset.pool && selPool) {
+          selPool.value = opt.dataset.pool;
+        }
+        if (opt && opt.dataset.cidr && !ip.value) {
+          const partes = opt.dataset.cidr.split('/')[0].split('.');
+          ip.value = `${partes[0]}.${partes[1]}.${partes[2]}.`;
+          ip.focus();
+        }
+      },
+    },
+    h('option', { value: '' }, 'Detectar por IP / Sin subred fija'),
+    asigs.map((a) =>
+      h(
+        'option',
+        { value: a.id, 'data-pool': a.pool_id, 'data-cidr': a.cidr },
+        `${a.vpc ? a.vpc + ' · ' : ''}${a.subred || a.cidr} (Pool: ${a.pool_id})`,
+      ),
+    ),
+  );
   const selPool = pools
     ? h(
         'select',
-        { id: prefijo + '-pool' },
+        {
+          id: prefijo + '-pool',
+          onchange: (e) => {
+            const pId = e.target.value;
+            Array.from(selSubred.options).forEach((opt, idx) => {
+              if (idx === 0) return;
+              opt.hidden = Boolean(pId && opt.dataset.pool !== pId);
+            });
+          },
+        },
         h('option', { value: '' }, 'Automático'),
         pools.map((p) => h('option', { value: p.id }, `${p.id} · ${p.cidr}`)),
       )
@@ -57,6 +92,7 @@ export function formularioDireccion({ prefijo, pool, pools, alGuardar }) {
     const cuerpo = Object.fromEntries(Object.entries({ ip: ip.value.trim(), ...v }).filter(([, x]) => x));
     const elegido = pool || (selPool && selPool.value);
     if (elegido) cuerpo.pool = elegido;
+    if (selSubred && selSubred.value) cuerpo.asignacion_id = Number(selSubred.value);
     boton.disabled = true;
     const r = await api('/api/v1/direcciones', { body: cuerpo });
     boton.disabled = false;
@@ -76,7 +112,8 @@ export function formularioDireccion({ prefijo, pool, pools, alGuardar }) {
       'form',
       { class: 'filtros', style: 'margin-top:10px', 'aria-label': 'Registrar IP fija', onsubmit: enviar },
       campo('IP', ip),
-      selPool ? campo('Pool (solo si la IP existe en varios)', selPool) : null,
+      selPool ? campo('Pool', selPool) : null,
+      asigs.length ? campo('Subnet / VPC asignada', selSubred) : null,
       campo('Dispositivo', c.dispositivo),
       campo('Interfaz', c.interfaz),
       campo('Rol', c.rol),
@@ -86,7 +123,7 @@ export function formularioDireccion({ prefijo, pool, pools, alGuardar }) {
       boton,
       estado,
     ),
-    h('p', { class: 'muted' }, 'La IP se ubica sola en su segmento asignado. Si está fuera de todo segmento, indica el motivo de la excepción.'),
+    h('p', { class: 'muted' }, 'Selecciona el Pool y la Subred/VPC para asignar la IP directamente, o escribe la IP para ubicarla automáticamente.'),
   );
 }
 
@@ -141,26 +178,29 @@ export function tablaDirecciones(lista, recargar, { conSegmento = true } = {}) {
   };
   return tabla(
     'Direcciones IP fijas',
-    ['IP', 'Dispositivo', 'Interfaz', 'Rol', 'DNS', 'Descripción', ...(conSegmento ? ['Segmento / excepción'] : []), 'Acciones'],
+    ['IP', 'Pool', 'VPC / Subred', 'Dispositivo', 'Interfaz', 'Rol', 'DNS', 'Descripción', 'Acciones'],
     lista.map((d) =>
       h(
         'tr',
         null,
         h('td', null, h('code', null, d.ip)),
+        h('td', null, d.pool_id ? h('button', { type: 'button', class: 'enlace', onclick: () => fichaPool(d.pool_id) }, d.pool_id) : '—'),
+        h(
+          'td',
+          null,
+          d.asignacion_id
+            ? h(
+                'button',
+                { type: 'button', class: 'enlace', onclick: () => fichaAsignacion(d.asignacion_id) },
+                `${d.vpc ? d.vpc + ' · ' : ''}${d.subred || d.segmento_codigo || d.segmento}`,
+              )
+            : h('span', { class: 'tag imp-aviso', title: d.excepcion || '' }, d.excepcion ? 'Excepción: ' + d.excepcion : '—'),
+        ),
         h('td', null, d.dispositivo || '—'),
         h('td', null, d.interfaz || '—'),
         h('td', null, nombreRol(d.rol)),
         h('td', null, d.dns || '—'),
         h('td', null, d.descripcion || '—'),
-        conSegmento
-          ? h(
-              'td',
-              null,
-              d.asignacion_id
-                ? h('button', { type: 'button', class: 'enlace', onclick: () => fichaAsignacion(d.asignacion_id) }, d.segmento_codigo || d.segmento)
-                : h('span', { class: 'tag imp-aviso', title: d.excepcion || '' }, 'Excepción: ' + (d.excepcion || '')),
-            )
-          : null,
         h(
           'td',
           null,
@@ -201,7 +241,11 @@ export const IPS = { q: '', aviso: null };
 export async function renderIps() {
   const raiz = $('ips');
   try {
-    const [lista, pools] = await Promise.all([get('/api/v1/direcciones?' + new URLSearchParams(IPS.q ? { q: IPS.q } : {})), get('/api/v1/pools')]);
+    const [lista, pools, asignaciones] = await Promise.all([
+      get('/api/v1/direcciones?' + new URLSearchParams(IPS.q ? { q: IPS.q } : {})),
+      get('/api/v1/pools'),
+      todasLasAsignaciones(),
+    ]);
     const estado = h('div', { id: 'ips-msg', 'aria-live': 'polite' });
     const buscador = h('input', {
       id: 'ips-buscar',
@@ -231,6 +275,7 @@ export async function renderIps() {
         ? formularioDireccion({
             prefijo: 'ni',
             pools,
+            asignaciones,
             alGuardar: (aviso) => {
               IPS.aviso = aviso;
               renderIps();

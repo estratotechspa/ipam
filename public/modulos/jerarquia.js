@@ -2,6 +2,7 @@
 import { armarJerarquia, limitesCidr, SIN } from '../calculos.js';
 import { ESTADO, fail, fmt, get, h, ico, todasLasAsignaciones } from './base.js';
 import { rangoDeIps } from './ui.js';
+import { subnavClusteres } from './clusteres.js';
 
 let DATOS = null; // última carga: al escribir en el buscador solo se vuelve a armar el árbol, sin pedir nada
 let ULTIMA_CARGA = 0;
@@ -120,6 +121,7 @@ export async function renderJerarquia() {
     });
     const abrir = (si) => () => document.querySelectorAll('#jerarquia-arbol details').forEach((d) => (d.open = si));
     cont.replaceChildren(
+      subnavClusteres('jerarquia'),
       h('div', { class: 'cabecera' }, h('h2', { tabindex: '-1' }, 'Jerarquía de la red')),
       h(
         'p',
