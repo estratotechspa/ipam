@@ -1,18 +1,25 @@
-# Dependencias y artefactos de construcción (se regeneran)
+# Dependencias de Node.js
 node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build output (se genera en el builder de la imagen central)
+dist/
+
+# Reportes de pruebas y cobertura
 coverage/
-sbom/
-test-results/
-playwright-report/
-# Secretos y entornos locales: en el repositorio solo hay .env.example con valores de relleno
-.env
-.env.*
-!.env.example
-# OpenTofu / Terraform
-.terraform/
-*.tfstate
-*.tfstate.*
-terraform.tfvars
-plan.bin
+.nyc_output/
+
+# Archivos de configuración de IDEs
+.idea/
+.vscode/
+
+# Archivos de sistema operativo
 .DS_Store
-.gitlab-ci-local/
+Thumbs.db
+
+# Variables locales
+.env
+.env.local

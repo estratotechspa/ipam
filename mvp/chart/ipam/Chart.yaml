@@ -1,6 +1,0 @@
-apiVersion: v2
-name: ipam
-description: IPAM — gestión de segmentos de red (API + PostgreSQL opcional)
-type: application
-version: 0.6.0
-appVersion: "0.6.0"

@@ -1,0 +1,33 @@
+# Dependencias instaladas localmente (se reinstalan dentro del builder)
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Tests y reportes (no van al runtime)
+tests
+coverage
+.nyc_output
+
+# Control de versiones y metadata
+.git
+.gitignore
+.gitattributes
+.gitlab
+.gitlab-ci.yml
+
+# IDE / SO
+.idea
+.vscode
+.DS_Store
+Thumbs.db
+
+# Variables locales y secretos
+.env
+.env.*
+config/cloudrunjob
+
+# Otros
+README.md
+Dockerfile
+.dockerignore

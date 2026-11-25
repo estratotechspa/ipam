@@ -1,0 +1,23 @@
+# Ubicación recomendada: .gitlab/CODEOWNERS
+
+# -----------------------------------------------------------------
+# Sección de Ingeniería Cloud
+# Al definir el grupo en la cabecera de la sección,
+# @.../ingenieria-cloud se vuelve el dueño de *todas*
+# las rutas listadas abajo.
+# -----------------------------------------------------------------
+[Area Ingenieria Cloud] @ccla/gestion-usuarios/los-andes/gerencia-de-tecnologia-y-data/operacion-tecnologica/subgerencia-plataformas/ingenieria-cloud
+/config/cloudrunjob/production.env
+# Acotado a produccion a proposito: cambios en development.env/testing.env no
+# requieren aprobacion de Ingenieria Cloud, solo el archivo que afecta produccion.
+# Si tuvieras más carpetas de cloud, solo agrégalas aquí:
+# /terraform/
+# /ansible/
+
+# -----------------------------------------------------------------
+# Sección de DevSecOps
+# Mismo principio: @.../coe-devsecops es dueño de todo lo siguiente.
+# -----------------------------------------------------------------
+[Area DevSecOps] @ccla/gestion-usuarios/los-andes/gerencia-de-tecnologia-y-data/operacion-tecnologica/subgerencia-plataformas/coe-devsecops
+/.gitlab-ci.yml
+/.gitlab/
