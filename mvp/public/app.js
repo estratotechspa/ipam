@@ -45,15 +45,17 @@ async function iniciar() {
   }
   Object.assign(YO, await r.json());
   const nav = $('nav');
-  nav.querySelector('[data-t="tokens"]').hidden = !puede('admin');
-  nav.querySelector('[data-t="usuarios"]').hidden = !puede('admin'); // sin cuentas habilitadas explica cómo habilitarlas
+  const navTokens = nav.querySelector('[data-t="tokens"]');
+  if (navTokens) navTokens.hidden = !puede('admin');
+  const navUsuarios = nav.querySelector('[data-t="usuarios"]');
+  if (navUsuarios) navUsuarios.hidden = !puede('admin');
   $('yo').innerHTML =
     YO.modo === 'oidc'
       ? `${esc(YO.nombre)} · <b>${esc(YO.rol)}</b> <button type="button" id="salir">${I('salir')}Salir</button>`
       : YO.modo === 'none'
         ? `<span class="tag pronto">${I('alerta')} Modo demo</span> <a href="/login?forzar=1" style="color:var(--txt);margin-left:8px;font-size:12px;text-decoration:underline">Pantalla de Login</a>`
         : `${esc(YO.usuario)} · <b>${esc(YO.rol)}</b> <button type="button" id="salir">${I('salir')}Salir</button>`;
-  if (YO.local) {
+  if (YO.local || puede('admin')) {
     $('yo').append(' ', h('button', { id: 'mi-clave', type: 'button', onclick: () => dialogoCambioClave() }, ico('llave'), 'Mi contraseña'));
   }
   const salir = $('salir');

@@ -2,6 +2,7 @@
 import { $, api, errorApi, fail, fecha, fechaHora, get, h, msg } from './base.js';
 import { diasPara } from './reservas.js';
 import { confirmar, tabla } from './ui.js';
+import { subnavUsuarios } from './usuarios.js';
 
 // Grupos de la API que se pueden dar a un token (los mismos de dominio/alcance.js).
 const GRUPOS = [
@@ -93,6 +94,7 @@ export async function renderTokens() {
     botonesCabecera.push(h('button', { class: 'btn', type: 'button', id: 'tk-nuevo', onclick: () => dialogoToken(estado) }, '+ Crear token'));
 
     raiz.replaceChildren(
+      subnavUsuarios('tokens'),
       h(
         'div',
         { style: 'display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px' },

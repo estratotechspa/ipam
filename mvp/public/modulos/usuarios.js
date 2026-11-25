@@ -1,6 +1,7 @@
 // Pestaña Usuarios y diálogos de clave (cuentas locales).
-import { abrirDialogo, confirmar } from './ui.js';
+import { abrirDialogo, confirmar, toast } from './ui.js';
 import { $, YO, api, errorApi, esc, fail, fechaHora, get, h, ico, msg } from './base.js';
+import { show } from './navegacion.js';
 
 /** Muestra UNA vez la clave temporal de una cuenta local (nunca se guarda ni se vuelve a mostrar). */
 export function mostrarClaveTemporal(usuario, clave, titulo) {
@@ -90,20 +91,64 @@ export function dialogoCambioClave({ obligatorio = false } = {}) {
 }
 
 // ---- Pestaña Usuarios (admin). SSO: pre-registro por correo y baja. Cuentas locales (AUTH_LOCAL): clave temporal de un solo uso. ----
+export function subnavUsuarios(activa) {
+  return h(
+    'div',
+    { class: 'subtabs-bar', style: 'display:flex;gap:8px;margin-bottom:var(--sp-4);border-bottom:1px solid var(--line, #334155);padding-bottom:10px;align-items:center' },
+    h('button', { type: 'button', class: `btn ${activa === 'usuarios' ? '' : 'sec'}`, style: `font-weight:${activa === 'usuarios' ? '600' : '500'}`, onclick: () => show('usuarios') }, ico('usuarios', 16), ' Cuentas de Usuario'),
+    h('button', { type: 'button', class: `btn ${activa === 'tokens' ? '' : 'sec'}`, style: `font-weight:${activa === 'tokens' ? '600' : '500'}`, onclick: () => show('tokens') }, ico('llave', 16), ' Tokens de API'),
+    h('button', { type: 'button', class: 'btn sec', style: 'margin-left:auto', onclick: () => dialogoCambioClave() }, ico('llave', 16), ' Cambiar mi contraseña')
+  );
+}
+
+export function dialogoFijarClave(email, recargar) {
+  abrirDialogo((dlg, cerrar) => {
+    const estado = h('div', { 'aria-live': 'polite' });
+    const clave = h('input', { type: 'password', required: true, minlength: 12, autocomplete: 'new-password' });
+    const repite = h('input', { type: 'password', required: true, minlength: 12, autocomplete: 'new-password' });
+    const boton = h('button', { class: 'btn', type: 'submit' }, 'Guardar contraseña');
+    const guardar = async (e) => {
+      e.preventDefault();
+      if (clave.value !== repite.value) return msg(estado, 'Las contraseñas no coinciden.', 'error');
+      boton.disabled = true;
+      const r = await api('/api/v1/usuarios/' + encodeURIComponent(email) + '/clave', { method: 'POST', body: { clave: clave.value } });
+      boton.disabled = false;
+      if (!r.ok) return msg(estado, errorApi(r), 'error');
+      toast(`Contraseña de ${email} actualizada exitosamente.`);
+      cerrar();
+      recargar();
+    };
+    dlg.replaceChildren(
+      h('form', { onsubmit: guardar, 'aria-label': 'Fijar contraseña' },
+        h('h3', null, `Fijar contraseña para ${email}`),
+        h('p', { class: 'muted' }, 'Ingresa la nueva contraseña para el usuario (mínimo 12 caracteres).'),
+        h('label', null, 'Nueva contraseña', clave),
+        h('label', null, 'Repite la contraseña', repite),
+        estado,
+        h('div', { class: 'fila-botones' }, boton, h('button', { class: 'btn sec', type: 'button', onclick: cerrar }, 'Cancelar'))
+      )
+    );
+    clave.focus();
+  });
+}
+
 /** Panel de la pestaña Usuarios cuando el modo de acceso no permite crear cuentas (Basic sin AUTH_LOCAL, o acceso abierto). */
 export function usuariosSinCuentas(raiz) {
   const quien =
     YO.modo === 'none'
       ? 'El acceso está <b>abierto</b>: cualquiera que llegue al servicio entra como administrador.'
-      : `Hoy se entra con el usuario y la clave únicos del administrador de emergencia (<b>${esc(YO.usuario)}</b>). Su clave no se cambia desde esta pantalla: vive en la configuración (<code>APP_PASS</code>, mejor como hash <code>scrypt$…</code>).`;
-  raiz.innerHTML = `<h2>Usuarios</h2><div class="card" style="max-width:820px">
-    <p><b>Las cuentas de usuario no están habilitadas en este modo de acceso.</b></p><p>${quien}</p>
-    <p>Para tener varias personas con su rol (lector, solicitante o admin) hay dos caminos:</p>
-    <ul>
-      <li><b>Cuentas locales</b> (pruebas y POC): activa <code>AUTH_LOCAL=true</code> (Helm: <code>auth.local=true</code>) con Basic (<code>APP_USER</code> y <code>APP_PASS</code>) y reinicia.
-        Aquí podrás crear cuentas con una clave temporal, desactivarlas, eliminarlas y restablecer su clave; cada persona cambia la suya al entrar y tiene su botón «Mi contraseña».</li>
-      <li><b>SSO</b> (recomendado para uso real): configura OpenID Connect (Google Workspace, Entra, Okta…) y pre-registra aquí a las personas por correo.</li>
-    </ul><p class="muted">Se cambia en la configuración del servicio (variables de entorno o los values de Helm), no desde la interfaz.</p></div>`;
+      : `Hoy se entra con el usuario y la clave del administrador (<b>${esc(YO.usuario)}</b>). Puedes cambiar tu contraseña pulsando el botón <b>Cambiar mi contraseña</b> superior.`;
+  raiz.replaceChildren(
+    subnavUsuarios('usuarios'),
+    h('h2', null, 'Usuarios'),
+    h('div', { class: 'card', style: 'max-width:820px' },
+      h('p', null, h('b', null, 'Las cuentas de usuario adicionales no están habilitadas en este modo de acceso.')),
+      h('p', { innerHTML: quien }),
+      h('div', { style: 'margin-top:16px' },
+        h('button', { class: 'btn', type: 'button', onclick: () => dialogoCambioClave() }, ico('llave', 16), ' Cambiar mi contraseña de Administrador')
+      )
+    )
+  );
 }
 
 export async function renderUsuarios() {
@@ -187,11 +232,14 @@ export async function renderUsuarios() {
               )
             : boton2('Activar', () => accion(ruta(u) + '/activar', 'POST')),
           u.local
-            ? boton2('Restablecer clave', () =>
-                accion(ruta(u) + '/restablecer-clave', 'POST', `¿Restablecer la clave de ${u.email}? Se generará una clave temporal nueva.`, (d) =>
-                  mostrarClaveTemporal(d.email, d.clave_temporal, 'Clave restablecida'),
+            ? [
+                boton2('Restablecer clave', () =>
+                  accion(ruta(u) + '/restablecer-clave', 'POST', `¿Restablecer la clave de ${u.email}? Se generará una clave temporal nueva.`, (d) =>
+                    mostrarClaveTemporal(d.email, d.clave_temporal, 'Clave restablecida'),
+                  ),
                 ),
-              )
+                boton2('Fijar clave', () => dialogoFijarClave(u.email, recargar)),
+              ]
             : null,
           boton2('Eliminar', () => accion(ruta(u), 'DELETE', `¿Eliminar a ${u.email}? Para conservar su historial prefiere Desactivar.`), {
             disabled: yoMismo,
@@ -205,6 +253,7 @@ export async function renderUsuarios() {
       RES_USUARIOS.aviso = null;
     }
     raiz.replaceChildren(
+      subnavUsuarios('usuarios'),
       h('h2', null, 'Usuarios'),
       h(
         'p',

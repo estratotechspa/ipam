@@ -11,8 +11,14 @@ import { renderClusteres } from './clusteres.js';
 import { renderJerarquia } from './jerarquia.js';
 import { renderReconciliacion } from './reconciliacion.js';
 
-// Vistas sin botón propio en la barra: se abren desde su pestaña (Importar, desde Pools) y solo las ve un admin.
-export const SUBVISTAS = { importar: 'pools', reconciliacion: 'pools' };
+// Vistas sin botón propio en la barra: se abren desde su pestaña y mantienen resaltada la sección principal.
+export const SUBVISTAS = {
+  importar: 'pools',
+  segmentos: 'pools',
+  reconciliacion: 'pools',
+  jerarquia: 'clusteres',
+  tokens: 'usuarios',
+};
 
 export function show(t) {
   const boton = $('nav').querySelector('[data-t="' + t + '"]');

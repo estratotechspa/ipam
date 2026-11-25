@@ -2,6 +2,7 @@
 import { $, I, api, errorApi, esc, fail, get, msg, post } from './base.js';
 import { toast } from './ui.js';
 import { show } from './navegacion.js';
+import { subnavPools } from './pools.js';
 
 const ESCENARIOS = {
   sincronizado: [
@@ -21,13 +22,7 @@ const ESCENARIOS = {
 
 export async function renderReconciliacion() {
   const contenedor = $('reconciliacion');
-  const subnavHtml = `
-    <div class="subtabs-bar" style="display:flex;gap:8px;margin-bottom:var(--sp-3)">
-      <button type="button" class="btn sec" id="btn-sub-pools-recon" style="font-weight:500">${I('capas', 16)} Estado de Pools</button>
-      <button type="button" class="btn" id="btn-sub-reconciliacion-recon" style="font-weight:600">${I('sincronizar', 16)} Reconciliación de Nube (Drift)</button>
-    </div>
-  `;
-  contenedor.innerHTML = subnavHtml + `
+  contenedor.innerHTML = subnavPools('reconciliacion') + `
     <div class="cabecera" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
       <div>
         <h2 tabindex="-1" style="margin-bottom:4px">Reconciliación de Nube (Cloud Drift)</h2>
@@ -99,8 +94,9 @@ export async function renderReconciliacion() {
   $('recon-esc-shadow').onclick = () => cargarEscenario('shadow_it');
   $('recon-esc-sync').onclick = () => cargarEscenario('sincronizado');
   $('recon-esc-fantasma').onclick = () => cargarEscenario('fantasma');
-  const btnSubPools = $('btn-sub-pools-recon');
-  if (btnSubPools) btnSubPools.onclick = () => show('pools');
+  const bP = $('subnav-pools'); if (bP) bP.onclick = () => show('pools');
+  const bS = $('subnav-segmentos'); if (bS) bS.onclick = () => show('segmentos');
+  const bR = $('subnav-reconciliacion'); if (bR) bR.onclick = () => show('reconciliacion');
   $('recon-limpiar').onclick = () => {
     $('recon-json').value = '';
     $('recon-resultados').innerHTML = '';

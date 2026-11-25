@@ -277,11 +277,33 @@ app.post('/api/v1/reconciliacion', (req, res) => {
   res.json(resultado);
 });
 
+const DIRECCIONES = [
+  { id: 1, ip: '10.10.1.1', pool_id: 'gke-nodos-prod', vpc: 'vpc-ccla-prd', subred: 'sub-prd-nodos', asignacion_id: '1', segmento: '10.10.0.0/20', dispositivo: 'gw-core-01', interfaz: 'vlan10', rol: 'gateway', dns: 'gw.prd.ccla.cl', descripcion: 'Gateway principal VPC Prod' },
+  { id: 2, ip: '10.10.1.10', pool_id: 'gke-nodos-prod', vpc: 'vpc-ccla-prd', subred: 'sub-prd-nodos', asignacion_id: '1', segmento: '10.10.0.0/20', dispositivo: 'fw-edge-01', interfaz: 'eth1', rol: 'interfaz', dns: 'fw.prd.ccla.cl', descripcion: 'Firewall perimetral' },
+  { id: 3, ip: '10.64.0.1', pool_id: 'gke-pods-prod', vpc: 'vpc-ccla-prd', subred: 'sub-prd-pods', asignacion_id: '2', segmento: '10.64.0.0/14', dispositivo: 'gke-ingress', interfaz: 'vip', rol: 'vip', dns: 'k8s.prd.ccla.cl', descripcion: 'Ingress VIP controlador' },
+];
+
 // Auditoría y tokens de prueba
 app.get('/api/v1/tokens', (_req, res) => res.json([]));
 app.get('/api/v1/usuarios', (_req, res) => res.json([]));
 app.get('/api/v1/clusteres', (_req, res) => res.json([]));
-app.get('/api/v1/direcciones', (_req, res) => res.json([]));
+app.get('/api/v1/direcciones', (req, res) => {
+  const q = req.query.q ? String(req.query.q).toLowerCase() : '';
+  const filtradas = q ? DIRECCIONES.filter(d => JSON.stringify(d).toLowerCase().includes(q)) : DIRECCIONES;
+  res.json(filtradas);
+});
+app.post('/api/v1/direcciones', (req, res) => {
+  const d = { id: DIRECCIONES.length + 1, ...req.body };
+  DIRECCIONES.push(d);
+  res.status(201).json(d);
+});
+app.delete('/api/v1/direcciones/:id', (req, res) => {
+  const idx = DIRECCIONES.findIndex(d => String(d.id) === req.params.id);
+  if (idx !== -1) DIRECCIONES.splice(idx, 1);
+  res.json({ ok: true });
+});
+app.post('/api/v1/yo/clave', (_req, res) => res.json({ email: 'admin', cambiada: true }));
+app.post('/api/v1/usuarios/:email/clave', (req, res) => res.json({ email: req.params.email, cambiada: true }));
 app.get('/api/v1/jira/solicitudes', (_req, res) => res.json([]));
 
 // Sondas de salud

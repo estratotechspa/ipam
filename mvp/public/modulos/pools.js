@@ -8,6 +8,16 @@ import { show } from './navegacion.js';
 import { confirmar, vincularCidr } from './ui.js';
 import { llenarLibres, selectorCabe } from './libre-pool.js';
 
+export function subnavPools(activa) {
+  return `
+    <div class="subtabs-bar" style="display:flex;gap:8px;margin-bottom:var(--sp-4);border-bottom:1px solid var(--line, #334155);padding-bottom:10px">
+      <button type="button" class="btn ${activa === 'pools' ? '' : 'sec'}" id="subnav-pools" style="font-weight:${activa === 'pools' ? '600' : '500'}">📊 Estado de Pools</button>
+      <button type="button" class="btn ${activa === 'segmentos' ? '' : 'sec'}" id="subnav-segmentos" style="font-weight:${activa === 'segmentos' ? '600' : '500'}">📋 Segmentos Asignados & Reservados</button>
+      <button type="button" class="btn ${activa === 'reconciliacion' ? '' : 'sec'}" id="subnav-reconciliacion" style="font-weight:${activa === 'reconciliacion' ? '600' : '500'}">🔄 Reconciliación de Nube (Drift)</button>
+    </div>
+  `;
+}
+
 let ULTIMA_CARGA = 0; // una carga vieja no debe pisar a una nueva ni rehacer la pantalla mientras se escribe en el buscador
 export async function renderPools() {
   const mia = ++ULTIMA_CARGA;
@@ -21,14 +31,8 @@ export async function renderPools() {
     const total = porFiltro.reduce((n, p) => n + size(p.cidr), 0);
     const ocupadas = porFiltro.reduce((n, p) => n + (p.uso + (p.uso_reservado || 0)) * size(p.cidr), 0);
     const sobre80 = porFiltro.filter((p) => p.uso + (p.uso_reservado || 0) > 0.8).length;
-    const subnavHtml = `
-      <div class="subtabs-bar" style="display:flex;gap:8px;margin-bottom:var(--sp-3)">
-        <button type="button" class="btn" id="btn-sub-pools" style="font-weight:600">${I('capas', 16)} Estado de Pools</button>
-        <button type="button" class="btn sec" id="btn-sub-reconciliacion" style="font-weight:500">${I('sincronizar', 16)} Reconciliación de Nube (Drift)</button>
-      </div>
-    `;
     $('pools').innerHTML =
-      subnavHtml +
+      subnavPools('pools') +
       `<div class="cabecera"><h2 tabindex="-1">Estado de pools</h2><span class="acciones">${puede('admin') ? `<button type="button" class="btn" id="btn-importar">${I('subir')}Importar segmentos</button>` : ''}<a class="btn sec" href="/api/v1/exportar.xlsx" download>${I('descargar')}Exportar a Excel</a></span></div>
   <div class="kpis"><div class="card"><div class="kpi">${porFiltro.length}</div><div class="sub">Pools</div></div>
   <div class="card"><div class="kpi">${porFiltro.reduce((n, p) => n + p.asignaciones, 0)}</div><div class="sub">Asignaciones activas</div></div>
@@ -69,8 +73,9 @@ export async function renderPools() {
       );
     const imp = $('btn-importar');
     if (imp) imp.onclick = () => show('importar');
-    const btnSubRecon = $('btn-sub-reconciliacion');
-    if (btnSubRecon) btnSubRecon.onclick = () => show('reconciliacion');
+    const bP = $('subnav-pools'); if (bP) bP.onclick = () => show('pools');
+    const bS = $('subnav-segmentos'); if (bS) bS.onclick = () => show('segmentos');
+    const bR = $('subnav-reconciliacion'); if (bR) bR.onclick = () => show('reconciliacion');
     if (puede('admin')) $('pool-nuevo').replaceWith(formularioNuevoPool(renderPools));
     if (ESTADO.poolsAviso) {
       msg($('pools-msg'), ESTADO.poolsAviso, 'ok');

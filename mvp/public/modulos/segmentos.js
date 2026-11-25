@@ -7,7 +7,8 @@ import { ASIG, liberarAsignacion, textoRed } from './asignaciones.js';
 import { RES, accionReserva, restante, tictac } from './reservas.js';
 import { formularioNuevoSegmento } from './nuevo-segmento.js';
 import { columnasAjustables } from './ui.js';
-import { abrirCluster } from './clusteres.js';
+import { subnavPools } from './pools.js';
+import { show } from './navegacion.js';
 
 export const POR_PAGINA = 25;
 
@@ -214,7 +215,7 @@ export async function renderSegmentos() {
     const reservaPorId = new Map(pendientes.map((r) => [r.id, r]));
     const [titulo, ayuda] = textoVacio(vista, !!(q || FILTRO.ambiente || FILTRO.proveedor));
     const raiz = $('segmentos');
-    raiz.innerHTML = `<div class="cabecera"><h2 id="seg-titulo" tabindex="-1">Segmentos</h2><span class="acciones"><a class="btn" href="/api/v1/exportar.xlsx" download>${I('descargar')}Exportar a Excel</a>${
+    raiz.innerHTML = subnavPools('segmentos') + `<div class="cabecera"><h2 id="seg-titulo" tabindex="-1">Segmentos</h2><span class="acciones"><a class="btn" href="/api/v1/exportar.xlsx" download>${I('descargar')}Exportar a Excel</a>${
       puede('admin')
         ? `<a class="btn sec" href="/api/v1/exportar.json" download title="Respaldo completo para llevar el IPAM a otra infraestructura">${I('archivo')}Respaldo JSON</a>`
         : ''
@@ -224,6 +225,9 @@ export async function renderSegmentos() {
         ? `<div class="card vacio">${I('buscar', 20)}<p><b>${titulo}</b></p><p class="muted">${ayuda}</p></div>`
         : `<div class="card tablewrap" tabindex="0" role="region" aria-label="Segmentos"><table><thead><tr>${encabezado()}</tr></thead><tbody>${pagina.map((x) => fila(x, puedeOperar)).join('')}</tbody></table></div>`
     }${paginacion(total)}`;
+    const bP = $('subnav-pools'); if (bP) bP.onclick = () => show('pools');
+    const bS = $('subnav-segmentos'); if (bS) bS.onclick = () => show('segmentos');
+    const bR = $('subnav-reconciliacion'); if (bR) bR.onclick = () => show('reconciliacion');
     enlazar(raiz, reservaPorId);
     if (raiz.querySelector('table')) columnasAjustables(raiz.querySelector('table'), 'segmentos');
     montarEncabezados(raiz, pools);
