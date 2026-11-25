@@ -39,7 +39,7 @@ export const VISTAS = [
 
 const RANGO = { reservado: 0, asignado: 1, historial: 2 };
 const ETIQUETA = { asignado: 'Asignado', reservado: 'Reservado', liberada: 'Liberada', expirada: 'Expirada' };
-const origenDeReserva = (s) => (s === 'jira-webhook' ? 'jira' : String(s).startsWith('svc:') ? 'agente' : 'panel');
+const origenDeReserva = (s) => (String(s).startsWith('svc:') || s === 'jira-webhook' ? 'agente' : 'panel');
 
 /** Une asignaciones y reservas en una sola forma. Las reservas confirmadas no se repiten: ya son la asignación. */
 export function unificar(asignaciones, reservas) {

@@ -30,8 +30,8 @@ export const ACCIONES = {
   reservar: 'reservó',
   confirmar_reserva: 'aprobó la reserva de',
   liberar_reserva: 'liberó la reserva de',
-  jira_reserva_creada: 'Jira reservó',
-  jira_reserva_aprobada: 'Jira registró la aprobación de',
+  jira_reserva_creada: 'Sistema reservó',
+  jira_reserva_aprobada: 'Aprobación de',
   registrar_ip: 'registró la IP',
   editar_ip: 'editó la IP',
   eliminar_ip: 'eliminó la IP',
@@ -220,7 +220,7 @@ export function dialogoReservarBloque(pool, bloque, alRecargar) {
       campo('Proyecto (opcional)', inputProyecto),
       campo('VPC (opcional)', inputVpc),
       campo('Subred o VLAN (opcional)', inputSubred),
-      campo('Ticket Jira / Referencia (opcional)', inputTicket),
+      campo('Ticket / Referencia de cambio (opcional)', inputTicket),
       campo('Vigencia (horas, máx. 168)', inputTtl),
       checkAsignarDirecto
         ? h(

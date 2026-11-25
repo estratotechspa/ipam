@@ -120,6 +120,21 @@ test('arranque seguro: producción sin autenticación se niega, salvo ALLOW_ANON
   conEntorno({ ...base, APP_USER: 'admin', APP_PASS: 'scrypt$16384$8$1$c2Fs$aGFzaA==' }, () => assert.ok(!validar().avisos.some((a) => /texto plano/.test(a))));
   // En desarrollo el modo abierto no estorba.
   conEntorno({ ...LIMPIO, DATABASE_URL: 'postgres://u:p@h/d' }, () => assert.deepEqual(validar().errores, []));
+  // Soporte para variables individuales de base de datos
+  conEntorno(
+    {
+      ...LIMPIO,
+      DATABASE_HOST: '10.1.2.3',
+      DATABASE_PORT: '5432',
+      DATABASE_NAME: 'ipam_db',
+      DATABASE_USERNAME: 'ipam_user',
+      DATABASE_PASSWORD: 'secretpassword',
+    },
+    () => {
+      assert.deepEqual(validar().errores, []);
+      assert.equal(config.bd.url, 'postgres://ipam_user:secretpassword@10.1.2.3:5432/ipam_db');
+    },
+  );
 });
 
 test('OIDC exige cliente, secreto, URL pública y una clave de sesión de al menos 32 caracteres', () => {

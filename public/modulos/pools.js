@@ -21,7 +21,14 @@ export async function renderPools() {
     const total = porFiltro.reduce((n, p) => n + size(p.cidr), 0);
     const ocupadas = porFiltro.reduce((n, p) => n + (p.uso + (p.uso_reservado || 0)) * size(p.cidr), 0);
     const sobre80 = porFiltro.filter((p) => p.uso + (p.uso_reservado || 0) > 0.8).length;
+    const subnavHtml = `
+      <div class="subtabs-bar" style="display:flex;gap:8px;margin-bottom:var(--sp-3)">
+        <button type="button" class="btn" id="btn-sub-pools" style="font-weight:600">${I('capas', 16)} Estado de Pools</button>
+        <button type="button" class="btn sec" id="btn-sub-reconciliacion" style="font-weight:500">${I('sincronizar', 16)} Reconciliación de Nube (Drift)</button>
+      </div>
+    `;
     $('pools').innerHTML =
+      subnavHtml +
       `<div class="cabecera"><h2 tabindex="-1">Estado de pools</h2><span class="acciones">${puede('admin') ? `<button type="button" class="btn" id="btn-importar">${I('subir')}Importar segmentos</button>` : ''}<a class="btn sec" href="/api/v1/exportar.xlsx" download>${I('descargar')}Exportar a Excel</a></span></div>
   <div class="kpis"><div class="card"><div class="kpi">${porFiltro.length}</div><div class="sub">Pools</div></div>
   <div class="card"><div class="kpi">${porFiltro.reduce((n, p) => n + p.asignaciones, 0)}</div><div class="sub">Asignaciones activas</div></div>
@@ -62,6 +69,8 @@ export async function renderPools() {
       );
     const imp = $('btn-importar');
     if (imp) imp.onclick = () => show('importar');
+    const btnSubRecon = $('btn-sub-reconciliacion');
+    if (btnSubRecon) btnSubRecon.onclick = () => show('reconciliacion');
     if (puede('admin')) $('pool-nuevo').replaceWith(formularioNuevoPool(renderPools));
     if (ESTADO.poolsAviso) {
       msg($('pools-msg'), ESTADO.poolsAviso, 'ok');
