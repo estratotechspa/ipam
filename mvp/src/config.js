@@ -30,6 +30,9 @@ function def(nombre, tipo, defecto, descripcion, extra = {}) {
 // Proceso
 def('NODE_ENV', 'texto', 'development', 'Entorno. Con «production» se activan las protecciones de arranque seguro.', { ejemplo: 'production' });
 def('PORT', 'entero', 8080, 'Puerto HTTP en el que escucha el servicio.', { min: 1, max: 65535 });
+def('CORS_ORIGEN', 'texto', '*', 'Orígenes permitidos para CORS (separados por coma o «*»). Necesario para clientes como Retool.', {
+  ejemplo: 'https://retool.ccla.cl',
+});
 def('ROL', 'texto', 'todos', 'Qué hace esta réplica: «api» (solo HTTP), «worker» (solo barredor) o «todos».', { opciones: ['api', 'worker', 'todos'] });
 def('LOG_LEVEL', 'texto', 'info', 'Nivel de log: debug, info, warn o error.', { opciones: ['debug', 'info', 'warn', 'error'] });
 def(
@@ -50,10 +53,17 @@ def('SOLICITUD_TIMEOUT_MS', 'entero', 30000, 'Tiempo máximo que el servidor esp
 
 // Base de datos (recurso adjunto)
 def('DATABASE_URL', 'texto', '', 'Cadena de conexión a PostgreSQL de la aplicación (usuario con permisos DML).', {
-  obligatoria: true,
   secreta: true,
   ejemplo: 'postgres://ipam_app:CLAVE@host:5432/ipam?sslmode=require',
 });
+def('DATABASE_HOST', 'texto', '', 'Host o dirección IP de la base de datos PostgreSQL.', { ejemplo: '10.0.0.5' });
+def('DATABASE_PORT', 'entero', 5432, 'Puerto de la base de datos PostgreSQL.', { min: 1, max: 65535 });
+def('DATABASE_NAME', 'texto', '', 'Nombre de la base de datos PostgreSQL.', { ejemplo: 'ipam' });
+def('DATABASE_SERVICE', 'texto', '', 'Alias alternativo para el nombre de la base de datos.');
+def('DATABASE_USERNAME', 'texto', '', 'Usuario de conexión a la base de datos.', { ejemplo: 'ipam_app' });
+def('DATABASE_USER', 'texto', '', 'Alias alternativo para el usuario de la base de datos.');
+def('DATABASE_PASSWORD', 'texto', '', 'Contraseña de la base de datos.', { secreta: true });
+def('DATABASE_PASS', 'texto', '', 'Alias alternativo para la contraseña de la base de datos.', { secreta: true });
 def('DATABASE_URL_MIGRACION', 'texto', '', 'Cadena de conexión del usuario migrador (DDL). Solo la usa `npm run migrar`. Si falta, se usa DATABASE_URL.', {
   secreta: true,
   ejemplo: 'postgres://ipam_migrador:CLAVE@host:5432/ipam',
@@ -299,6 +309,19 @@ function valor(nombre) {
 const IDENTIFICADOR = /^[a-z_][a-z0-9_]{0,62}$/;
 const texto = (nombre) => valor(nombre);
 
+function resolverDatabaseUrl() {
+  const directa = texto('DATABASE_URL');
+  if (directa) return directa;
+  const host = texto('DATABASE_HOST');
+  if (!host) return '';
+  const port = valor('DATABASE_PORT') || 5432;
+  const name = texto('DATABASE_NAME') || texto('DATABASE_SERVICE') || 'ipam';
+  const user = texto('DATABASE_USERNAME') || texto('DATABASE_USER') || '';
+  const pass = texto('DATABASE_PASSWORD') || texto('DATABASE_PASS') || '';
+  const auth = user ? (pass ? `${encodeURIComponent(user)}:${encodeURIComponent(pass)}@` : `${encodeURIComponent(user)}@`) : '';
+  return `postgres://${auth}${host}:${port}/${name}`;
+}
+
 const config = {
   get entorno() {
     return texto('NODE_ENV');
@@ -317,6 +340,7 @@ const config = {
     const confiar = tp === '' || tp === 'false' ? undefined : Number.isNaN(Number(tp)) ? tp : Number(tp);
     return {
       puerto: valor('PORT'),
+      corsOrigen: texto('CORS_ORIGEN'),
       trustProxy: confiar,
       jsonLimite: texto('JSON_LIMIT'),
       jsonLimiteImportar: texto('JSON_LIMIT_IMPORTAR'),
@@ -327,9 +351,10 @@ const config = {
     };
   },
   get bd() {
+    const url = resolverDatabaseUrl();
     return {
-      url: texto('DATABASE_URL'),
-      urlMigracion: texto('DATABASE_URL_MIGRACION') || texto('DATABASE_URL'),
+      url,
+      urlMigracion: texto('DATABASE_URL_MIGRACION') || url,
       esquema: texto('DATABASE_SCHEMA'),
       ssl: texto('DATABASE_SSL'),
       sslCa: texto('DATABASE_SSL_CA'),
@@ -472,10 +497,10 @@ function crearContexto() {
 
 // Las comprobaciones de BD no dependen de que el resto de los valores sean válidos: se leen una a una.
 function validarBaseDeDatos({ errores, avisos, intenta }) {
-  const url = intenta(() => valor('DATABASE_URL'));
+  const url = intenta(() => resolverDatabaseUrl());
   const esquema = intenta(() => valor('DATABASE_SCHEMA'));
   const ssl = intenta(() => valor('DATABASE_SSL'));
-  if (url === '') errores.push('Falta DATABASE_URL (o DATABASE_URL_FILE).');
+  if (!url) errores.push('Falta DATABASE_URL (o DATABASE_HOST + DATABASE_PORT + DATABASE_NAME).');
   if (esquema !== undefined && !IDENTIFICADOR.test(esquema))
     errores.push('DATABASE_SCHEMA debe ser un identificador simple en minúsculas (letras, números y _).');
   if (ssl === 'verify-full' && !intenta(() => valor('DATABASE_SSL_CA')))

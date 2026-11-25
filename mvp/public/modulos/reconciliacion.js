@@ -1,6 +1,7 @@
 // Pestaña Reconciliación: detección de Cloud Drift entre la nube real y el IPAM.
 import { $, I, api, errorApi, esc, fail, get, msg, post } from './base.js';
 import { toast } from './ui.js';
+import { show } from './navegacion.js';
 
 const ESCENARIOS = {
   sincronizado: [
@@ -20,7 +21,13 @@ const ESCENARIOS = {
 
 export async function renderReconciliacion() {
   const contenedor = $('reconciliacion');
-  contenedor.innerHTML = `
+  const subnavHtml = `
+    <div class="subtabs-bar" style="display:flex;gap:8px;margin-bottom:var(--sp-3)">
+      <button type="button" class="btn sec" id="btn-sub-pools-recon" style="font-weight:500">${I('capas', 16)} Estado de Pools</button>
+      <button type="button" class="btn" id="btn-sub-reconciliacion-recon" style="font-weight:600">${I('sincronizar', 16)} Reconciliación de Nube (Drift)</button>
+    </div>
+  `;
+  contenedor.innerHTML = subnavHtml + `
     <div class="cabecera" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
       <div>
         <h2 tabindex="-1" style="margin-bottom:4px">Reconciliación de Nube (Cloud Drift)</h2>
@@ -92,6 +99,8 @@ export async function renderReconciliacion() {
   $('recon-esc-shadow').onclick = () => cargarEscenario('shadow_it');
   $('recon-esc-sync').onclick = () => cargarEscenario('sincronizado');
   $('recon-esc-fantasma').onclick = () => cargarEscenario('fantasma');
+  const btnSubPools = $('btn-sub-pools-recon');
+  if (btnSubPools) btnSubPools.onclick = () => show('pools');
   $('recon-limpiar').onclick = () => {
     $('recon-json').value = '';
     $('recon-resultados').innerHTML = '';

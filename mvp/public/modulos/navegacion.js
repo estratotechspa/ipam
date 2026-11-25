@@ -12,11 +12,11 @@ import { renderJerarquia } from './jerarquia.js';
 import { renderReconciliacion } from './reconciliacion.js';
 
 // Vistas sin botón propio en la barra: se abren desde su pestaña (Importar, desde Pools) y solo las ve un admin.
-export const SUBVISTAS = { importar: 'pools' };
+export const SUBVISTAS = { importar: 'pools', reconciliacion: 'pools' };
 
 export function show(t) {
   const boton = $('nav').querySelector('[data-t="' + t + '"]');
-  if (!$(t) || (SUBVISTAS[t] ? !puede('admin') : !boton || boton.hidden)) t = 'pools';
+  if (!$(t) || (t === 'importar' && !puede('admin')) || (!SUBVISTAS[t] && (!boton || boton.hidden))) t = 'pools';
   ESTADO.vista = t;
   const marcada = SUBVISTAS[t] || t;
   clearInterval(RES.timer);

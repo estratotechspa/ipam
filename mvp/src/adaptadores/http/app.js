@@ -43,6 +43,27 @@ function crearApp(deps) {
 
   app.use(crearSolicitud({ log, metricas, trazas }));
 
+  // Soporte CORS para consumidores externos (Retool, consolas web, agentes)
+  const corsPermitido = config.http.corsOrigen || '*';
+  app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (corsPermitido === '*' || !corsPermitido) {
+      res.setHeader('Access-Control-Allow-Origin', origin || '*');
+    } else {
+      const origenes = corsPermitido.split(',').map((s) => s.trim());
+      if (origin && origenes.includes(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+      }
+    }
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Idempotency-Key');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(204);
+    }
+    next();
+  });
+
   // Cabeceras de seguridad. La interfaz no usa scripts en línea (todo en /app.js); los estilos en atributo sí.
   app.use(
     helmet({
@@ -147,7 +168,12 @@ function crearApp(deps) {
   direccionesRutas.montar(app, dep);
   contratoRutas.montar(app, dep);
 
-  app.use(express.static(path.join(__dirname, '..', '..', '..', 'public')));
+  const fs = require('node:fs');
+  const rutaPublica =
+    [path.join(__dirname, '..', '..', 'public'), path.join(__dirname, '..', '..', '..', 'public'), path.join(process.cwd(), 'public')].find((p) =>
+      fs.existsSync(p),
+    ) || path.join(__dirname, '..', '..', '..', 'public');
+  app.use(express.static(rutaPublica));
   // Swagger UI para la página /api.html (archivos estáticos del paquete; detrás del mismo acceso que la interfaz).
   app.use('/vendor/swagger-ui', express.static(path.dirname(require.resolve('swagger-ui-dist/package.json'))));
   app.use(noEncontrada);
