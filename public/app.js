@@ -8,6 +8,14 @@ $('nav').onclick = (e) => {
   if (b) show(b.dataset.t);
 };
 
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-subnav]');
+  if (b) {
+    e.preventDefault();
+    show(b.dataset.subnav);
+  }
+});
+
 document.querySelectorAll('#nav [data-ic]').forEach((b) => b.prepend(ico(b.dataset.ic)));
 
 async function marca() {

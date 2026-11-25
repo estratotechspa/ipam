@@ -93,10 +93,10 @@ export function dialogoCambioClave({ obligatorio = false } = {}) {
 // ---- Pestaña Usuarios (admin). SSO: pre-registro por correo y baja. Cuentas locales (AUTH_LOCAL): clave temporal de un solo uso. ----
 export function subnavUsuarios(activa) {
   return h(
-    'div',
-    { class: 'subtabs-bar', style: 'display:flex;gap:8px;margin-bottom:var(--sp-4);border-bottom:1px solid var(--line, #334155);padding-bottom:10px;align-items:center' },
-    h('button', { type: 'button', class: `btn ${activa === 'usuarios' ? '' : 'sec'}`, style: `font-weight:${activa === 'usuarios' ? '600' : '500'}`, onclick: () => show('usuarios') }, ico('usuarios', 16), ' Cuentas de Usuario'),
-    h('button', { type: 'button', class: `btn ${activa === 'tokens' ? '' : 'sec'}`, style: `font-weight:${activa === 'tokens' ? '600' : '500'}`, onclick: () => show('tokens') }, ico('llave', 16), ' Tokens de API'),
+    'nav',
+    { class: 'subtabs-bar', 'aria-label': 'Subsecciones de Usuarios', style: 'display:flex;gap:8px;margin-bottom:var(--sp-4);border-bottom:1px solid var(--line, #334155);padding-bottom:10px;align-items:center' },
+    h('button', { type: 'button', 'data-subnav': 'usuarios', class: `btn ${activa === 'usuarios' ? '' : 'sec'}`, style: `font-weight:${activa === 'usuarios' ? '600' : '500'}`, onclick: () => show('usuarios') }, ico('usuarios', 16), ' Cuentas de Usuario'),
+    h('button', { type: 'button', 'data-subnav': 'tokens', class: `btn ${activa === 'tokens' ? '' : 'sec'}`, style: `font-weight:${activa === 'tokens' ? '600' : '500'}`, onclick: () => show('tokens') }, ico('llave', 16), ' Tokens de API'),
     h('button', { type: 'button', class: 'btn sec', style: 'margin-left:auto', onclick: () => dialogoCambioClave() }, ico('llave', 16), ' Cambiar mi contraseña')
   );
 }

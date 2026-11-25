@@ -9,6 +9,7 @@ import { formularioNuevoSegmento } from './nuevo-segmento.js';
 import { columnasAjustables } from './ui.js';
 import { subnavPools } from './pools.js';
 import { show } from './navegacion.js';
+import { abrirCluster } from './clusteres.js';
 
 export const POR_PAGINA = 25;
 
@@ -225,9 +226,7 @@ export async function renderSegmentos() {
         ? `<div class="card vacio">${I('buscar', 20)}<p><b>${titulo}</b></p><p class="muted">${ayuda}</p></div>`
         : `<div class="card tablewrap" tabindex="0" role="region" aria-label="Segmentos"><table><thead><tr>${encabezado()}</tr></thead><tbody>${pagina.map((x) => fila(x, puedeOperar)).join('')}</tbody></table></div>`
     }${paginacion(total)}`;
-    const bP = $('subnav-pools'); if (bP) bP.onclick = () => show('pools');
-    const bS = $('subnav-segmentos'); if (bS) bS.onclick = () => show('segmentos');
-    const bR = $('subnav-reconciliacion'); if (bR) bR.onclick = () => show('reconciliacion');
+    raiz.querySelectorAll('[data-subnav]').forEach((b) => (b.onclick = () => show(b.dataset.subnav)));
     enlazar(raiz, reservaPorId);
     if (raiz.querySelector('table')) columnasAjustables(raiz.querySelector('table'), 'segmentos');
     montarEncabezados(raiz, pools);

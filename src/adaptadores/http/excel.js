@@ -74,7 +74,7 @@ function filaSegmento(r) {
     { value: r.proyecto || '' },
     { value: r.vpc || '' },
     { value: r.subred || '' },
-    { value: r.vlan != null ? String(r.vlan) : '' },
+    { value: r.vlan !== null && r.vlan !== undefined ? String(r.vlan) : '' },
     { value: r.vlan_nombre || '' },
     { value: r.uso || '' },
     { value: r.responsable || '' },
@@ -93,8 +93,8 @@ function filaPool(p) {
     { value: p.ambiente || '' },
     { value: p.proveedor || '' },
     { value: p.cidr || '' },
-    { value: p.asignaciones != null ? Number(p.asignaciones) : 0, type: Number },
-    { value: p.uso != null ? Number(p.uso) : 0, type: Number, format: '0.0%' },
+    { value: p.asignaciones !== null && p.asignaciones !== undefined ? Number(p.asignaciones) : 0, type: Number },
+    { value: p.uso !== null && p.uso !== undefined ? Number(p.uso) : 0, type: Number, format: '0.0%' },
   ];
 }
 
@@ -119,7 +119,7 @@ function filaIP(d) {
  * @param {string} [creador]
  * @returns {Promise<{segmentos: number, direcciones: number}>}
  */
-async function escribirLibro(salida, lector, creador) {
+async function escribirLibro(salida, lector, _creador) {
   const filasSegmentos = [filaEncabezado(COLUMNAS_SEGMENTOS)];
   let segmentos = 0;
   for await (const lote of lector.filas()) {

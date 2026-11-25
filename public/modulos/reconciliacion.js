@@ -94,9 +94,7 @@ export async function renderReconciliacion() {
   $('recon-esc-shadow').onclick = () => cargarEscenario('shadow_it');
   $('recon-esc-sync').onclick = () => cargarEscenario('sincronizado');
   $('recon-esc-fantasma').onclick = () => cargarEscenario('fantasma');
-  const bP = $('subnav-pools'); if (bP) bP.onclick = () => show('pools');
-  const bS = $('subnav-segmentos'); if (bS) bS.onclick = () => show('segmentos');
-  const bR = $('subnav-reconciliacion'); if (bR) bR.onclick = () => show('reconciliacion');
+  contenedor.querySelectorAll('[data-subnav]').forEach((b) => (b.onclick = () => show(b.dataset.subnav)));
   $('recon-limpiar').onclick = () => {
     $('recon-json').value = '';
     $('recon-resultados').innerHTML = '';
