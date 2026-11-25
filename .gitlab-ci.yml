@@ -1,3 +1,6 @@
+variables:
+  STACK_VERSION: 'nodejs/24-distroless'
+
 include:
   - component: 'gitlab.com/ccla/areas-ccla/devops-ccla/pipelines-cla/pipeline-modularizado/$TECNOLOGIA_ASIGNADA@$VERSION_TAG_PIPELINES'
 # No agregar inputs: el Cloud Scheduler se activa con variables CI/CD del proyecto

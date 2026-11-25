@@ -30,6 +30,9 @@ function def(nombre, tipo, defecto, descripcion, extra = {}) {
 // Proceso
 def('NODE_ENV', 'texto', 'development', 'Entorno. Con «production» se activan las protecciones de arranque seguro.', { ejemplo: 'production' });
 def('PORT', 'entero', 8080, 'Puerto HTTP en el que escucha el servicio.', { min: 1, max: 65535 });
+def('CORS_ORIGEN', 'texto', '*', 'Orígenes permitidos para CORS (separados por coma o «*»). Necesario para clientes como Retool.', {
+  ejemplo: 'https://retool.ccla.cl',
+});
 def('ROL', 'texto', 'todos', 'Qué hace esta réplica: «api» (solo HTTP), «worker» (solo barredor) o «todos».', { opciones: ['api', 'worker', 'todos'] });
 def('LOG_LEVEL', 'texto', 'info', 'Nivel de log: debug, info, warn o error.', { opciones: ['debug', 'info', 'warn', 'error'] });
 def(
@@ -317,6 +320,7 @@ const config = {
     const confiar = tp === '' || tp === 'false' ? undefined : Number.isNaN(Number(tp)) ? tp : Number(tp);
     return {
       puerto: valor('PORT'),
+      corsOrigen: texto('CORS_ORIGEN'),
       trustProxy: confiar,
       jsonLimite: texto('JSON_LIMIT'),
       jsonLimiteImportar: texto('JSON_LIMIT_IMPORTAR'),
