@@ -10,7 +10,7 @@ const CLAVE_MIN = 12;
  * Lecturas generales, usuarios y auditoría. Las cuentas se administran por dos caminos:
  *  A) SSO (OIDC): el admin pre-registra por correo con su rol, o da de baja (la identidad la guarda el proveedor).
  *  B) Cuentas locales (AUTH_LOCAL, modo Basic): el admin crea la cuenta con una clave temporal que se muestra una sola vez.
- * @param {{repo: any, rolesUsuario: string[], contrasenas: {hashear: (c: string) => Promise<string>, verificar: (c: string, h: string) => Promise<boolean>, generarTemporal: () => string}, cuentasLocales?: () => boolean}} deps
+ * @param {{repo: any, rolesUsuario: string[], contrasenas: {hashear: (c: string) => Promise<string>, verificar: (c: string, h: string) => Promise<boolean>, generarTemporal: () => string}, cuentasLocales?: () => boolean, config?: any}} deps
  */
 function crearAdministracion({ repo, rolesUsuario, contrasenas, cuentasLocales = () => false, config }) {
   const normalizar = (email) =>

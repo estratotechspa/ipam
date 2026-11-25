@@ -362,8 +362,16 @@ export async function fichaPool(id) {
             return h(
               'div',
               null,
-              h('p', { class: 'ficha-uso' }, barraUso(poolActualizado.uso, resActual), ` ocupado (asignado ${pct(poolActualizado.uso)} · reservado ${pct(resActual)})`),
-              resumenPool(poolActualizado, d, poolActualizado.uso + resActual, [...asig.filter((a) => a.pool_id === id), ...reservas.map((x) => ({ ...x, reserva: true }))]),
+              h(
+                'p',
+                { class: 'ficha-uso' },
+                barraUso(poolActualizado.uso, resActual),
+                ` ocupado (asignado ${pct(poolActualizado.uso)} · reservado ${pct(resActual)})`,
+              ),
+              resumenPool(poolActualizado, d, poolActualizado.uso + resActual, [
+                ...asig.filter((a) => a.pool_id === id),
+                ...reservas.map((x) => ({ ...x, reserva: true })),
+              ]),
               h(
                 'details',
                 { class: 'plegable', open: true },

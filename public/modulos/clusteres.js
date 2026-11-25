@@ -156,9 +156,35 @@ export function abrirCluster(grupo) {
 export function subnavClusteres(activa) {
   return h(
     'nav',
-    { class: 'subtabs-bar', 'aria-label': 'Subsecciones de Clústeres', style: 'display:flex;gap:8px;margin-bottom:var(--sp-4);border-bottom:1px solid var(--line, #334155);padding-bottom:10px' },
-    h('button', { type: 'button', 'data-subnav': 'clusteres', class: `btn ${activa === 'clusteres' ? '' : 'sec'}`, style: `font-weight:${activa === 'clusteres' ? '600' : '500'}`, onclick: () => show('clusteres') }, ico('capas', 16), ' Clústeres Kubernetes'),
-    h('button', { type: 'button', 'data-subnav': 'jerarquia', class: `btn ${activa === 'jerarquia' ? '' : 'sec'}`, style: `font-weight:${activa === 'jerarquia' ? '600' : '500'}`, onclick: () => show('jerarquia') }, ico('flujo', 16), ' Jerarquía de Red (GCP)'),
+    {
+      class: 'subtabs-bar',
+      'aria-label': 'Subsecciones de Clústeres',
+      style: 'display:flex;gap:8px;margin-bottom:var(--sp-4);border-bottom:1px solid var(--line, #334155);padding-bottom:10px',
+    },
+    h(
+      'button',
+      {
+        type: 'button',
+        'data-subnav': 'clusteres',
+        class: `btn ${activa === 'clusteres' ? '' : 'sec'}`,
+        style: `font-weight:${activa === 'clusteres' ? '600' : '500'}`,
+        onclick: () => show('clusteres'),
+      },
+      ico('capas', 16),
+      ' Clústeres Kubernetes',
+    ),
+    h(
+      'button',
+      {
+        type: 'button',
+        'data-subnav': 'jerarquia',
+        class: `btn ${activa === 'jerarquia' ? '' : 'sec'}`,
+        style: `font-weight:${activa === 'jerarquia' ? '600' : '500'}`,
+        onclick: () => show('jerarquia'),
+      },
+      ico('flujo', 16),
+      ' Jerarquía de Red (GCP)',
+    ),
   );
 }
 

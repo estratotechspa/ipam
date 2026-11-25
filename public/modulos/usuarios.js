@@ -94,10 +94,41 @@ export function dialogoCambioClave({ obligatorio = false } = {}) {
 export function subnavUsuarios(activa) {
   return h(
     'nav',
-    { class: 'subtabs-bar', 'aria-label': 'Subsecciones de Usuarios', style: 'display:flex;gap:8px;margin-bottom:var(--sp-4);border-bottom:1px solid var(--line, #334155);padding-bottom:10px;align-items:center' },
-    h('button', { type: 'button', 'data-subnav': 'usuarios', class: `btn ${activa === 'usuarios' ? '' : 'sec'}`, style: `font-weight:${activa === 'usuarios' ? '600' : '500'}`, onclick: () => show('usuarios') }, ico('usuarios', 16), ' Cuentas de Usuario'),
-    h('button', { type: 'button', 'data-subnav': 'tokens', class: `btn ${activa === 'tokens' ? '' : 'sec'}`, style: `font-weight:${activa === 'tokens' ? '600' : '500'}`, onclick: () => show('tokens') }, ico('llave', 16), ' Tokens de API'),
-    h('button', { type: 'button', class: 'btn sec', style: 'margin-left:auto', onclick: () => dialogoCambioClave() }, ico('llave', 16), ' Cambiar mi contraseña')
+    {
+      class: 'subtabs-bar',
+      'aria-label': 'Subsecciones de Usuarios',
+      style: 'display:flex;gap:8px;margin-bottom:var(--sp-4);border-bottom:1px solid var(--line, #334155);padding-bottom:10px;align-items:center',
+    },
+    h(
+      'button',
+      {
+        type: 'button',
+        'data-subnav': 'usuarios',
+        class: `btn ${activa === 'usuarios' ? '' : 'sec'}`,
+        style: `font-weight:${activa === 'usuarios' ? '600' : '500'}`,
+        onclick: () => show('usuarios'),
+      },
+      ico('usuarios', 16),
+      ' Cuentas de Usuario',
+    ),
+    h(
+      'button',
+      {
+        type: 'button',
+        'data-subnav': 'tokens',
+        class: `btn ${activa === 'tokens' ? '' : 'sec'}`,
+        style: `font-weight:${activa === 'tokens' ? '600' : '500'}`,
+        onclick: () => show('tokens'),
+      },
+      ico('llave', 16),
+      ' Tokens de API',
+    ),
+    h(
+      'button',
+      { type: 'button', class: 'btn sec', style: 'margin-left:auto', onclick: () => dialogoCambioClave() },
+      ico('llave', 16),
+      ' Cambiar mi contraseña',
+    ),
   );
 }
 
@@ -119,14 +150,16 @@ export function dialogoFijarClave(email, recargar) {
       recargar();
     };
     dlg.replaceChildren(
-      h('form', { onsubmit: guardar, 'aria-label': 'Fijar contraseña' },
+      h(
+        'form',
+        { onsubmit: guardar, 'aria-label': 'Fijar contraseña' },
         h('h3', null, `Fijar contraseña para ${email}`),
         h('p', { class: 'muted' }, 'Ingresa la nueva contraseña para el usuario (mínimo 12 caracteres).'),
         h('label', null, 'Nueva contraseña', clave),
         h('label', null, 'Repite la contraseña', repite),
         estado,
-        h('div', { class: 'fila-botones' }, boton, h('button', { class: 'btn sec', type: 'button', onclick: cerrar }, 'Cancelar'))
-      )
+        h('div', { class: 'fila-botones' }, boton, h('button', { class: 'btn sec', type: 'button', onclick: cerrar }, 'Cancelar')),
+      ),
     );
     clave.focus();
   });
@@ -141,13 +174,17 @@ export function usuariosSinCuentas(raiz) {
   raiz.replaceChildren(
     subnavUsuarios('usuarios'),
     h('h2', null, 'Usuarios'),
-    h('div', { class: 'card', style: 'max-width:820px' },
+    h(
+      'div',
+      { class: 'card', style: 'max-width:820px' },
       h('p', null, h('b', null, 'Las cuentas de usuario adicionales no están habilitadas en este modo de acceso.')),
       h('p', { innerHTML: quien }),
-      h('div', { style: 'margin-top:16px' },
-        h('button', { class: 'btn', type: 'button', onclick: () => dialogoCambioClave() }, ico('llave', 16), ' Cambiar mi contraseña de Administrador')
-      )
-    )
+      h(
+        'div',
+        { style: 'margin-top:16px' },
+        h('button', { class: 'btn', type: 'button', onclick: () => dialogoCambioClave() }, ico('llave', 16), ' Cambiar mi contraseña de Administrador'),
+      ),
+    ),
   );
 }
 
