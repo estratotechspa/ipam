@@ -3,6 +3,9 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y versionado semántico.
 
 ## [Sin publicar]
+### Seguridad y Dependencias
+- **Reemplazo de `exceljs` por `read-excel-file` y `write-excel-file`:** Eliminación de vulnerabilidades críticas y transitivas (CVE-2026-78207 de Prototype Pollution y CVE-2026-128338 de Denegación de Servicio por memoria) al erradicar dependencias obsoletas (`unzipper`, `archiver`). El escaneo `npm audit --omit=dev` pasa con 0 vulnerabilidades. Los adaptadores de exportación (`excel.js`) e importación (`archivo-segmentos.js`) mantienen streaming, formatos de celda y compatibilidad total.
+
 ### Motor Anti-fragmentación, Reconciliación de Nube y Consola Dark Ops (0.6.0)
 - **Estrategias CIDR anti-fragmentación:** soporte para el parámetro `estrategia` (`primero`, `mejor_ajuste`, `biseccion`, `inverso`) en `POST /api/v1/reservas`. La estrategia `mejor_ajuste` (*best-fit*) previene romper bloques contiguos grandes al elegir el hueco libre más ajustado al tamaño requerido.
 - **Métrica de fragmentación de pools:** cálculo en tiempo real del índice de fragmentación (`0.0` continuo a `1.0` altamente fragmentado) en `GET /api/v1/pools/{id}/disponibilidad`.
