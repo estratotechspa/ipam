@@ -3,6 +3,17 @@ import { $, api, errorApi, fail, fecha, fechaHora, get, h, msg } from './base.js
 import { diasPara } from './reservas.js';
 import { confirmar, tabla } from './ui.js';
 import { subnavUsuarios } from './usuarios.js';
+import { show } from './navegacion.js';
+
+function breadcrumbTokens() {
+  return h(
+    'nav',
+    { class: 'breadcrumbs', 'aria-label': 'Ruta de navegación' },
+    h('button', { type: 'button', class: 'enlace', onclick: () => show('usuarios') }, 'Usuarios'),
+    h('span', { class: 'separador', 'aria-hidden': 'true' }, '/'),
+    h('span', { class: 'actual', 'aria-current': 'page' }, h('span', { class: 'dot' }), 'Tokens de API'),
+  );
+}
 
 // Grupos de la API que se pueden dar a un token (los mismos de dominio/alcance.js).
 const GRUPOS = [
@@ -94,6 +105,7 @@ export async function renderTokens() {
     botonesCabecera.push(h('button', { class: 'btn', type: 'button', id: 'tk-nuevo', onclick: () => dialogoToken(estado) }, '+ Crear token'));
 
     raiz.replaceChildren(
+      breadcrumbTokens(),
       subnavUsuarios('tokens'),
       h(
         'div',

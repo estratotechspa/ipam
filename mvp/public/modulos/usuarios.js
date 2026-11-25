@@ -97,15 +97,14 @@ export function subnavUsuarios(activa) {
     {
       class: 'subtabs-bar',
       'aria-label': 'Subsecciones de Usuarios',
-      style: 'display:flex;gap:8px;margin-bottom:var(--sp-4);border-bottom:1px solid var(--line, #334155);padding-bottom:10px;align-items:center',
+      style: 'width:100%',
     },
     h(
       'button',
       {
         type: 'button',
         'data-subnav': 'usuarios',
-        class: `btn ${activa === 'usuarios' ? '' : 'sec'}`,
-        style: `font-weight:${activa === 'usuarios' ? '600' : '500'}`,
+        class: `subnav-pill ${activa === 'usuarios' ? 'activa' : ''}`,
         onclick: () => show('usuarios'),
       },
       ico('usuarios', 16),
@@ -116,8 +115,7 @@ export function subnavUsuarios(activa) {
       {
         type: 'button',
         'data-subnav': 'tokens',
-        class: `btn ${activa === 'tokens' ? '' : 'sec'}`,
-        style: `font-weight:${activa === 'tokens' ? '600' : '500'}`,
+        class: `subnav-pill ${activa === 'tokens' ? 'activa' : ''}`,
         onclick: () => show('tokens'),
       },
       ico('llave', 16),
@@ -125,8 +123,8 @@ export function subnavUsuarios(activa) {
     ),
     h(
       'button',
-      { type: 'button', class: 'btn sec', style: 'margin-left:auto', onclick: () => dialogoCambioClave() },
-      ico('llave', 16),
+      { type: 'button', class: 'btn sec pequeno', style: 'margin-left:auto', onclick: () => dialogoCambioClave() },
+      ico('llave', 14),
       ' Cambiar mi contraseña',
     ),
   );

@@ -3,6 +3,17 @@ import { armarJerarquia, limitesCidr, SIN } from '../calculos.js';
 import { ESTADO, fail, fmt, get, h, ico, todasLasAsignaciones } from './base.js';
 import { rangoDeIps } from './ui.js';
 import { subnavClusteres } from './clusteres.js';
+import { show } from './navegacion.js';
+
+function breadcrumbJerarquia() {
+  return h(
+    'nav',
+    { class: 'breadcrumbs', 'aria-label': 'Ruta de navegación' },
+    h('button', { type: 'button', class: 'enlace', onclick: () => show('clusteres') }, 'Clústeres'),
+    h('span', { class: 'separador', 'aria-hidden': 'true' }, '/'),
+    h('span', { class: 'actual', 'aria-current': 'page' }, h('span', { class: 'dot' }), 'Jerarquía de Red (GCP)'),
+  );
+}
 
 let DATOS = null; // última carga: al escribir en el buscador solo se vuelve a armar el árbol, sin pedir nada
 let ULTIMA_CARGA = 0;
@@ -121,6 +132,7 @@ export async function renderJerarquia() {
     });
     const abrir = (si) => () => document.querySelectorAll('#jerarquia-arbol details').forEach((d) => (d.open = si));
     cont.replaceChildren(
+      breadcrumbJerarquia(),
       subnavClusteres('jerarquia'),
       h('div', { class: 'cabecera' }, h('h2', { tabindex: '-1' }, 'Jerarquía de la red')),
       h(

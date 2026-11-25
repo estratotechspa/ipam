@@ -2,6 +2,7 @@
 import { $, CAB, I, YO, api, esc, h, ico, puede } from './modulos/base.js';
 import { show } from './modulos/navegacion.js';
 import { dialogoCambioClave } from './modulos/usuarios.js';
+import { inicializarComando } from './modulos/comando.js';
 
 $('nav').onclick = (e) => {
   const b = e.target.closest('[data-t]');
@@ -79,6 +80,7 @@ async function iniciar() {
       location.href = (x.data && x.data.redirect) || '/';
     };
   show('pools');
+  inicializarComando();
   if (YO.debe_cambiar_clave) dialogoCambioClave({ obligatorio: true }); // clave temporal: no se puede seguir sin cambiarla
 }
 

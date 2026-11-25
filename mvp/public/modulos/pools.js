@@ -7,13 +7,33 @@ import { fichaAsignacion, fichaPool, segmentosDePool } from './fichas.js';
 import { show } from './navegacion.js';
 import { confirmar, vincularCidr } from './ui.js';
 import { llenarLibres, selectorCabe } from './libre-pool.js';
+import { componenteMapaCidr } from './mapa-cidr.js';
 
-export function subnavPools(activa) {
+export function breadcrumbsHtml(padre, subseccion, vistaPadre = 'pools') {
   return `
-    <nav class="subtabs-bar" aria-label="Subsecciones de Pools" style="display:flex;gap:8px;margin-bottom:var(--sp-4);border-bottom:1px solid var(--line, #334155);padding-bottom:10px">
-      <button type="button" class="btn ${activa === 'pools' ? '' : 'sec'}" data-subnav="pools" style="font-weight:${activa === 'pools' ? '600' : '500'}">📊 Estado de Pools</button>
-      <button type="button" class="btn ${activa === 'segmentos' ? '' : 'sec'}" data-subnav="segmentos" style="font-weight:${activa === 'segmentos' ? '600' : '500'}">📋 Segmentos Asignados & Reservados</button>
-      <button type="button" class="btn ${activa === 'reconciliacion' ? '' : 'sec'}" data-subnav="reconciliacion" style="font-weight:${activa === 'reconciliacion' ? '600' : '500'}">🔄 Reconciliación de Nube (Drift)</button>
+    <nav class="breadcrumbs" aria-label="Ruta de navegación">
+      <button type="button" class="enlace" data-subnav="${esc(vistaPadre)}">${esc(padre)}</button>
+      <span class="separador" aria-hidden="true">/</span>
+      <span class="actual" aria-current="page"><span class="dot"></span>${esc(subseccion)}</span>
+    </nav>
+  `;
+}
+
+export function subnavPools(activa, cuentas = {}) {
+  const nPools = cuentas.pools !== undefined ? `<span class="subnav-badge gris">${cuentas.pools}</span>` : '';
+  const nSeg = cuentas.segmentos !== undefined ? `<span class="subnav-badge azul">${cuentas.segmentos}</span>` : '';
+  const nDrift = cuentas.drift !== undefined ? `<span class="subnav-badge alerta">${cuentas.drift}</span>` : '';
+  return `
+    <nav class="subtabs-bar" aria-label="Subsecciones de Pools">
+      <button type="button" class="subnav-pill ${activa === 'pools' ? 'activa' : ''}" data-subnav="pools">
+        📊 Estado de Pools ${nPools}
+      </button>
+      <button type="button" class="subnav-pill ${activa === 'segmentos' ? 'activa' : ''}" data-subnav="segmentos">
+        📋 Segmentos Asignados & Reservados ${nSeg}
+      </button>
+      <button type="button" class="subnav-pill ${activa === 'reconciliacion' ? 'activa' : ''}" data-subnav="reconciliacion">
+        🔄 Reconciliación de Nube ${nDrift}
+      </button>
     </nav>
   `;
 }
@@ -76,6 +96,10 @@ export async function renderPools() {
     $('pools')
       .querySelectorAll('[data-subnav]')
       .forEach((b) => (b.onclick = () => show(b.dataset.subnav)));
+    if (pools.length > 0) {
+      const mapa = componenteMapaCidr(pools[0], await todasLasAsignaciones().catch(() => []));
+      $('pools').appendChild(mapa);
+    }
     if (puede('admin')) $('pool-nuevo').replaceWith(formularioNuevoPool(renderPools));
     if (ESTADO.poolsAviso) {
       msg($('pools-msg'), ESTADO.poolsAviso, 'ok');
