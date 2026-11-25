@@ -2,7 +2,7 @@
 import { $, I, api, errorApi, esc, fail, get, msg, post } from './base.js';
 import { toast } from './ui.js';
 import { show } from './navegacion.js';
-import { subnavPools } from './pools.js';
+import { breadcrumbsHtml, subnavPools } from './pools.js';
 
 const ESCENARIOS = {
   sincronizado: [
@@ -23,7 +23,8 @@ const ESCENARIOS = {
 export async function renderReconciliacion() {
   const contenedor = $('reconciliacion');
   contenedor.innerHTML =
-    subnavPools('reconciliacion') +
+    breadcrumbsHtml('Pools', 'Reconciliación de Nube (Cloud Drift)', 'pools') +
+    subnavPools('reconciliacion', { pools: 4, segmentos: 45, drift: 2 }) +
     `
     <div class="cabecera" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
       <div>

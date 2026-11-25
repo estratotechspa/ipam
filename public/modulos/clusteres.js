@@ -159,15 +159,13 @@ export function subnavClusteres(activa) {
     {
       class: 'subtabs-bar',
       'aria-label': 'Subsecciones de Clústeres',
-      style: 'display:flex;gap:8px;margin-bottom:var(--sp-4);border-bottom:1px solid var(--line, #334155);padding-bottom:10px',
     },
     h(
       'button',
       {
         type: 'button',
         'data-subnav': 'clusteres',
-        class: `btn ${activa === 'clusteres' ? '' : 'sec'}`,
-        style: `font-weight:${activa === 'clusteres' ? '600' : '500'}`,
+        class: `subnav-pill ${activa === 'clusteres' ? 'activa' : ''}`,
         onclick: () => show('clusteres'),
       },
       ico('capas', 16),
@@ -178,8 +176,7 @@ export function subnavClusteres(activa) {
       {
         type: 'button',
         'data-subnav': 'jerarquia',
-        class: `btn ${activa === 'jerarquia' ? '' : 'sec'}`,
-        style: `font-weight:${activa === 'jerarquia' ? '600' : '500'}`,
+        class: `subnav-pill ${activa === 'jerarquia' ? 'activa' : ''}`,
         onclick: () => show('jerarquia'),
       },
       ico('flujo', 16),

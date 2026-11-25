@@ -7,7 +7,7 @@ import { ASIG, liberarAsignacion, textoRed } from './asignaciones.js';
 import { RES, accionReserva, restante, tictac } from './reservas.js';
 import { formularioNuevoSegmento } from './nuevo-segmento.js';
 import { columnasAjustables } from './ui.js';
-import { subnavPools } from './pools.js';
+import { breadcrumbsHtml, subnavPools } from './pools.js';
 import { show } from './navegacion.js';
 import { abrirCluster } from './clusteres.js';
 
@@ -214,15 +214,29 @@ export async function renderSegmentos() {
     const pagina = lista.slice(ORDEN.pagina * POR_PAGINA, (ORDEN.pagina + 1) * POR_PAGINA);
     const puedeOperar = (r) => puede('agente') && (YO.rol === 'admin' || r.solicitante === YO.usuario);
     const reservaPorId = new Map(pendientes.map((r) => [r.id, r]));
+    const ipsTotal = todas.reduce((acc, x) => acc + size(x.cidr), 0);
+    const vencenPronto = pendientes.filter((r) => (r.segundos_restantes || 0) < 86400).length;
+
+    const kpisSegmentos = `
+      <div class="kpis" style="margin-bottom:var(--sp-4)">
+        <div class="card"><div class="kpi">${_fmt(cuentas.asignados)}</div><div class="sub">Segmentos asignados</div></div>
+        <div class="card"><div class="kpi ${cuentas.reservados ? 'uso-txt-medio' : ''}">${_fmt(cuentas.reservados)}</div><div class="sub">Reservas en espera</div></div>
+        <div class="card"><div class="kpi ${vencenPronto ? 'uso-txt-alto' : ''}">${vencenPronto}</div><div class="sub">Por vencer (&lt; 24h)</div></div>
+        <div class="card"><div class="kpi">${_fmt(ipsTotal)}</div><div class="sub">Direcciones ocupadas</div></div>
+      </div>
+    `;
+
     const [titulo, ayuda] = textoVacio(vista, !!(q || FILTRO.ambiente || FILTRO.proveedor));
     const raiz = $('segmentos');
     raiz.innerHTML =
-      subnavPools('segmentos') +
-      `<div class="cabecera"><h2 id="seg-titulo" tabindex="-1">Segmentos</h2><span class="acciones"><a class="btn" href="/api/v1/exportar.xlsx" download>${I('descargar')}Exportar a Excel</a>${
+      breadcrumbsHtml('Pools', 'Segmentos Asignados & Reservados', 'pools') +
+      subnavPools('segmentos', { pools: pools.length, segmentos: todas.length, drift: 2 }) +
+      `<div class="cabecera"><h2 id="seg-titulo" tabindex="-1">Segmentos Asignados & Reservados</h2><span class="acciones"><a class="btn" href="/api/v1/exportar.xlsx" download>${I('descargar')}Exportar a Excel</a>${
         puede('admin')
           ? `<a class="btn sec" href="/api/v1/exportar.json" download title="Respaldo completo para llevar el IPAM a otra infraestructura">${I('archivo')}Respaldo JSON</a>`
           : ''
       }</span></div>
+      ${kpisSegmentos}
     <p class="muted">Un segmento <b>asignado</b> es definitivo. Uno <b>reservado</b> está apartado por un tiempo: falta que un administrador lo apruebe y, si nadie lo hace, vence solo y el rango vuelve al pool.</p>${chips(cuentas)}${
       total === 0
         ? `<div class="card vacio">${I('buscar', 20)}<p><b>${titulo}</b></p><p class="muted">${ayuda}</p></div>`
