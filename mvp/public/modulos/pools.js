@@ -73,7 +73,9 @@ export async function renderPools() {
       );
     const imp = $('btn-importar');
     if (imp) imp.onclick = () => show('importar');
-    $('pools').querySelectorAll('[data-subnav]').forEach((b) => (b.onclick = () => show(b.dataset.subnav)));
+    $('pools')
+      .querySelectorAll('[data-subnav]')
+      .forEach((b) => (b.onclick = () => show(b.dataset.subnav)));
     if (puede('admin')) $('pool-nuevo').replaceWith(formularioNuevoPool(renderPools));
     if (ESTADO.poolsAviso) {
       msg($('pools-msg'), ESTADO.poolsAviso, 'ok');

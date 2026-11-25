@@ -13,6 +13,7 @@ Tipos: *texto*, *entero*, *booleano* (`true`/`false`) y *lista* (valores separad
 |---|---|---|---|
 | `NODE_ENV` | texto | development | Entorno. Con «production» se activan las protecciones de arranque seguro. Ej.: `production` |
 | `PORT` | entero | 8080 | Puerto HTTP en el que escucha el servicio.  |
+| `CORS_ORIGEN` | texto | * | Orígenes permitidos para CORS (separados por coma o «*»). Necesario para clientes como Retool. Ej.: `https://retool.ccla.cl` |
 | `ROL` | texto | todos | Qué hace esta réplica: «api» (solo HTTP), «worker» (solo barredor) o «todos». Opciones: api, worker, todos. |
 | `LOG_LEVEL` | texto | info | Nivel de log: debug, info, warn o error. Opciones: debug, info, warn, error. |
 | `TRUST_PROXY` | texto | (vacío) | Saltos de proxy delante de la app (número). Hace que la IP del cliente, las cookies Secure y el rate limit funcionen tras un balanceador. Ej.: `1` |
@@ -44,7 +45,15 @@ Tipos: *texto*, *entero*, *booleano* (`true`/`false`) y *lista* (valores separad
 
 | Variable | Tipo | Por defecto | Descripción |
 |---|---|---|---|
-| `DATABASE_URL` | texto | (secreto) | Cadena de conexión a PostgreSQL de la aplicación (usuario con permisos DML). **Obligatoria.** Secreta. |
+| `DATABASE_URL` | texto | (secreto) | Cadena de conexión a PostgreSQL de la aplicación (usuario con permisos DML). Secreta. |
+| `DATABASE_HOST` | texto | (vacío) | Host o dirección IP de la base de datos PostgreSQL. Ej.: `10.0.0.5` |
+| `DATABASE_PORT` | entero | 5432 | Puerto de la base de datos PostgreSQL.  |
+| `DATABASE_NAME` | texto | (vacío) | Nombre de la base de datos PostgreSQL. Ej.: `ipam` |
+| `DATABASE_SERVICE` | texto | (vacío) | Alias alternativo para el nombre de la base de datos.  |
+| `DATABASE_USERNAME` | texto | (vacío) | Usuario de conexión a la base de datos. Ej.: `ipam_app` |
+| `DATABASE_USER` | texto | (vacío) | Alias alternativo para el usuario de la base de datos.  |
+| `DATABASE_PASSWORD` | texto | (secreto) | Contraseña de la base de datos. Secreta. |
+| `DATABASE_PASS` | texto | (secreto) | Alias alternativo para la contraseña de la base de datos. Secreta. |
 | `DATABASE_URL_MIGRACION` | texto | (secreto) | Cadena de conexión del usuario migrador (DDL). Solo la usa `npm run migrar`. Si falta, se usa DATABASE_URL. Secreta. |
 | `DATABASE_SCHEMA` | texto | public | Esquema de PostgreSQL donde viven las tablas del IPAM. Ej.: `ipam` |
 | `DATABASE_SSL` | texto | (vacío) | TLS hacia la base: «disable», «require» (cifra sin verificar) o «verify-full» (verifica el certificado). Vacío = lo que diga DATABASE_URL (sslmode). Opciones: , disable, require, verify-full. |

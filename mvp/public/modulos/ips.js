@@ -60,11 +60,7 @@ export function formularioDireccion({ prefijo, pool, pools, asignaciones, alGuar
     },
     h('option', { value: '' }, 'Detectar por IP / Sin subred fija'),
     asigs.map((a) =>
-      h(
-        'option',
-        { value: a.id, 'data-pool': a.pool_id, 'data-cidr': a.cidr },
-        `${a.vpc ? a.vpc + ' · ' : ''}${a.subred || a.cidr} (Pool: ${a.pool_id})`,
-      ),
+      h('option', { value: a.id, 'data-pool': a.pool_id, 'data-cidr': a.cidr }, `${a.vpc ? a.vpc + ' · ' : ''}${a.subred || a.cidr} (Pool: ${a.pool_id})`),
     ),
   );
   const selPool = pools

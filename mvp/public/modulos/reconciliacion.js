@@ -22,7 +22,9 @@ const ESCENARIOS = {
 
 export async function renderReconciliacion() {
   const contenedor = $('reconciliacion');
-  contenedor.innerHTML = subnavPools('reconciliacion') + `
+  contenedor.innerHTML =
+    subnavPools('reconciliacion') +
+    `
     <div class="cabecera" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
       <div>
         <h2 tabindex="-1" style="margin-bottom:4px">Reconciliación de Nube (Cloud Drift)</h2>
