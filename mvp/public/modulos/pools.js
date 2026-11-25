@@ -10,11 +10,11 @@ import { llenarLibres, selectorCabe } from './libre-pool.js';
 
 export function subnavPools(activa) {
   return `
-    <div class="subtabs-bar" style="display:flex;gap:8px;margin-bottom:var(--sp-4);border-bottom:1px solid var(--line, #334155);padding-bottom:10px">
-      <button type="button" class="btn ${activa === 'pools' ? '' : 'sec'}" id="subnav-pools" style="font-weight:${activa === 'pools' ? '600' : '500'}">📊 Estado de Pools</button>
-      <button type="button" class="btn ${activa === 'segmentos' ? '' : 'sec'}" id="subnav-segmentos" style="font-weight:${activa === 'segmentos' ? '600' : '500'}">📋 Segmentos Asignados & Reservados</button>
-      <button type="button" class="btn ${activa === 'reconciliacion' ? '' : 'sec'}" id="subnav-reconciliacion" style="font-weight:${activa === 'reconciliacion' ? '600' : '500'}">🔄 Reconciliación de Nube (Drift)</button>
-    </div>
+    <nav class="subtabs-bar" aria-label="Subsecciones de Pools" style="display:flex;gap:8px;margin-bottom:var(--sp-4);border-bottom:1px solid var(--line, #334155);padding-bottom:10px">
+      <button type="button" class="btn ${activa === 'pools' ? '' : 'sec'}" data-subnav="pools" style="font-weight:${activa === 'pools' ? '600' : '500'}">📊 Estado de Pools</button>
+      <button type="button" class="btn ${activa === 'segmentos' ? '' : 'sec'}" data-subnav="segmentos" style="font-weight:${activa === 'segmentos' ? '600' : '500'}">📋 Segmentos Asignados & Reservados</button>
+      <button type="button" class="btn ${activa === 'reconciliacion' ? '' : 'sec'}" data-subnav="reconciliacion" style="font-weight:${activa === 'reconciliacion' ? '600' : '500'}">🔄 Reconciliación de Nube (Drift)</button>
+    </nav>
   `;
 }
 
@@ -73,9 +73,7 @@ export async function renderPools() {
       );
     const imp = $('btn-importar');
     if (imp) imp.onclick = () => show('importar');
-    const bP = $('subnav-pools'); if (bP) bP.onclick = () => show('pools');
-    const bS = $('subnav-segmentos'); if (bS) bS.onclick = () => show('segmentos');
-    const bR = $('subnav-reconciliacion'); if (bR) bR.onclick = () => show('reconciliacion');
+    $('pools').querySelectorAll('[data-subnav]').forEach((b) => (b.onclick = () => show(b.dataset.subnav)));
     if (puede('admin')) $('pool-nuevo').replaceWith(formularioNuevoPool(renderPools));
     if (ESTADO.poolsAviso) {
       msg($('pools-msg'), ESTADO.poolsAviso, 'ok');

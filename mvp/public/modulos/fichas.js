@@ -341,7 +341,6 @@ export async function fichaPool(id) {
   const p = pools.find((x) => x.id === id);
   if (!p) return toast('Ese pool ya no existe.', 'error');
   const r = rango(p.cidr);
-  const res = p.uso_reservado || 0;
   abrirPanel(
     p.cidr,
     `Pool ${p.id} · ${p.tipo} · ${p.ambiente} · ${p.proveedor}`,

@@ -14,7 +14,6 @@ async function main(argv = process.argv.slice(2)) {
   const rutaArchivo = idxArchivo !== -1 && argv[idxArchivo + 1] ? argv[idxArchivo + 1] : null;
 
   if (!rutaArchivo) {
-    // eslint-disable-next-line no-console
     console.error('Uso: node src/cli/detectar-drift.js --archivo <subredes-nube.json>');
     process.exitCode = 1;
     return;
